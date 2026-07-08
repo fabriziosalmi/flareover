@@ -13,6 +13,7 @@
 			paths /login
 		}
 		block_asns 64512
+		block_countries GeoLite2-Country.mmdb CN
 		ip_blacklist_file /etc/caddy/waf/ip_blacklist.txt
 		ip_whitelist_file /etc/caddy/waf/ip_whitelist.txt
 	}

@@ -229,21 +229,44 @@ func classifyRulesets(s cf.Snapshot, add func(report.Finding)) {
 
 func classifyCustomWAFRule(rule cf.Rule, name string, add func(report.Finding)) {
 	switch rule.Action {
-	case "block", "log", "managed_challenge", "challenge", "js_challenge":
-		if cfexpr.IsSimple(rule.Expression) {
-			add(auto("waf-custom", name, "caddy-waf",
-				"Custom firewall rule with a single-field match → caddy-waf JSON rule (pattern+targets+action)."))
+	case "block", "log":
+		// AUTO only for shapes the plan actually emits (SimpleWAFMatch is the
+		// shared predicate) — otherwise the coverage report would claim a mapping
+		// the generator drops, a false positive.
+		if m, ok := cfexpr.SimpleWAFMatch(rule.Expression); ok {
+			add(auto("waf-custom", name, "caddy-waf", wafAutoRationale(m)))
 		} else {
 			add(report.Finding{
 				Kind: "waf-custom", Name: name, Verdict: report.Ask, Target: "caddy-waf",
-				Rationale: "Custom firewall rule uses a compound Cloudflare expression. A best-effort caddy-waf translation is possible but may not be byte-identical.",
-				Question:  &report.Question{ID: "waf-translate:" + name, Prompt: "Accept a best-effort caddy-waf translation of this compound rule?", Options: []string{"yes", "no"}, Default: "no"},
+				Rationale: "Custom firewall rule uses a compound or non-standard Cloudflare expression. A best-effort caddy-waf translation is possible but may not be byte-identical.",
+				Question:  &report.Question{ID: "waf-translate:" + name, Prompt: "Accept a best-effort caddy-waf translation of this rule?", Options: []string{"yes", "no"}, Default: "no"},
 			})
 		}
+	case "managed_challenge", "challenge", "js_challenge":
+		// caddy-waf can block or log, not issue a CAPTCHA/JS challenge — so this
+		// is never a faithful 1:1 (it was wrongly AUTO before). Offer the one
+		// bounded choice: convert to a hard block.
+		add(report.Finding{
+			Kind: "waf-custom", Name: name, Verdict: report.Ask, Target: "caddy-waf",
+			Rationale: "Cloudflare challenge (CAPTCHA/JS) has no caddy-waf equivalent; caddy-waf can block or log, not challenge.",
+			Question:  &report.Question{ID: "waf-challenge:" + name, Prompt: "Convert this challenge to a hard block?", Options: []string{"yes", "no"}, Default: "no"},
+		})
 	case "skip", "set_config":
 		add(manual("waf-custom", name, "Rule uses skip/set_config (bypass/override semantics) that have no faithful caddy-waf equivalent."))
 	default:
 		add(manual("waf-custom", name, fmt.Sprintf("Firewall action %q has no faithful caddy-waf mapping.", rule.Action)))
+	}
+}
+
+// wafAutoRationale explains what a faithfully-mappable firewall rule becomes.
+func wafAutoRationale(m cfexpr.WAFMatch) string {
+	switch m.Kind {
+	case "country":
+		return "Country block (ip.geoip.country) → caddy-waf block_countries."
+	case "asn":
+		return "ASN block (ip.geoip.asnum) → caddy-waf block_asns."
+	default:
+		return "Single-field match → caddy-waf JSON rule (pattern + targets + action)."
 	}
 }
 

@@ -9,6 +9,7 @@ package plan
 import (
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/fabriziosalmi/flareover/internal/cfexpr"
@@ -340,14 +341,27 @@ func buildWAF(s cf.Snapshot) ir.WAFPolicy {
 		switch rs.Phase {
 		case "http_request_firewall_custom":
 			for _, rule := range rs.Rules {
-				if !rule.Enabled || !cfexpr.IsSimple(rule.Expression) {
+				if !rule.Enabled {
 					continue
 				}
 				if rule.Action != "block" && rule.Action != "log" {
 					continue
 				}
-				if wr, ok := wafRuleFromExpr(rule); ok {
-					w.CustomRules = append(w.CustomRules, wr)
+				// Same predicate the classifier gates AUTO on, so what is reported
+				// AUTO is exactly what gets emitted here (the 0%FP invariant).
+				m, ok := cfexpr.SimpleWAFMatch(rule.Expression)
+				if !ok {
+					continue
+				}
+				switch m.Kind {
+				case "country":
+					w.BlockCountries = append(w.BlockCountries, m.Value)
+				case "asn":
+					if n, err := strconv.Atoi(m.Value); err == nil {
+						w.BlockASNs = append(w.BlockASNs, n)
+					}
+				default: // field
+					w.CustomRules = append(w.CustomRules, wafRuleFromMatch(rule, m))
 				}
 			}
 		case "http_ratelimit":
@@ -391,7 +405,36 @@ func buildWAF(s cf.Snapshot) ir.WAFPolicy {
 			}
 		}
 	}
+	// Country/ASN blocks can arrive from both IP Access Rules and firewall custom
+	// rules (a zone may express the same block twice) — dedup so the directive is
+	// emitted once.
+	w.BlockCountries = dedupStrings(w.BlockCountries)
+	w.BlockASNs = dedupInts(w.BlockASNs)
 	return w
+}
+
+func dedupStrings(in []string) []string {
+	seen := map[string]bool{}
+	out := in[:0]
+	for _, v := range in {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+func dedupInts(in []int) []int {
+	seen := map[int]bool{}
+	out := in[:0]
+	for _, v := range in {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // parseASN turns "AS64512" or "64512" into 64512.
@@ -410,25 +453,22 @@ func parseASN(s string) (int, bool) {
 	return n, true
 }
 
-// wafRuleFromExpr parses a single-field `<field> eq|contains "<value>"`
-// expression into a caddy-waf rule.
-func wafRuleFromExpr(rule cf.Rule) (ir.WAFRule, bool) {
-	field, value, ok := parseFieldMatch(rule.Expression)
-	if !ok {
-		return ir.WAFRule{}, false
-	}
+// wafRuleFromMatch turns a faithfully-matched single-field firewall rule into a
+// caddy-waf rule. The match came from cfexpr.SimpleWAFMatch (the shared
+// predicate), so this only ever runs for shapes the classifier reported AUTO.
+func wafRuleFromMatch(rule cf.Rule, m cfexpr.WAFMatch) ir.WAFRule {
 	action := "block"
 	if rule.Action == "log" {
 		action = "log"
 	}
 	return ir.WAFRule{
 		Description: rule.Description,
-		Pattern:     regexpQuote(value),
-		Targets:     []string{wafTargetForField(field)},
+		Pattern:     regexpQuote(m.Value),
+		Targets:     []string{wafTargetForField(m.Field)},
 		Action:      action,
 		Score:       10,
-		Sample:      value,
-	}, true
+		Sample:      m.Value,
+	}
 }
 
 // --- small helpers -----------------------------------------------------------

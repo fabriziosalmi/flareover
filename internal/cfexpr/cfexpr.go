@@ -27,6 +27,42 @@ func IsSimple(expr string) bool {
 	return !compound.MatchString(e)
 }
 
+// WAFMatch describes a Cloudflare firewall expression that flareover can
+// faithfully translate, and how.
+type WAFMatch struct {
+	Kind  string // "field" | "country" | "asn"
+	Field string // the http.* field, for Kind == "field"
+	Op    string // "eq" | "contains", for Kind == "field"
+	Value string // matched value: field value, ISO country code, or ASN digits
+}
+
+var (
+	wafField   = regexp.MustCompile(`(?i)^\s*(http\.[a-z0-9_.]+)\s+(eq|contains)\s+"([^"]+)"\s*$`)
+	wafCountry = regexp.MustCompile(`(?i)^\s*ip\.geoip\.country\s+eq\s+"([A-Za-z]{2})"\s*$`)
+	wafASN     = regexp.MustCompile(`(?i)^\s*ip\.geoip\.asnum\s+eq\s+([0-9]+)\s*$`)
+)
+
+// SimpleWAFMatch is the SINGLE predicate both the classifier (AUTO decision) and
+// the plan builder (emission) use for custom firewall rules, so a rule is only
+// marked AUTO when config is actually generated for it — the 0% false-positive
+// invariant. It is a deliberate allowlist of shapes flareover emits faithfully:
+// a single-field `http.<field> eq|contains "…"` (→ caddy-waf JSON rule), a
+// `ip.geoip.country eq "XX"` (→ block_countries), or a `ip.geoip.asnum eq N`
+// (→ block_asns). Anything else (compound expressions, other fields/operators)
+// returns ok=false and must route to ASK/MANUAL, never AUTO.
+func SimpleWAFMatch(expr string) (WAFMatch, bool) {
+	if m := wafCountry.FindStringSubmatch(expr); m != nil {
+		return WAFMatch{Kind: "country", Value: strings.ToUpper(m[1])}, true
+	}
+	if m := wafASN.FindStringSubmatch(expr); m != nil {
+		return WAFMatch{Kind: "asn", Value: m[1]}, true
+	}
+	if m := wafField.FindStringSubmatch(expr); m != nil {
+		return WAFMatch{Kind: "field", Field: strings.ToLower(m[1]), Op: strings.ToLower(m[2]), Value: m[3]}, true
+	}
+	return WAFMatch{}, false
+}
+
 var hostEq = regexp.MustCompile(`(?i)^\s*http\.host\s+eq\s+"([^"]+)"\s*$`)
 
 // HostEq extracts the host from a `http.host eq "example.com"` expression.
