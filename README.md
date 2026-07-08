@@ -4,7 +4,6 @@
 
 [![CI](https://github.com/fabriziosalmi/flareover/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/flareover/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/fabriziosalmi/flareover?sort=semver)](https://github.com/fabriziosalmi/flareover/releases)
-[![Go Report Card](https://goreportcard.com/badge/github.com/fabriziosalmi/flareover)](https://goreportcard.com/report/github.com/fabriziosalmi/flareover)
 [![Go](https://img.shields.io/github/go-mod/go-version/fabriziosalmi/flareover)](go.mod)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
