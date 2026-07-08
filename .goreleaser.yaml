@@ -66,23 +66,28 @@ signs:
 source:
   enabled: true
 
-# Homebrew tap (macOS) — auto-published on every release. One-time setup: create
-# the repo github.com/fabriziosalmi/homebrew-tap and add a repo-scoped PAT as the
-# HOMEBREW_TAP_GITHUB_TOKEN secret. Until that secret exists the step skips itself
-# (skip_upload below), so a release never fails for lack of it. Linux users have
-# the verified install.sh and `go install`.
-homebrew_casks:
+# Homebrew tap — auto-published on every release to the per-project tap repo
+# (matches homebrew-proxxx / homebrew-proxymate). A formula, so it works on Linux
+# brew too. One-time setup: create github.com/fabriziosalmi/homebrew-flareover and
+# add a repo-scoped PAT as the HOMEBREW_TAP_GITHUB_TOKEN secret. Until that secret
+# exists the step skips itself (skip_upload), so a release never fails for it.
+brews:
   - name: flareover
     repository:
       owner: fabriziosalmi
-      name: homebrew-tap
+      name: homebrew-flareover
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: "https://www.flareover.com"
     description: "Deterministic Cloudflare → EU-sovereign migration engine (0% false positives)"
+    license: "AGPL-3.0-only"
     skip_upload: '{{ if .Env.HOMEBREW_TAP_GITHUB_TOKEN }}false{{ else }}true{{ end }}'
     commit_author:
       name: goreleaser-bot
       email: bot@flareover.dev
+    install: |
+      bin.install "flareover"
+    test: |
+      system "#{bin}/flareover", "version"
 
 changelog:
   use: github

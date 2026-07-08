@@ -89,7 +89,7 @@ explicit human steps.
 
 ```bash
 # macOS (Homebrew)
-brew install fabriziosalmi/tap/flareover
+brew install fabriziosalmi/flareover/flareover
 
 # Linux/macOS — verified installer (downloads the release for your OS/arch, checks its sha256)
 curl -fsSL https://raw.githubusercontent.com/fabriziosalmi/flareover/main/install.sh | sh
