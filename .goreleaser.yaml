@@ -1,0 +1,92 @@
+# goreleaser configuration for flareover — reproducible, signed, SBOM'd release
+# artifacts. Docs: https://goreleaser.com. Validate with `goreleaser check`.
+version: 2
+
+project_name: flareover
+
+before:
+  hooks:
+    # No `go mod tidy` — the project is stdlib-only, so it is a no-op that could
+    # only dirty the tree and fail the release. vet + test gate the release.
+    - go vet ./...
+    - go test ./...
+
+builds:
+  - id: flareover
+    main: ./cmd/flareover
+    binary: flareover
+    env:
+      - CGO_ENABLED=0 # pure-Go (modernc-free here); static, cross-compiles cleanly
+    flags:
+      - -trimpath # strip local paths → reproducible builds
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}" # deterministic archive timestamps
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - docs/deploy-hardened.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# Software Bill of Materials per archive (syft must be on PATH).
+sboms:
+  - id: archive
+    artifacts: archive
+
+# Keyless (Sigstore/OIDC) signature over the checksums file — verifying the
+# checksums transitively verifies every artifact. Requires cosign + an OIDC
+# token (GitHub Actions provides one with `id-token: write`).
+signs:
+  - id: cosign-checksums
+    cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--yes"
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+    artifacts: checksum
+    output: true
+
+source:
+  enabled: true
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "merge conflict"
+
+release:
+  draft: false
+  prerelease: auto
+  footer: |
+    ---
+    Verify the checksums signature (keyless):
+
+    ```
+    cosign verify-blob checksums.txt \
+      --signature checksums.txt.sig --certificate checksums.txt.pem \
+      --certificate-identity-regexp 'https://github.com/fabriziosalmi/flareover' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com
+    ```

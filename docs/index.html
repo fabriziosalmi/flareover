@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>flareover — deterministic edge migration to EU-sovereign infrastructure</title>
+<meta name="description" content="A deterministic, 0% false-positive engine that rebuilds your proxied CDN/WAF edge on EU-sovereign self-hosted infrastructure — Caddy, PowerDNS, CertMate, MinIO. AGPL.">
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#111621; --line:#1e2636; --ink:#e6ebf2; --dim:#8a94a6;
+    --flare:#ff8a3d; --flare2:#ffb347; --eu:#5fd39a; --ask:#f5c451; --manual:#ff6b6b;
+    --blue:#8ab4ff; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,rgba(255,138,61,.10),transparent),var(--bg);
+       color:var(--ink);font:16px/1.65 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:var(--flare2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+  .mono{font-family:var(--mono)}
+  .tag{display:inline-block;padding:.28rem .7rem;border-radius:999px;font-size:.78rem;letter-spacing:.04em;
+       border:1px solid var(--line);color:var(--eu);background:rgba(95,211,154,.06)}
+
+  /* hero */
+  header{padding:96px 0 64px;text-align:center}
+  .logo{font-family:var(--mono);font-weight:700;font-size:1rem;letter-spacing:.2em;color:var(--dim)}
+  .logo b{color:var(--flare)}
+  h1{font-size:clamp(2.4rem,6vw,4rem);line-height:1.05;margin:.5rem 0 .3rem;font-weight:800;letter-spacing:-.02em}
+  h1 .flare{background:linear-gradient(90deg,var(--flare),var(--flare2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{font-size:clamp(1.05rem,2.5vw,1.35rem);color:var(--dim);max-width:640px;margin:1rem auto 2rem}
+  .cta{display:inline-flex;gap:12px;flex-wrap:wrap;justify-content:center}
+  .btn{padding:.7rem 1.2rem;border-radius:10px;border:1px solid var(--line);font-weight:600;font-size:.95rem}
+  .btn.p{background:linear-gradient(90deg,var(--flare),var(--flare2));color:#1a1206;border-color:transparent}
+  .btn.g{background:var(--panel);color:var(--ink)}
+
+  section{padding:56px 0;border-top:1px solid var(--line)}
+  h2{font-size:1.6rem;margin:0 0 .4rem;letter-spacing:-.01em}
+  .lead{color:var(--dim);max-width:680px;margin:0 0 1.6rem}
+
+  /* contract cards */
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(3,1fr)}
+  @media(max-width:720px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .card h3{margin:.1rem 0 .4rem;font-size:1.05rem;display:flex;align-items:center;gap:.5rem}
+  .card p{margin:0;color:var(--dim);font-size:.95rem}
+  .badge{width:10px;height:10px;border-radius:50%}
+  .auto{background:var(--eu)} .ask{background:var(--ask)} .manual{background:var(--manual)}
+
+  /* phases */
+  .phases{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-family:var(--mono);font-size:.9rem}
+  .phase{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.5rem .8rem}
+  .arrow{color:var(--dim)}
+
+  /* animated migration pipeline (pure CSS, loops) */
+  .pipe{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-family:var(--mono);font-size:.92rem}
+  .step{padding:.5rem .85rem;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--dim);animation:lite 7s infinite}
+  .step:nth-child(1){animation-delay:0s} .step:nth-child(2){animation-delay:1s} .step:nth-child(3){animation-delay:2s}
+  .step:nth-child(4){animation-delay:3s} .step:nth-child(5){animation-delay:4s}
+  @keyframes lite{
+    0%,12%   {color:var(--dim);border-color:var(--line);box-shadow:none}
+    14%,22%  {color:#1a1206;background:linear-gradient(90deg,var(--flare),var(--flare2));border-color:transparent;box-shadow:0 0 20px rgba(255,138,61,.45)}
+    26%,100% {color:var(--eu);border-color:rgba(95,211,154,.4);background:rgba(95,211,154,.06)}}
+  .gatebadge{font-family:var(--mono);font-weight:700;padding:.5rem .8rem;border-radius:6px;background:#0d1119;color:var(--dim);border:1px solid var(--line);animation:gate 7s infinite}
+  @keyframes gate{
+    0%,58%  {color:var(--dim);background:#0d1119;border-color:var(--line);box-shadow:none}
+    64%,100%{color:#062318;background:var(--eu);border-color:transparent;box-shadow:0 0 24px rgba(95,211,154,.5)}}
+  @media(prefers-reduced-motion:reduce){.step,.gatebadge{animation:none;color:var(--eu)}}
+
+  /* terminal */
+  .term{background:#0a0d14;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+  .term .bar{display:flex;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:#0d1119}
+  .term .bar i{width:12px;height:12px;border-radius:50%;display:inline-block}
+  .term pre{margin:0;padding:18px 20px;overflow:auto;font-family:var(--mono);font-size:13px;line-height:1.6}
+  .cy{color:#57c7d4}.gn{color:var(--eu)}.yl{color:var(--ask)}.rd{color:var(--manual)}.dm{color:var(--dim)}.bl{color:var(--blue)}.bd{font-weight:700}
+  .gate{background:var(--eu);color:#062318;font-weight:700;padding:0 .4rem;border-radius:3px}
+
+  /* stack table */
+  table{width:100%;border-collapse:collapse;font-size:.95rem}
+  td,th{text-align:left;padding:.6rem .5rem;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:600}
+  td.k{color:var(--dim)} td .juris{color:var(--eu);font-size:.82rem}
+
+  .proof{display:grid;gap:12px;grid-template-columns:repeat(2,1fr)}
+  @media(max-width:720px){.proof{grid-template-columns:1fr}}
+  .pill{display:flex;justify-content:space-between;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.7rem 1rem;font-size:.92rem}
+  .pill b{color:var(--eu);font-family:var(--mono)}
+
+  footer{padding:48px 0 80px;color:var(--dim);text-align:center;border-top:1px solid var(--line);font-size:.9rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo"><b>▲</b> <span class="flare">FLARE</span>·OVER</div>
+    <h1>Leave the <span class="flare">orange cloud</span>.<br>Without breaking your site.</h1>
+    <p class="sub"><b>flareover</b> reads your existing edge setup — DNS, TLS certificates, redirects,
+      WAF rules, caching — and rebuilds it faithfully on your own EU servers (open-source,
+      self-hosted). It never emits config that silently changes how your site behaves: what it can't
+      map exactly, it asks about or flags — <b>it never guesses</b>.</p>
+    <div class="cta">
+      <a class="btn p" href="#contract">How it stays faithful</a>
+      <a class="btn g" href="#proof">See it proven live</a>
+    </div>
+    <p style="margin-top:1.4rem"><span class="tag">● AGPL-3.0 · self-hostable · no lock-in</span></p>
+  </header>
+
+  <section id="contract">
+    <h2>It refuses to guess</h2>
+    <p class="lead">Every element of your edge gets exactly one verdict. Behavior-changing config is
+      emitted only when equivalence is proven or you answer a bounded yes/no. That honesty is the product.</p>
+    <div class="grid">
+      <div class="card"><h3><span class="badge auto"></span> AUTO</h3>
+        <p>A provably-equivalent target mapping exists. Config is generated.</p></div>
+      <div class="card"><h3><span class="badge ask"></span> ASK</h3>
+        <p>A faithful mapping exists with one enumerable ambiguity. A single yes/no resolves it — cached, reviewable.</p></div>
+      <div class="card"><h3><span class="badge manual"></span> MANUAL</h3>
+        <p>No faithful mapping (arbitrary edge code, ML bot-scoring). Surfaced with a reason, <b>never guessed</b>.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>How it works — five phases</h2>
+    <p class="lead">Read-only extraction to a gated, reversible cutover. Every step is deterministic;
+      the parity gate blocks the flip unless the new edge behaves identically.</p>
+    <div class="pipe">
+      <span class="step">Assess</span>
+      <span class="step">Prepare</span>
+      <span class="step">Present</span>
+      <span class="step">Execute</span>
+      <span class="step">Guard</span>
+      <span class="gatebadge">GATE: PASS ✓</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>An honest report, at a glance</h2>
+    <p class="lead">The engine tells you exactly what carries, what needs a decision, and what it won't
+      touch — before anything changes.</p>
+    <div class="term">
+      <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+      <pre><span class="dm">$</span> flareover assess zone.snapshot.json
+
+<span class="cy">╭─ flareover · assessment · example.com ─────────────╮</span>
+<span class="cy">│</span> <span class="bd">43 elements</span>   <span class="gn">●</span> 31 AUTO   <span class="yl">●</span> 11 ASK   <span class="rd">●</span> 1 MANUAL
+<span class="cy">╰────────────────────────────────────────────────────╯</span>
+
+<span class="rd bd"> MANUAL </span> <span class="dm">(1)</span>
+  <span class="rd">●</span> <span class="bd">config-rule</span>  tweak features on /api  <span class="dm">→ —</span>
+     <span class="dm">Provider-only edge feature (email obfuscation): no Caddy equivalent.</span>
+
+<span class="yl bd"> ASK </span> <span class="dm">(11)</span>
+  <span class="yl">●</span> <span class="bd">dns</span>  A app.example.com  <span class="dm">→</span> <span class="cy">powerdns</span>
+     <span class="yl">? Real origin (host:port) behind the orange cloud?</span>
+
+<span class="gn bd"> AUTO </span> <span class="dm">(31)</span>
+  <span class="gn">●</span> <span class="bd">tls</span>  hsts  <span class="dm">→</span> <span class="cy">caddy</span>
+  <span class="gn">●</span> <span class="bd">waf-custom</span>  block bad UA  <span class="dm">→</span> <span class="cy">caddy-waf</span>
+  <span class="gn">●</span> <span class="bd">redirect</span>  apex → www  <span class="dm">→</span> <span class="cy">caddy</span></pre>
+    </div>
+  </section>
+
+  <section id="proof">
+    <h2>Proven on a real domain, live</h2>
+    <p class="lead">A real zone was migrated end-to-end and cut over off its incumbent edge provider — then
+      verified from the public internet. The parity gate <b>first blocked</b> a divergence, and only passed
+      once the new edge behaved identically.</p>
+    <div class="proof">
+      <div class="pill"><span>Certificate</span><b>Let's Encrypt ✓</b></div>
+      <div class="pill"><span>Server header</span><b>own edge · no CDN ✓</b></div>
+      <div class="pill"><span>apex → www redirect</span><b>301 → 200 ✓</b></div>
+      <div class="pill"><span>Security headers</span><b>3/3 ✓</b></div>
+      <div class="pill"><span>WAF (malicious UA)</span><b>403 blocked ✓</b></div>
+      <div class="pill"><span>Edge cache</span><b>souin HIT ✓</b></div>
+      <div class="pill"><span>Parity gate</span><b>PASS ✓</b></div>
+      <div class="pill"><span>Rollback</span><b>1 command ✓</b></div>
+    </div>
+    <p style="margin-top:1.2rem;color:var(--dim)"><span class="gate">&nbsp;GATE: PASS&nbsp;</span>
+      &nbsp;no behavior-changing divergence — cutover permitted.</p>
+  </section>
+
+  <section>
+    <h2>Your new edge — EU-sovereign, flat cost</h2>
+    <p class="lead">No traffic or egress fees. No exposure to a future price or policy change. Every target
+      is tagged with its jurisdiction, so the migration provably stays EU-scoped.</p>
+    <table>
+      <tr><th>Concern</th><th>Tool</th><th>where</th></tr>
+      <tr><td class="k">Authoritative DNS</td><td>PowerDNS</td><td class="juris">EU</td></tr>
+      <tr><td class="k">Reverse proxy · TLS · HTTP/3</td><td>Caddy</td><td class="juris">free</td></tr>
+      <tr><td class="k">WAF</td><td>caddy-waf</td><td class="juris">free</td></tr>
+      <tr><td class="k">Edge cache</td><td>souin</td><td class="juris">free</td></tr>
+      <tr><td class="k">Certificates</td><td>CertMate · Let's Encrypt / Actalis</td><td class="juris">EU CA option</td></tr>
+      <tr><td class="k">Object storage (S3-compatible →)</td><td>MinIO</td><td class="juris">no egress fee</td></tr>
+      <tr><td class="k">Landing zone</td><td>refurbished bare metal → Proxmox → LXC</td><td class="juris">EU</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Leave the storage too</h2>
+    <p class="lead">The same 0% FP discipline migrates S3-compatible object storage (R2, S3, …) onto
+      sovereign MinIO. The engine maps the configuration; rclone copies the data — into the EU, with no egress fee.
+      A public bucket is never made public without your explicit yes; an IAM policy is flagged, never guessed.</p>
+  </section>
+
+  <footer>
+    <p><span class="mono">flareover</span> · own your escape hatch · <a href="https://github.com/fabriziosalmi/flareover">GitHub</a> · AGPL-3.0</p>
+    <p class="dm">Built from the discipline that real, high-stakes DNS and edge migrations demand.</p>
+  </footer>
+
+</div>
+</body>
+</html>

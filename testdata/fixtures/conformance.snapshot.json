@@ -1,0 +1,397 @@
+{
+  "schema_version": 1,
+  "zone": {
+    "id": "00000000000000000000000000000000",
+    "name": "conformance.example",
+    "status": "active",
+    "name_servers": [
+      "ns1.example-cdn.net",
+      "ns2.example-cdn.net"
+    ]
+  },
+  "settings": {
+    "ssl": "full",
+    "always_use_https": "on",
+    "automatic_https_rewrites": "on",
+    "min_tls_version": "1.2",
+    "http2": "on",
+    "http3": "on",
+    "opportunistic_encryption": "on",
+    "hsts": {
+      "enabled": true,
+      "max_age": 31536000,
+      "include_subdomains": true,
+      "preload": false,
+      "nosniff": true
+    },
+    "brotli": "on",
+    "cache_level": "aggressive",
+    "ip_geolocation": "on",
+    "websockets": "on",
+    "dnssec": "active"
+  },
+  "dns_records": [
+    {
+      "type": "A",
+      "name": "api.conformance.example",
+      "content": "203.0.113.10",
+      "ttl": 1,
+      "proxied": true
+    },
+    {
+      "type": "A",
+      "name": "blog.conformance.example",
+      "content": "203.0.113.10",
+      "ttl": 1,
+      "proxied": true
+    },
+    {
+      "type": "A",
+      "name": "*.conformance.example",
+      "content": "203.0.113.10",
+      "ttl": 1,
+      "proxied": true
+    },
+    {
+      "type": "A",
+      "name": "conformance.example",
+      "content": "203.0.113.10",
+      "ttl": 1,
+      "proxied": true
+    },
+    {
+      "type": "A",
+      "name": "mail.conformance.example",
+      "content": "203.0.113.10",
+      "ttl": 1,
+      "proxied": false
+    },
+    {
+      "type": "AAAA",
+      "name": "conformance.example",
+      "content": "2a01:4f8:c17:b8f::1",
+      "ttl": 1,
+      "proxied": true
+    },
+    {
+      "type": "CAA",
+      "name": "conformance.example",
+      "content": "0 issue \"letsencrypt.org\"",
+      "ttl": 1,
+      "proxied": false
+    },
+    {
+      "type": "CNAME",
+      "name": "shop.conformance.example",
+      "content": "conformance.example",
+      "ttl": 1,
+      "proxied": true
+    },
+    {
+      "type": "CNAME",
+      "name": "www.conformance.example",
+      "content": "conformance.example",
+      "ttl": 1,
+      "proxied": true
+    },
+    {
+      "type": "MX",
+      "name": "conformance.example",
+      "content": "mail.conformance.example",
+      "ttl": 1,
+      "proxied": false,
+      "priority": 10
+    },
+    {
+      "type": "SRV",
+      "name": "_sip._tcp.conformance.example",
+      "content": "5 5060 sip.conformance.example",
+      "ttl": 1,
+      "proxied": false,
+      "priority": 10
+    },
+    {
+      "type": "TXT",
+      "name": "conformance.example",
+      "content": "v=spf1 include:_spf.conformance.example ~all",
+      "ttl": 1,
+      "proxied": false
+    },
+    {
+      "type": "TXT",
+      "name": "_dmarc.conformance.example",
+      "content": "v=DMARC1; p=quarantine; rua=mailto:dmarc@conformance.example",
+      "ttl": 1,
+      "proxied": false
+    }
+  ],
+  "page_rules": [
+    {
+      "target": "*conformance.example/old/*",
+      "actions": {
+        "forwarding_url": {
+          "status_code": 301,
+          "url": "https://www.conformance.example/new/$2"
+        }
+      },
+      "priority": 3,
+      "status": "active"
+    },
+    {
+      "target": "*conformance.example/assets/*",
+      "actions": {
+        "cache_level": "cache_everything",
+        "edge_cache_ttl": 7200
+      },
+      "priority": 2,
+      "status": "active"
+    },
+    {
+      "target": "http://*conformance.example/*",
+      "actions": {
+        "always_use_https": null
+      },
+      "priority": 1,
+      "status": "active"
+    }
+  ],
+  "rulesets": [
+    {
+      "id": "1e896067a7d346b1beec4decffd6c72d",
+      "name": "default",
+      "phase": "http_request_dynamic_redirect",
+      "rules": [
+        {
+          "description": "apex to www",
+          "expression": "http.host eq \"conformance.example\"",
+          "action": "redirect",
+          "action_parameters": {
+            "from_value": {
+              "preserve_query_string": true,
+              "status_code": 301,
+              "target_url": {
+                "value": "https://www.conformance.example"
+              }
+            }
+          },
+          "enabled": true
+        },
+        {
+          "description": "legacy path move",
+          "expression": "starts_with(http.request.uri.path, \"/old/\")",
+          "action": "redirect",
+          "action_parameters": {
+            "from_value": {
+              "status_code": 301,
+              "target_url": {
+                "expression": "concat(\"https://www.conformance.example/new\", substring(http.request.uri.path, 4))"
+              }
+            }
+          },
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "e61a61cb422444138ac515a96d912940",
+      "name": "default",
+      "phase": "http_request_transform",
+      "rules": [
+        {
+          "description": "rewrite legacy to modern",
+          "expression": "starts_with(http.request.uri.path, \"/legacy\")",
+          "action": "rewrite",
+          "action_parameters": {
+            "uri": {
+              "path": {
+                "value": "/modern"
+              }
+            }
+          },
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "8c6b42ed74fd4ef7bf35ff2a890d1b46",
+      "name": "default",
+      "phase": "http_response_headers_transform",
+      "rules": [
+        {
+          "description": "security headers",
+          "expression": "true",
+          "action": "rewrite",
+          "action_parameters": {
+            "headers": {
+              "X-Content-Type-Options": {
+                "operation": "set",
+                "value": "nosniff"
+              },
+              "X-Frame-Options": {
+                "operation": "set",
+                "value": "DENY"
+              }
+            }
+          },
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "875389b7e05148dbaa26092f08b5c81e",
+      "name": "default",
+      "phase": "http_request_firewall_custom",
+      "rules": [
+        {
+          "description": "block bad UA",
+          "expression": "http.user_agent eq \"badbot\"",
+          "action": "block",
+          "enabled": true
+        },
+        {
+          "description": "block by country",
+          "expression": "ip.geoip.country eq \"CN\"",
+          "action": "block",
+          "enabled": true
+        },
+        {
+          "description": "challenge admin from outside",
+          "expression": "starts_with(http.request.uri.path, \"/admin\") and ip.src ne 203.0.113.7",
+          "action": "managed_challenge",
+          "enabled": true
+        },
+        {
+          "description": "block asn",
+          "expression": "ip.geoip.asnum eq 64512",
+          "action": "block",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "6bca6a99b51a44f3b29cb7fb9ebd5b67",
+      "name": "default",
+      "phase": "http_request_cache_settings",
+      "rules": [
+        {
+          "description": "cache assets aggressively",
+          "expression": "starts_with(http.request.uri.path, \"/assets/\")",
+          "action": "set_cache_settings",
+          "action_parameters": {
+            "browser_ttl": {
+              "mode": "respect_origin"
+            },
+            "cache": true,
+            "edge_ttl": {
+              "default": 7200,
+              "mode": "override_origin"
+            }
+          },
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "d4879f3e2f804dd2816e7f7bf2c5967b",
+      "name": "default",
+      "phase": "http_config_settings",
+      "rules": [
+        {
+          "description": "tweak features on /api",
+          "expression": "starts_with(http.request.uri.path, \"/api/\")",
+          "action": "set_config",
+          "action_parameters": {
+            "automatic_https_rewrites": false,
+            "email_obfuscation": false
+          },
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "09d955fcd6c94d39999577a7d71f6e39",
+      "name": "default",
+      "phase": "http_ratelimit",
+      "rules": [
+        {
+          "description": "login throttle",
+          "expression": "http.request.uri.path eq \"/login\"",
+          "action": "block",
+          "enabled": true,
+          "ratelimit": {
+            "characteristics": [
+              "ip.src",
+              "cf.colo.id"
+            ],
+            "period": 10,
+            "requests_per_period": 20,
+            "mitigation_timeout": 10
+          }
+        }
+      ]
+    }
+  ],
+  "certificates": [
+    {
+      "type": "universal",
+      "hosts": [
+        "conformance.example",
+        "*.conformance.example"
+      ],
+      "issuer": "LetsEncrypt"
+    },
+    {
+      "type": "universal",
+      "hosts": [
+        "conformance.example",
+        "*.conformance.example"
+      ],
+      "issuer": "SectigoLimited"
+    }
+  ],
+  "ip_access_rules": [
+    {
+      "mode": "whitelist",
+      "target": "ip",
+      "value": "203.0.113.24"
+    },
+    {
+      "mode": "whitelist",
+      "target": "ip",
+      "value": "203.0.113.23"
+    },
+    {
+      "mode": "whitelist",
+      "target": "ip",
+      "value": "203.0.113.22"
+    },
+    {
+      "mode": "whitelist",
+      "target": "ip",
+      "value": "203.0.113.21"
+    },
+    {
+      "mode": "whitelist",
+      "target": "ip",
+      "value": "203.0.113.20"
+    },
+    {
+      "mode": "block",
+      "target": "asn",
+      "value": "AS64512",
+      "notes": "flareover demo: block asn"
+    },
+    {
+      "mode": "challenge",
+      "target": "country",
+      "value": "CN",
+      "notes": "flareover demo: challenge country"
+    },
+    {
+      "mode": "block",
+      "target": "ip",
+      "value": "192.0.2.10",
+      "notes": "flareover demo: block ip"
+    }
+  ]
+}

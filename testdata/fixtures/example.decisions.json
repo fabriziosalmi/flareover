@@ -1,0 +1,7 @@
+{
+  "origin:example.com": "10.44.44.20:8080",
+  "origin:www.example.com": "10.44.44.20:8080",
+  "dnssec-ds-update": "yes",
+  "flexible-origin-scheme": "https",
+  "r2-migrate:example-assets": "yes"
+}

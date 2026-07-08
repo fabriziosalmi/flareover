@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "zone": {
+    "id": "0000000000000000000000000000abcd",
+    "name": "example.com",
+    "status": "active",
+    "name_servers": ["ana.ns.cloudflare.com", "bob.ns.cloudflare.com"]
+  },
+  "settings": {
+    "ssl": "flexible",
+    "always_use_https": "on",
+    "automatic_https_rewrites": "on",
+    "min_tls_version": "1.2",
+    "tls_1_3": "on",
+    "http2": "on",
+    "http3": "on",
+    "hsts": { "enabled": true, "max_age": 31536000, "include_subdomains": true, "preload": false, "nosniff": true },
+    "cache_level": "aggressive",
+    "dnssec": "active",
+    "email_obfuscation": "on",
+    "bot_fight_mode": "on"
+  },
+  "dns_records": [
+    { "type": "A", "name": "example.com", "content": "104.16.0.1", "ttl": 1, "proxied": true },
+    { "type": "CNAME", "name": "www.example.com", "content": "example.com", "ttl": 1, "proxied": true },
+    { "type": "MX", "name": "example.com", "content": "mail.example.com", "ttl": 3600, "proxied": false, "priority": 10 },
+    { "type": "TXT", "name": "example.com", "content": "v=spf1 include:_spf.example.net ~all", "ttl": 3600, "proxied": false }
+  ],
+  "page_rules": [
+    { "target": "http://example.com/old/*", "priority": 1, "status": "active",
+      "actions": { "forwarding_url": { "status_code": 301, "url": "https://example.com/new/$1" } } },
+    { "target": "example.com/assets/*", "priority": 2, "status": "active",
+      "actions": { "edge_cache_ttl": 7200 } }
+  ],
+  "rulesets": [
+    { "id": "r1", "name": "custom fw", "phase": "http_request_firewall_custom", "rules": [
+      { "description": "block bad UA", "expression": "http.user_agent eq \"badbot\"", "action": "block", "enabled": true },
+      { "description": "block admin from outside", "expression": "http.request.uri.path contains \"/admin\" and ip.src ne 203.0.113.7", "action": "block", "enabled": true }
+    ]},
+    { "id": "r2", "name": "rate", "phase": "http_ratelimit", "rules": [
+      { "description": "login throttle", "expression": "http.request.uri.path eq \"/login\"", "action": "block", "enabled": true,
+        "ratelimit": { "characteristics": ["ip.src"], "period": 60, "requests_per_period": 20 } }
+    ]},
+    { "id": "r3", "name": "headers", "phase": "http_response_headers_transform", "rules": [
+      { "description": "add security header", "expression": "true", "action": "rewrite", "enabled": true,
+        "action_parameters": { "headers": { "X-Frame-Options": { "operation": "set", "value": "DENY" } } } }
+    ]},
+    { "id": "r4", "name": "redirects", "phase": "http_request_dynamic_redirect", "rules": [
+      { "description": "apex to www", "expression": "http.host eq \"example.com\"", "action": "redirect", "enabled": true,
+        "action_parameters": { "from_value": { "status_code": 301, "target_url": { "value": "https://www.example.com" } } } }
+    ]}
+  ],
+  "managed_rulesets": [
+    { "id": "efb7b8c9aafb4d6ea5ee8be2c2b60b", "name": "Cloudflare OWASP Core Ruleset", "enabled": true, "sensitivity": "medium" }
+  ],
+  "certificates": [
+    { "type": "universal", "hosts": ["example.com", "*.example.com"], "issuer": "Cloudflare Inc ECC CA-3" }
+  ],
+  "workers": [
+    { "pattern": "example.com/api/*", "script": "api-router" }
+  ],
+  "r2_buckets": [
+    { "name": "example-assets", "location": "weur" }
+  ],
+  "ip_access_rules": [
+    { "mode": "block", "target": "country", "value": "CN" },
+    { "mode": "block", "target": "asn", "value": "AS64512" },
+    { "mode": "block", "target": "ip", "value": "192.0.2.10" },
+    { "mode": "whitelist", "target": "ip", "value": "203.0.113.5" },
+    { "mode": "challenge", "target": "country", "value": "RU" }
+  ],
+  "ua_rules": [
+    { "mode": "block", "user_agent": "curl", "description": "block curl" },
+    { "mode": "challenge", "user_agent": "scanner", "description": "challenge scanner" }
+  ],
+  "snippets": [
+    { "name": "geo-router" }
+  ],
+  "email_routing": { "enabled": true, "rules": 3 }
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "block-bad-ua",
+    "phase": 1,
+    "pattern": "(?i)badbot",
+    "targets": [
+      "HEADERS:User-Agent"
+    ],
+    "severity": "HIGH",
+    "mode": "block",
+    "score": 10,
+    "description": "block bad UA"
+  }
+]

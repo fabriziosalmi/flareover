@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "source": "r2",
+  "account": "example-account",
+  "buckets": [
+    {
+      "name": "public-assets",
+      "region": "weur",
+      "versioning": true,
+      "public_read": true,
+      "cors": [
+        { "allowed_origins": ["https://app.example.com"], "allowed_methods": ["GET", "HEAD"], "max_age_seconds": 3600 }
+      ],
+      "lifecycle": [
+        { "id": "expire-temp", "prefix": "tmp/", "expire_days": 30 }
+      ],
+      "approx_objects": 120000,
+      "approx_gb": 45
+    },
+    {
+      "name": "private-backups",
+      "region": "weur",
+      "versioning": false,
+      "public_read": false,
+      "policy_json": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::123:role/app\"},\"Action\":\"s3:GetObject\"}]}",
+      "lifecycle": [
+        { "id": "glacier", "prefix": "", "transition": true }
+      ],
+      "approx_objects": 8000,
+      "approx_gb": 900
+    }
+  ]
+}

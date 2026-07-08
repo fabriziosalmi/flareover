@@ -1,0 +1,12 @@
+{
+  "origin:conformance.example": "10.0.0.10:8080",
+  "origin:www.conformance.example": "10.0.0.10:8080",
+  "origin:api.conformance.example": "10.0.0.10:8081",
+  "origin:blog.conformance.example": "10.0.0.10:8082",
+  "origin:shop.conformance.example": "10.0.0.10:8083",
+  "origin:*.conformance.example": "10.0.0.10:8080",
+  "dnssec-ds-update": "yes",
+  "redirect-template:legacy path move": "no",
+  "waf-translate:challenge admin from outside": "no",
+  "challenge-as-block:challenge country=CN": "no"
+}

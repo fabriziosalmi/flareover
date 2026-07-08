@@ -1,0 +1,123 @@
+{
+	order waf first
+	order cache before rewrite
+	cache
+}
+
+(waf) {
+	waf {
+		rule_file /etc/caddy/waf/rules.json
+		rate_limit {
+			requests 20
+			window 10s
+			paths /login
+		}
+		block_asns 64512
+		ip_blacklist_file /etc/caddy/waf/ip_blacklist.txt
+		ip_whitelist_file /etc/caddy/waf/ip_whitelist.txt
+	}
+}
+
+*.conformance.example {
+	tls /etc/caddy/certs/*.conformance.example/fullchain.pem /etc/caddy/certs/*.conformance.example/privkey.pem
+	tls {
+		protocols tls1.2
+	}
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	header X-Content-Type-Options "nosniff"
+	header X-Frame-Options "DENY"
+	import waf
+	cache
+	reverse_proxy https://10.0.0.10:8080 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+}
+
+api.conformance.example {
+	tls /etc/caddy/certs/api.conformance.example/fullchain.pem /etc/caddy/certs/api.conformance.example/privkey.pem
+	tls {
+		protocols tls1.2
+	}
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	header X-Content-Type-Options "nosniff"
+	header X-Frame-Options "DENY"
+	import waf
+	cache
+	reverse_proxy https://10.0.0.10:8081 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+}
+
+blog.conformance.example {
+	tls /etc/caddy/certs/blog.conformance.example/fullchain.pem /etc/caddy/certs/blog.conformance.example/privkey.pem
+	tls {
+		protocols tls1.2
+	}
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	header X-Content-Type-Options "nosniff"
+	header X-Frame-Options "DENY"
+	import waf
+	cache
+	reverse_proxy https://10.0.0.10:8082 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+}
+
+conformance.example {
+	tls /etc/caddy/certs/conformance.example/fullchain.pem /etc/caddy/certs/conformance.example/privkey.pem
+	tls {
+		protocols tls1.2
+	}
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	header X-Content-Type-Options "nosniff"
+	header X-Frame-Options "DENY"
+	import waf
+	cache
+	redir https://www.conformance.example{uri} 301
+	reverse_proxy https://10.0.0.10:8080 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+}
+
+shop.conformance.example {
+	tls /etc/caddy/certs/shop.conformance.example/fullchain.pem /etc/caddy/certs/shop.conformance.example/privkey.pem
+	tls {
+		protocols tls1.2
+	}
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	header X-Content-Type-Options "nosniff"
+	header X-Frame-Options "DENY"
+	import waf
+	cache
+	reverse_proxy https://10.0.0.10:8083 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+}
+
+www.conformance.example {
+	tls /etc/caddy/certs/www.conformance.example/fullchain.pem /etc/caddy/certs/www.conformance.example/privkey.pem
+	tls {
+		protocols tls1.2
+	}
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	header X-Content-Type-Options "nosniff"
+	header X-Frame-Options "DENY"
+	import waf
+	cache
+	reverse_proxy https://10.0.0.10:8080 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+}
+

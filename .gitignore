@@ -1,0 +1,27 @@
+# Build artifacts
+/flareover
+/dist/
+*.exe
+
+# Per-migration working state (generated; keep out of the public repo)
+/decisions.lock
+/out/
+# Real per-migration snapshots stay out — but the SANITIZED test fixtures are
+# tracked, so a fresh clone can run `go test` (the suite reads them).
+*.snapshot.json
+!testdata/fixtures/*.snapshot.json
+
+# Local env / secrets
+.env
+*.local
+
+# Go
+/vendor/
+
+# Infrastructure notes, recon, deploy artifacts, secrets — NEVER tracked
+/infra/
+
+# macOS
+.DS_Store
+
+.claude/

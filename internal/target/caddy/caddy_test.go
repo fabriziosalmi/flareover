@@ -1,0 +1,90 @@
+package caddy
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/fabriziosalmi/flareover/internal/ir"
+)
+
+func samplePlan() ir.Plan {
+	return ir.Plan{
+		Zone: "example.com",
+		Sites: []ir.Site{{
+			Host:    "example.com",
+			Origin:  ir.Origin{Upstreams: []string{"10.44.44.20:8080"}, Scheme: "https", VerifyTLS: false},
+			TLS:     ir.TLS{Provider: "certmate", MinVersion: "1.2", HSTS: &ir.HSTS{MaxAge: 31536000, IncludeSubDomains: true}},
+			Headers: []ir.HeaderOp{{Phase: "response", Op: "set", Name: "X-Frame-Options", Value: "DENY"}},
+			Redirects: []ir.Redirect{
+				{Match: "*", To: "https://www.example.com", Status: 301},
+				{Match: "/old/*", To: "https://example.com/new/$1", Status: 301},
+			},
+			Cache: &ir.CachePolicy{Enabled: true, TTL: 7200},
+		}},
+		WAF: ir.WAFPolicy{
+			ManagedOWASP: true,
+			CustomRules:  []ir.WAFRule{{Description: "block bad UA", Pattern: "(?i)badbot", Targets: []string{"HEADERS:User-Agent"}, Action: "block", Score: 10}},
+			RateLimits:   []ir.RateLimit{{Requests: 20, Window: 60, Path: "/login"}},
+		},
+	}
+}
+
+func generate(t *testing.T) string {
+	t.Helper()
+	arts, err := Generator{}.Generate(samplePlan())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(arts) != 1 {
+		t.Fatalf("artifacts = %d, want 1", len(arts))
+	}
+	return string(arts[0].Content)
+}
+
+// TestNoCloudflareCaptureSyntax is the 0% FP guard: Cloudflare's `$1` capture
+// must never survive into a Caddyfile (it would silently break the redirect).
+func TestNoCloudflareCaptureSyntax(t *testing.T) {
+	out := generate(t)
+	if strings.Contains(out, "/new/$1") {
+		t.Error("Caddyfile leaked Cloudflare capture syntax $1")
+	}
+	if !strings.Contains(out, "path_regexp") || !strings.Contains(out, "{re.rd") {
+		t.Error("capture redirect was not translated to a path_regexp matcher")
+	}
+}
+
+func TestCaddyfileEssentials(t *testing.T) {
+	out := generate(t)
+	wants := []string{
+		"order waf first",
+		"example.com {",
+		"reverse_proxy https://10.44.44.20:8080",
+		"tls_insecure_skip_verify",               // https origin, no verify
+		"Strict-Transport-Security",              // HSTS
+		"protocols tls1.2",                       // min TLS floor
+		`header X-Frame-Options "DENY"`,          // header transform
+		"import waf",                             // WAF snippet
+		"redir https://www.example.com{uri} 301", // catch-all preserves path
+		"rate_limit {",
+	}
+	for _, w := range wants {
+		if !strings.Contains(out, w) {
+			t.Errorf("Caddyfile missing %q\n---\n%s", w, out)
+		}
+	}
+}
+
+func TestRedirectOrdering(t *testing.T) {
+	out := generate(t)
+	specific := strings.Index(out, "path_regexp")
+	catchall := strings.Index(out, "redir https://www.example.com{uri}")
+	if specific == -1 || catchall == -1 || specific > catchall {
+		t.Errorf("specific redirect must precede catch-all (specific=%d catchall=%d)", specific, catchall)
+	}
+}
+
+func TestDeterministic(t *testing.T) {
+	if generate(t) != generate(t) {
+		t.Error("Caddyfile generation is not deterministic")
+	}
+}

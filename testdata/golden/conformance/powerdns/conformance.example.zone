@@ -1,0 +1,26 @@
+; flareover-generated authoritative zone for conformance.example
+$ORIGIN conformance.example.
+$TTL 300
+
+@	IN	SOA	ns1.conformance.example. hostmaster.conformance.example. (
+		1          ; serial (set at provision time)
+		3600       ; refresh
+		600        ; retry
+		1209600    ; expire
+		300 )      ; minimum
+
+@	IN	NS	ns1.NAMESERVER_PLACEHOLDER.
+@	IN	NS	ns2.NAMESERVER_PLACEHOLDER.
+
+*	300	IN	A	203.0.113.1
+_dmarc	300	IN	TXT	"v=DMARC1; p=quarantine; rua=mailto:dmarc@conformance.example"
+_sip._tcp	300	IN	SRV	10 5 5060 sip.conformance.example.
+api	300	IN	A	203.0.113.1
+blog	300	IN	A	203.0.113.1
+@	300	IN	A	203.0.113.1
+@	300	IN	CAA	0 issue "letsencrypt.org"
+@	300	IN	MX	10 mail.conformance.example.
+@	300	IN	TXT	"v=spf1 include:_spf.conformance.example ~all"
+mail	300	IN	A	203.0.113.10
+shop	300	IN	A	203.0.113.1
+www	300	IN	A	203.0.113.1
