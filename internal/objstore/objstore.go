@@ -69,8 +69,7 @@ func Classify(s Snapshot) report.Report {
 			add(report.Finding{Kind: "versioning", Name: b.Name, Verdict: report.Auto, Target: "minio",
 				Rationale: "Object versioning → MinIO versioning (mc version enable)."})
 		}
-		for i, c := range b.CORS {
-			_ = c
+		for i := range b.CORS {
 			add(report.Finding{Kind: "cors", Name: fmt.Sprintf("%s#%d", b.Name, i), Verdict: report.Auto, Target: "minio",
 				Rationale: "CORS rule → MinIO bucket CORS (mc cors set)."})
 		}

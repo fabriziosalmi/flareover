@@ -29,12 +29,13 @@ wrong".
 ## Before you open a PR
 
 ```bash
-gofmt -l cmd internal      # must print nothing
-go vet ./...               # must be clean
-go test -race ./...        # must pass
+make fmt        # gofmt ./cmd ./internal
+make vet        # go vet ./...
+make lint       # staticcheck ./...
+make race       # go test -race ./...
 ```
 
-CI runs exactly these. Please keep commits focused and their messages explaining the *why*.
+CI runs exactly these (build + vet + staticcheck + `go test -race` + gofmt check). Please keep commits focused and their messages explaining the *why*.
 
 ## Getting started
 

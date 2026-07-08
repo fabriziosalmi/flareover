@@ -84,7 +84,9 @@ func TestRedirectOrdering(t *testing.T) {
 }
 
 func TestDeterministic(t *testing.T) {
-	if generate(t) != generate(t) {
+	a := generate(t)
+	b := generate(t)
+	if a != b {
 		t.Error("Caddyfile generation is not deterministic")
 	}
 }

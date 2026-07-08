@@ -153,7 +153,7 @@ func classifyGlobalSettings(s cf.Snapshot, add func(report.Finding)) {
 		add(auto("transform", "automatic-https-rewrites", "caddy",
 			"Automatic HTTPS Rewrites → Caddy replace directive rewriting http:// asset links to https://."))
 	}
-	if st.Ciphers != nil && len(st.Ciphers) > 0 {
+	if len(st.Ciphers) > 0 {
 		add(report.Finding{
 			Kind: "tls", Name: "custom-ciphers", Verdict: report.Ask, Target: "caddy",
 			Rationale: "A custom cipher suite is configured. Caddy exposes a narrower, safe-by-default cipher set; confirm mapping to the closest supported list.",
