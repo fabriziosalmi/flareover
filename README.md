@@ -2,7 +2,7 @@
 
 **Move your site off the orange cloud onto your own EU servers — without changing how it behaves.**
 
-<p align="center"><img src="docs/demo.svg" alt="flareover — assess, cost, providers, prepare (a real session)" width="760"></p>
+<p align="center"><img src="docs/demo.svg" alt="flareover — assess, cost, providers, prepare (real output, honest numbers)" width="820"></p>
 
 Leaving the big managed edge means rebuilding, by hand, everything the dashboard quietly does for
 you: DNS, TLS certificates, redirects, firewall/WAF rules, caching — and hoping you didn't miss

@@ -1,0 +1,139 @@
+# flareover — README hero storyboard (rendered by firstframe → docs/demo.svg,
+# which GitHub animates). Every number is verbatim from a real run against the
+# sanitized conformance fixture: 43 elements · 31 AUTO · 11 ASK · 1 MANUAL · 72%.
+#
+# Render:  cd ../firstframe && cargo run --release -- build \
+#            ../flareover/docs/demo.toml -o ../flareover/docs/demo.svg
+
+[meta]
+name        = "flareover"
+tagline     = "flareover — deterministic edge migration to EU-sovereign infrastructure"
+theme       = "mocha"
+width       = 880
+height      = 630
+seed        = 0xF1A6E0FF
+end_hold_ms = 2600
+
+# ── assess ──
+[[beat]]
+kind        = "silence"
+duration_ms = 700
+
+[[beat]]
+kind  = "output"
+lines = [ { text = "# assess a Cloudflare zone — what maps, what to decide, what won't", accent = "dim" } ]
+
+[[beat]]
+kind = "prompt"
+text = "$ "
+
+[[beat]]
+kind   = "type"
+text   = "flareover assess zone.snapshot.json"
+cps    = 20
+jitter = 0.28
+
+[[beat]]
+kind        = "silence"
+duration_ms = 500
+
+[[beat]]
+kind       = "output"
+stagger_ms = 110
+lines = [
+  { text = "  43 elements   ✅ 31 migrated 1:1   ⚠️ 11 ASK   ✋ 1 MANUAL" },
+  { text = "  → 72% mapped automatically · 0% false positives", accent = "orange" },
+]
+
+# ── cost ──
+[[beat]]
+kind        = "silence"
+duration_ms = 900
+
+[[beat]]
+kind  = "output"
+lines = [ { text = "# compare the cost vs a flat EU-sovereign stack", accent = "dim" } ]
+
+[[beat]]
+kind = "prompt"
+text = "$ "
+
+[[beat]]
+kind   = "type"
+text   = "flareover cost zone.snapshot.json"
+cps    = 20
+jitter = 0.28
+
+[[beat]]
+kind        = "silence"
+duration_ms = 500
+
+[[beat]]
+kind       = "output"
+stagger_ms = 110
+lines = [
+  { text = "  Cloudflare today: free   ·   EU-sovereign: 8.49 EUR/mo", accent = "green" },
+  { text = "  the case for leaving is sovereignty & resilience — not the bill", accent = "dim" },
+]
+
+# ── providers ──
+[[beat]]
+kind        = "silence"
+duration_ms = 900
+
+[[beat]]
+kind  = "output"
+lines = [ { text = "# pick where the edge lands — honest sovereignty tiers", accent = "dim" } ]
+
+[[beat]]
+kind = "prompt"
+text = "$ "
+
+[[beat]]
+kind   = "type"
+text   = "flareover providers"
+cps    = 20
+jitter = 0.28
+
+[[beat]]
+kind        = "silence"
+duration_ms = 500
+
+[[beat]]
+kind       = "output"
+stagger_ms = 110
+lines = [
+  { text = "  ✅ EU-sovereign   Hetzner · OVH · Contabo · Aruba · Scaleway", accent = "green" },
+  { text = "  ⚠️ EU residency   AWS · GCP · Azure (Milan) — US CLOUD Act reach", accent = "yellow" },
+]
+
+# ── prepare ──
+[[beat]]
+kind        = "silence"
+duration_ms = 900
+
+[[beat]]
+kind  = "output"
+lines = [ { text = "# generate the target config + a migration report", accent = "dim" } ]
+
+[[beat]]
+kind = "prompt"
+text = "$ "
+
+[[beat]]
+kind   = "type"
+text   = "flareover prepare zone.snapshot.json --edge-ip 203.0.113.10 --out ./out"
+cps    = 20
+jitter = 0.28
+
+[[beat]]
+kind        = "silence"
+duration_ms = 500
+
+[[beat]]
+kind       = "output"
+stagger_ms = 110
+lines = [
+  { text = "  ✓ Caddyfile · caddy-waf · PowerDNS zone · WireGuard mesh", accent = "green" },
+  { text = "  ✓ MIGRATION.md — every element, and exactly what it became", accent = "green" },
+]
