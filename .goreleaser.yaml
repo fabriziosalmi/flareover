@@ -76,7 +76,9 @@ brews:
     repository:
       owner: fabriziosalmi
       name: homebrew-flareover
+      branch: main
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
     homepage: "https://www.flareover.com"
     description: "Deterministic Cloudflare → EU-sovereign migration engine (0% false positives)"
     license: "AGPL-3.0-only"
