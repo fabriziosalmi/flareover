@@ -88,7 +88,10 @@ explicit human steps.
 ## Install
 
 ```bash
-# Verified installer (downloads the release for your OS/arch, checks its sha256)
+# macOS (Homebrew)
+brew install fabriziosalmi/tap/flareover
+
+# Linux/macOS — verified installer (downloads the release for your OS/arch, checks its sha256)
 curl -fsSL https://raw.githubusercontent.com/fabriziosalmi/flareover/main/install.sh | sh
 
 # …or from source (single static binary, pure Go, zero external deps)
