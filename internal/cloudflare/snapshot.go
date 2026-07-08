@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package cloudflare defines the canonical, read-only snapshot of a Cloudflare
 // zone. A Snapshot is produced by the extractor (or hand-authored as a test
 // fixture) and is the single input to classification and generation. It is a

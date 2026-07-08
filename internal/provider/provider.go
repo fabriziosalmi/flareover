@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package provider is the honest catalogue of places to put an edge node. Its
 // whole reason to exist is a single distinction the sovereignty pitch must never
 // blur: an EU *region* is not EU *sovereignty*. A US-operated cloud in Milan

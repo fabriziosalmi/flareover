@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package doctor is the pre-flight: before you provision, it checks — read-only —
 // that every target service is reachable, authorized, and configured the way the
 // provisioning step will need it. It writes nothing and changes nothing, so it

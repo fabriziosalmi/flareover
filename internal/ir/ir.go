@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package ir defines the provider-agnostic Intermediate Representation of a
 // migration. Extraction produces a cloudflare.Snapshot; classification turns
 // the AUTO (and answered-ASK) parts of that snapshot into this IR, which

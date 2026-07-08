@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package plan builds the provider-agnostic ir.Plan from a Cloudflare snapshot
 // plus the answers to any ASK questions. It emits IR only for what can be
 // faithfully translated — the same judgement the classifier makes, via the

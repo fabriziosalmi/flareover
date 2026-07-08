@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package cfexpr holds the small, shared interpreters for Cloudflare's rules
 // language and action parameters. Both the classifier (which decides AUTO/ASK/
 // MANUAL) and the plan builder (which emits config) depend on it, so the

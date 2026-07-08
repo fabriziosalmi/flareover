@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package powerdns renders the authoritative zone from the plan's DNS intent.
 // It emits a BIND-style zone file (which PowerDNS loads directly, or which maps
 // 1:1 onto the PowerDNS HTTP API) plus a short provisioning note. Proxied

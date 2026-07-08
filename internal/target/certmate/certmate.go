@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package certmate is the certificate adapter: it drives a CertMate instance to
 // issue certs via DNS-01, which is what unlocks the two things Caddy's built-in
 // HTTP-01 cannot do — wildcard certificates and an EU certificate authority

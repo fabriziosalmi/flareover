@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package cost estimates the monetary picture of a migration: which Cloudflare
 // paid tiers/add-ons the captured configuration implies, versus a flat EU-stack
 // cost. It is deliberately honest — it reports a *floor* with ranges and notes,

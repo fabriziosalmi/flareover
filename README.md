@@ -25,6 +25,8 @@ CertMate, …) on EU infrastructure. Its one rule: **never emit config that sile
 That last part is the whole point: a migration you can trust, because the tool is honest about exactly
 what it can and can't carry over.
 
+**Contents:** [The contract](#the-contract-no-silent-surprises) · [How it works](#how-it-works--five-phases) · [Target stack](#target-stack-eu-sovereign) · [Install](#install) · [Usage](#usage) · [Status](#status) · [Architecture](docs/architecture.md) · [Contributing](CONTRIBUTING.md)
+
 ## The contract: no silent surprises
 
 Every setting on the source gets exactly one verdict:

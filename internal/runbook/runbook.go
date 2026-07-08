@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package runbook renders the human-facing migration document — the assessment
 // summary, the generated artifacts, the ordered cutover steps (as flareover
 // commands), and the rollback. It is the paper trail a migration deserves: every

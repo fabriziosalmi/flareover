@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package cloudflare's extractor turns a live zone into a Snapshot by calling
 // the Cloudflare REST API v4 read-only. It depends on nothing but an API token
 // (scoped Zone:Read, DNS:Read, and — for firewall/rules — Zone WAF:Read), so

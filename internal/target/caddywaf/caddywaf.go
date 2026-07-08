@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package caddywaf renders the caddy-waf rule corpus (rules.json) from the
 // plan's WAF policy. The Caddyfile (see the caddy package) references this file
 // via `rule_file` and carries the directive-level policy (rate limits, ASN/

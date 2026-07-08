@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package report holds the verdict vocabulary and the honest coverage report
 // that the Assessment phase produces. A Finding is the atomic unit: one
 // Cloudflare element, one verdict, one rationale. The report is the contract

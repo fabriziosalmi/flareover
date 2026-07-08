@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package parity is the Failguards muscle: it proves the new edge behaves like
 // Cloudflare before any cutover is allowed. It probes both edges with the same
 // requests and diffs the responses — but only on what represents *behavior*

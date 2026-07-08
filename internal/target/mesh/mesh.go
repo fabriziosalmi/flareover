@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package mesh generates a sovereign WireGuard link between one or more public
 // edge nodes and the isolated origin — the substitute for a Cloudflare Tunnel,
 // which would route a leave-Cloudflare migration back through Cloudflare. It

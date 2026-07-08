@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package classify is the verdict engine. It turns a cloudflare.Snapshot into a
 // report.Report by classifying every element AUTO / ASK / MANUAL. The single
 // invariant that makes the 0% false-positive claim true: when equivalence

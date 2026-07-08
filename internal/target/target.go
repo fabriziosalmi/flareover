@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package target defines the adapter contracts that turn a provider-agnostic
 // ir.Plan into concrete configuration for a specific EU-stack tool. The IR is
 // the seam: extraction and classification never know which target is in play,

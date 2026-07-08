@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package objstore migrates object storage off a hyperscaler (Cloudflare R2 or
 // AWS S3) onto EU-sovereign MinIO. It applies the same 0% false-positive
 // discipline as the edge migration: it maps bucket *configuration* faithfully

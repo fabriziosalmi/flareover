@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Command flareover is the CLI for the deterministic Cloudflare → EU-self-hosted
 // migration engine. Its verbs walk the migration end to end:
 //

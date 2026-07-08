@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package validate proves that generated artifacts actually parse — turning
 // "faithful by construction" into "faithful and checked". It only ever runs
 // read-only checkers (a syntax linter, `caddy validate`/`caddy fmt`), so it can

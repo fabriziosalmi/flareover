@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package render turns the engine's reports into terminal output that reads at
 // a glance — colored verdict badges, boxed summaries, aligned columns. It is
 // pure presentation over the same data the plain Text() renderers use, and it

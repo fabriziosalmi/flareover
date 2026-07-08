@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package stack assembles concrete StackProfiles from the target generators.
 // It is the one place that knows which proxy/WAF/DNS implementations belong
 // together, so selecting a profile ("caddy" today; "nginx"/"traefik" later) is

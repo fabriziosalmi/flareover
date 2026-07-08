@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package spm generates the egress-shield configuration for secure-proxy-manager
 // — the outbound counterpart almost no migration touches. It turns the egress
 // intent (default-deny, an allowlist of legitimate destinations, threat feeds,

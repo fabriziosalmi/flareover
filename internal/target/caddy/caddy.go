@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package caddy renders an ir.Plan into a Caddyfile for the default flareover
 // stack profile (Caddy + caddy-waf + souin cache). The output assumes a custom
 // Caddy build (xcaddy with the caddy-waf and souin modules) and certificates

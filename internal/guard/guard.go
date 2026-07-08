@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package guard is the Failguards muscle as a running loop. After a cutover it
 // watches the migrated edge's health; when it degrades past a threshold it fires
 // a trigger — a rollback (back to the source) or, in failover framing, a flip to
