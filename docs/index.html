@@ -101,7 +101,7 @@
       map exactly, it asks about or flags — <b>it never guesses</b>.</p>
     <div class="cta">
       <a class="btn p" href="#contract">How it stays faithful</a>
-      <a class="btn g" href="#proof">See it proven live</a>
+      <a class="btn g" href="#proof">See the validation</a>
     </div>
     <p style="margin-top:1.4rem"><span class="tag">● AGPL-3.0 · self-hostable · no lock-in</span></p>
   </header>
@@ -162,10 +162,10 @@
   </section>
 
   <section id="proof">
-    <h2>Proven on a real domain, live</h2>
-    <p class="lead">A real zone was migrated end-to-end and cut over off its incumbent edge provider — then
-      verified from the public internet. The parity gate <b>first blocked</b> a divergence, and only passed
-      once the new edge behaved identically.</p>
+    <h2>Validated end-to-end on a real zone</h2>
+    <p class="lead">A real zone was migrated and cut over off its old managed edge, then verified
+      end-to-end. The parity gate <b>first blocked</b> a divergence, and only passed once the new edge
+      behaved identically — these are the checks it ran:</p>
     <div class="proof">
       <div class="pill"><span>Certificate</span><b>Let's Encrypt ✓</b></div>
       <div class="pill"><span>Server header</span><b>own edge · no CDN ✓</b></div>
@@ -204,7 +204,10 @@
   </section>
 
   <footer>
-    <p><span class="mono">flareover</span> · own your escape hatch · <a href="https://github.com/fabriziosalmi/flareover">GitHub</a> · AGPL-3.0</p>
+    <p><span class="mono">flareover</span> · <a href="https://github.com/fabriziosalmi/flareover">GitHub</a>
+      · <a href="https://github.com/fabriziosalmi/flareover/blob/main/docs/scenario-edge-mesh.md">Keep-your-origin scenario</a>
+      · <a href="https://github.com/fabriziosalmi/flareover/blob/main/docs/deploy-hardened.md">Hardened deploy</a>
+      · AGPL-3.0</p>
     <p class="dm">Built from the discipline that real, high-stakes DNS and edge migrations demand.</p>
   </footer>
 

@@ -2,6 +2,12 @@
 
 **Move your site off the orange cloud onto your own EU servers — without changing how it behaves.**
 
+[![CI](https://github.com/fabriziosalmi/flareover/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/flareover/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/fabriziosalmi/flareover?sort=semver)](https://github.com/fabriziosalmi/flareover/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/fabriziosalmi/flareover)](https://goreportcard.com/report/github.com/fabriziosalmi/flareover)
+[![Go](https://img.shields.io/github/go-mod/go-version/fabriziosalmi/flareover)](go.mod)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+
 <p align="center"><img src="docs/demo.svg" alt="flareover — assess, cost, providers, prepare (real output, honest numbers)" width="820"></p>
 
 Leaving the big managed edge means rebuilding, by hand, everything the dashboard quietly does for
@@ -30,23 +36,24 @@ Every setting on the source gets exactly one verdict:
 | **MANUAL** | Nothing maps faithfully (Workers code, ML bot-scoring, proprietary DDoS) → documented and left for you, never guessed. |
 
 Behavior-changing configuration is emitted **only** for AUTO and answered-ASK items — everything else
-is surfaced, never silently applied. Classification and generation are a **pure function** of
-`snapshot + decisions.lock`: run it twice, get byte-identical output (this is golden-tested), so the
-result is reviewable in git before anything goes live.
+is surfaced, never silently applied. Classification and artifact generation are a **pure function** of
+`snapshot + decisions.lock`: run it twice, get byte-identical config (this is golden-tested), so the
+result is reviewable in git before anything goes live. (Runtime state a *target* assigns later — e.g.
+a MinIO lifecycle-rule id — is outside that function and noted where it differs.)
 
 ## How it works — five phases
 
 ```
-Assessment → Preparation → Presentation → Execution → Failguards
+assess → prepare → present → execute → guard
 ```
 
-1. **Assessment** — read-only extract of the source zone → provider-agnostic intent model (CF-IR) →
-   classify every element AUTO/ASK/MANUAL. Output: an honest coverage report (+ a cost comparison).
-2. **Preparation** — resolve ASK items; generate artifacts; auto-provision a **staged** target.
-3. **Presentation** — parity gate: probe the live edge vs the staged edge and diff
+1. **Assessment** (`assess`) — read-only extract of the source zone → provider-agnostic intent model
+   (CF-IR) → classify every element AUTO/ASK/MANUAL. Output: an honest coverage report (+ cost).
+2. **Preparation** (`prepare`) — resolve ASK items; generate artifacts; auto-provision a **staged** target.
+3. **Presentation** (`present`) — parity gate: probe the live edge vs the staged edge and diff
    status/redirects/headers/body. HARD divergences block; SOFT ones are surfaced.
-4. **Execution** — gated cutover, orchestrated live up to the DNS flip. Requires explicit confirmation.
-5. **Failguards** — parity gate, health monitoring, automatic rollback/failover, fail-closed egress,
+4. **Execution** (`execute`) — gated cutover, orchestrated live up to the DNS flip. Requires explicit confirmation.
+5. **Failguards** (`guard`) — health monitoring, automatic rollback/failover, fail-closed egress,
    idempotent re-runs.
 
 ## Target stack (EU-sovereign)
@@ -86,9 +93,9 @@ curl -fsSL https://raw.githubusercontent.com/fabriziosalmi/flareover/main/instal
 go install github.com/fabriziosalmi/flareover/cmd/flareover@latest
 ```
 
-Release binaries (linux/macOS/windows · amd64/arm64) ship with an SBOM and a
-`checksums.txt` **signed keyless via Sigstore/cosign** — verify it with the
-command in each release's notes. `flareover version` prints the build tag.
+Building from source requires **Go 1.25+**. Release binaries (linux/macOS/windows · amd64/arm64) ship
+with an SBOM and a `checksums.txt` **signed keyless via Sigstore/cosign** — verify it with the command
+in each release's notes. `flareover version` prints the build tag.
 
 ## Usage
 
