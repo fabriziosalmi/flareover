@@ -305,7 +305,11 @@ func (c *Client) extractSettings(ctx context.Context, id string, out *ZoneSettin
 	}
 	str := func(k string) string {
 		var v string
-		_ = json.Unmarshal(get[k], &v)
+		if raw := get[k]; len(raw) > 0 {
+			if err := json.Unmarshal(raw, &v); err != nil {
+				c.warn("setting %q: unreadable value (%v)", k, err)
+			}
+		}
 		return v
 	}
 	onoff := func(k string) *OnOff {
@@ -459,7 +463,9 @@ func (c *Client) extractPageRules(ctx context.Context, id string) ([]PageRule, e
 		actions := map[string]any{}
 		for _, a := range pr.Actions {
 			var v any
-			_ = json.Unmarshal(a.Value, &v)
+			if err := json.Unmarshal(a.Value, &v); err != nil {
+				c.warn("page rule %q action %q: unreadable (%v)", target, a.ID, err)
+			}
 			actions[a.ID] = v
 		}
 		out = append(out, PageRule{Target: target, Actions: actions, Priority: pr.Priority, Status: pr.Status})
@@ -550,7 +556,9 @@ func (c *Client) getRulesetRules(ctx context.Context, zoneID, rulesetID, name, p
 			Description: r.Description, Expression: r.Expression, Action: r.Action, Enabled: r.Enabled,
 		}
 		if len(r.ActionParameters) > 0 {
-			_ = json.Unmarshal(r.ActionParameters, &rule.ActionParams)
+			if err := json.Unmarshal(r.ActionParameters, &rule.ActionParams); err != nil {
+				c.warn("ruleset %q rule %q: unreadable action params (%v)", name, r.Description, err)
+			}
 		}
 		if r.RateLimit != nil {
 			rule.RateLimit = &RateLimit{
