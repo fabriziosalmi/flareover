@@ -69,18 +69,18 @@ source:
 # Homebrew tap — auto-published on every release to the per-project tap repo
 # (matches homebrew-proxxx / homebrew-proxymate). A formula, so it works on Linux
 # brew too. One-time setup: create github.com/fabriziosalmi/homebrew-flareover and
-# add a repo-scoped PAT as the HOMEBREW_TAP_GITHUB_TOKEN secret. Until that secret
+# add a repo-scoped PAT as the HOMEBREW_TAP_TOKEN secret. Until that secret
 # exists the step skips itself (skip_upload), so a release never fails for it.
 brews:
   - name: flareover
     repository:
       owner: fabriziosalmi
       name: homebrew-flareover
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: "https://www.flareover.com"
     description: "Deterministic Cloudflare → EU-sovereign migration engine (0% false positives)"
     license: "AGPL-3.0-only"
-    skip_upload: '{{ if .Env.HOMEBREW_TAP_GITHUB_TOKEN }}false{{ else }}true{{ end }}'
+    skip_upload: '{{ if .Env.HOMEBREW_TAP_TOKEN }}false{{ else }}true{{ end }}'
     commit_author:
       name: goreleaser-bot
       email: bot@flareover.dev
