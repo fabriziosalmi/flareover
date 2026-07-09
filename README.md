@@ -61,7 +61,7 @@ assess → prepare → present → execute → guard
 
 | Concern | Tool |
 |---------|------|
-| Authoritative DNS | PowerDNS self-hosted, or **bunny.net** managed EU DNS via `prepare --dns bunny` (zone + records + DNSSEC → DS for the registrar) |
+| Authoritative DNS | PowerDNS self-hosted (zone + records + DNSSEC → DS for the registrar), or a managed EU provider via `--dns`: **bunny.net** (`prepare --dns bunny`) or **Scaleway** (`provision --dns scaleway`) |
 | Reverse proxy / CDN / TLS | Caddy (native ACME, HTTP/3) |
 | Edge cache | souin (Caddy module) |
 | WAF | caddy-waf (OWASP/rate-limit/IP·ASN·country/blocklists) |

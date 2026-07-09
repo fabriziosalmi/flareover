@@ -46,6 +46,7 @@ import (
 	"github.com/fabriziosalmi/flareover/internal/target/certmate"
 	"github.com/fabriziosalmi/flareover/internal/target/mesh"
 	"github.com/fabriziosalmi/flareover/internal/target/powerdns"
+	"github.com/fabriziosalmi/flareover/internal/target/scalewaydns"
 	"github.com/fabriziosalmi/flareover/internal/target/spm"
 	"github.com/fabriziosalmi/flareover/internal/validate"
 )
@@ -70,8 +71,9 @@ PHASES
   prepare <snapshot.json>   Generate the target-stack artifacts (Caddyfile,
                             caddy-waf rules, PowerDNS zone) for the AUTO plus
                             answered-ASK surface.
-  provision ...             Stand up the target via APIs (PowerDNS zone + DNSSEC,
-                            CertMate DNS-01 certs). --pdns-url / --certmate-url.
+  provision ...             Stand up the target via APIs (DNS zone + DNSSEC,
+                            CertMate DNS-01 certs). --pdns-url (PowerDNS) or
+                            --dns scaleway (Scaleway managed DNS) / --certmate-url.
   present ...               Parity gate: live edge vs staged edge (--after-addr).
   execute ...               Orchestrate the phases live up to the gated cutover.
   storage <buckets.json>    Migrate object storage (R2/S3) → MinIO + rclone plan.
@@ -100,8 +102,9 @@ PREPARE FLAGS
   --ca <name>          default cert CA: letsencrypt (default) | actalis
   --stack <id>         target stack profile (default: caddy)
   --dns <id>           authoritative DNS target: powerdns (default, self-hosted)
-                       | bunny (bunny.net managed EU DNS: emits a records-only
-                       BIND zone + apply.sh using the bunny.net CLI)
+                       | bunny (bunny.net managed EU DNS via its CLI) | scaleway
+                       (Scaleway managed EU DNS — apply live with
+                       "provision --dns scaleway", SCW_SECRET_KEY in the env)
   --out <dir>          write artifacts under <dir> (default: stdout preview)
   --validate           prove the generated Caddyfile + zone parse (caddy validate)
   --mesh-edge [name=]<host:port>  sovereign WireGuard tunnel to keep an existing
@@ -740,7 +743,7 @@ func cmdPresent(args []string) int {
 // the auto-provision step that closes the gap between "generate" and "done".
 func cmdProvision(args []string) int {
 	var snapPath, decisionsPath, nsList, edgeIP string
-	var pdnsURL, pdnsKey, cmURL, cmToken, ca, cmAccount, cmDNS string
+	var pdnsURL, pdnsKey, cmURL, cmToken, ca, cmAccount, cmDNS, dnsTarget string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		next := func() string { i++; return args[i] }
@@ -757,6 +760,8 @@ func cmdProvision(args []string) int {
 			edgeIP = next()
 		case "--nameservers":
 			nsList = next()
+		case "--dns":
+			dnsTarget = next()
 		case "--pdns-url":
 			pdnsURL = next()
 		case "--pdns-key":
@@ -776,8 +781,25 @@ func cmdProvision(args []string) int {
 			return 2
 		}
 	}
-	if snapPath == "" || (pdnsURL == "" && cmURL == "") {
-		fmt.Fprintln(os.Stderr, "flareover provision: need --snapshot and at least one of --pdns-url / --certmate-url")
+	// DNS backend selection (default: self-hosted PowerDNS). Scaleway managed DNS
+	// takes its credentials from the environment, never from argv.
+	var scwSecret, scwProject string
+	var useScaleway bool
+	switch dnsTarget {
+	case "", "powerdns":
+	case "scaleway", "scaleway-dns", "scalewaydns":
+		useScaleway = true
+		scwSecret, scwProject = os.Getenv("SCW_SECRET_KEY"), os.Getenv("SCW_DEFAULT_PROJECT_ID")
+	default:
+		fmt.Fprintf(os.Stderr, "flareover provision: unknown --dns %q (want: powerdns | scaleway)\n", dnsTarget)
+		return 2
+	}
+	if snapPath == "" || (pdnsURL == "" && cmURL == "" && !useScaleway) {
+		fmt.Fprintln(os.Stderr, "flareover provision: need --snapshot and at least one of --pdns-url / --certmate-url / --dns scaleway")
+		return 2
+	}
+	if useScaleway && (scwSecret == "" || scwProject == "") {
+		fmt.Fprintln(os.Stderr, "flareover provision: --dns scaleway needs SCW_SECRET_KEY and SCW_DEFAULT_PROJECT_ID in the environment")
 		return 2
 	}
 	if ca == "" {
@@ -799,16 +821,32 @@ func cmdProvision(args []string) int {
 		return 1
 	}
 
-	pr := render.NewProgress(os.Stdout, []string{"PowerDNS zone", "Certificates (DNS-01)"},
+	pr := render.NewProgress(os.Stdout, []string{"DNS zone", "Certificates (DNS-01)"},
 		render.Enabled(os.Stdout), render.IsTTY(os.Stdout))
 	ctx := context.Background()
 	var dsRecords []string
 
-	// PowerDNS
+	// DNS zone — Scaleway managed DNS, self-hosted PowerDNS, or skipped.
 	pr.Start(0)
-	if pdnsURL == "" {
-		pr.Done(0, "skipped (no --pdns-url)")
-	} else {
+	switch {
+	case useScaleway:
+		sp := scalewaydns.NewProvisioner(scwSecret, scwProject)
+		if u := os.Getenv("SCW_API_URL"); u != "" { // SDK-standard override; also lets tests point at a mock
+			sp.BaseURL = u
+		}
+		if err := sp.Provision(ctx, built.DNS); err != nil {
+			pr.Fail(0, err.Error())
+			return 1
+		}
+		detail := fmt.Sprintf("%d records (Scaleway)", len(built.DNS.Records))
+		if ns, err := sp.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
+			detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
+		}
+		if built.DNS.DNSSEC {
+			detail += " · DNSSEC: enable in the Scaleway console (not yet automated)"
+		}
+		pr.Done(0, detail)
+	case pdnsURL != "":
 		var ns []string
 		for _, n := range strings.Split(nsList, ",") {
 			if s := strings.TrimSpace(n); s != "" {
@@ -828,6 +866,8 @@ func cmdProvision(args []string) int {
 			}
 		}
 		pr.Done(0, detail)
+	default:
+		pr.Done(0, "skipped (no --pdns-url / --dns scaleway)")
 	}
 
 	// CertMate
@@ -1020,8 +1060,10 @@ func cmdPrepare(args []string) int {
 		// profile default (self-hosted PowerDNS)
 	case "bunny", "bunny-dns", "bunnydns":
 		profile.DNS = bunnydns.Generator{}
+	case "scaleway", "scaleway-dns", "scalewaydns":
+		profile.DNS = scalewaydns.Generator{}
 	default:
-		fmt.Fprintf(os.Stderr, "flareover prepare: unknown --dns %q (want: powerdns | bunny)\n", dnsTarget)
+		fmt.Fprintf(os.Stderr, "flareover prepare: unknown --dns %q (want: powerdns | bunny | scaleway)\n", dnsTarget)
 		return 2
 	}
 
