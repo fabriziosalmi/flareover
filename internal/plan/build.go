@@ -129,6 +129,7 @@ func buildDNS(s cf.Snapshot, opts Options) ir.DNSZone {
 func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 	scheme, verify := originScheme(s, opts)
 	siteHeaders := buildHeaders(s)
+	siteRewrites := buildRewrites(s)
 	scopedProxies := pathScopedProxies(s, scheme, verify)
 	wildcard := hasWildcardCert(s)
 
@@ -166,7 +167,8 @@ func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 				Wildcard:   wildcard,
 				HSTS:       buildHSTS(s),
 			},
-			Headers:   append([]ir.HeaderOp(nil), siteHeaders...),
+			Headers:   headersForSite(siteHeaders, rec.Name),
+			Rewrites:  rewritesForSite(siteRewrites, rec.Name),
 			Redirects: redirectsForHost(s, rec.Name),
 			Cache:     cacheForZone(s),
 		}
@@ -305,13 +307,9 @@ func buildHeaders(s cf.Snapshot) []ir.HeaderOp {
 			if !rule.Enabled {
 				continue
 			}
-			match := ""
-			if strings.TrimSpace(strings.ToLower(rule.Expression)) != "true" {
-				m, ok := cfexpr.CaddyMatcher(rule.Expression)
-				if !ok {
-					continue // host-scoped or compound → left MANUAL by the classifier
-				}
-				match = m
+			host, match, ok := cfexpr.TransformScope(rule.Expression)
+			if !ok {
+				continue // compound / host+path / unmappable → left MANUAL by the classifier
 			}
 			headers, ok := rule.ActionParams["headers"].(map[string]any)
 			if !ok {
@@ -327,18 +325,121 @@ func buildHeaders(s cf.Snapshot) []ir.HeaderOp {
 				if op == "" {
 					op = "set"
 				}
-				ops = append(ops, ir.HeaderOp{Phase: phase, Op: op, Name: name, Value: val, Match: match})
+				ops = append(ops, ir.HeaderOp{Phase: phase, Op: op, Name: name, Value: val, Host: host, Match: match})
 			}
 		}
 	}
-	// Deterministic: unscoped ops (Match "") first, then grouped by matcher.
+	// Deterministic: global ops first, then host-scoped, then path-scoped, each
+	// group ordered by name.
 	sort.SliceStable(ops, func(i, j int) bool {
+		if ops[i].Host != ops[j].Host {
+			return ops[i].Host < ops[j].Host
+		}
 		if ops[i].Match != ops[j].Match {
 			return ops[i].Match < ops[j].Match
 		}
 		return ops[i].Name < ops[j].Name
 	})
 	return ops
+}
+
+// headersForSite selects the header ops that apply to one host. Global ops and
+// zone-wide path-scoped ops apply to every site as-is; a host-scoped op applies
+// only to its own host, where it is emitted unmatched (the whole block is that
+// host) — so its Host hint is cleared. The result is re-sorted for a stable,
+// matcher-grouped rendering.
+func headersForSite(all []ir.HeaderOp, host string) []ir.HeaderOp {
+	var out []ir.HeaderOp
+	for _, op := range all {
+		switch {
+		case op.Host == "": // global or path-scoped (zone-wide)
+			out = append(out, op)
+		case op.Host == host: // host-scoped → this site; drop the scope, emit plainly
+			op.Host = ""
+			out = append(out, op)
+		}
+		// else: host-scoped for a different host → not part of this site
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Match != out[j].Match {
+			return out[i].Match < out[j].Match
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+// buildRewrites translates static URL-rewrite transform rules (request phase
+// only — a response transform cannot rewrite the URL) into internal rewrites,
+// using the same cfexpr.TransformScope + cfexpr.RewriteTarget predicates the
+// classifier decides AUTO from (classify ⟺ generate). A dynamic (expression-
+// derived) or unmappable rule is skipped here and left MANUAL by the classifier.
+func buildRewrites(s cf.Snapshot) []ir.Rewrite {
+	var rws []ir.Rewrite
+	for _, rs := range s.Rulesets {
+		switch rs.Phase {
+		case "http_request_transform", "http_request_late_transform":
+		default:
+			continue
+		}
+		for _, rule := range rs.Rules {
+			if !rule.Enabled {
+				continue
+			}
+			uri, ok := rule.ActionParams["uri"].(map[string]any)
+			if !ok {
+				continue
+			}
+			host, match, ok := cfexpr.TransformScope(rule.Expression)
+			if !ok {
+				continue
+			}
+			to, ok := cfexpr.RewriteTarget(uri)
+			if !ok {
+				continue
+			}
+			rws = append(rws, ir.Rewrite{Host: host, Match: match, To: to})
+		}
+	}
+	sort.SliceStable(rws, func(i, j int) bool {
+		if rws[i].Host != rws[j].Host {
+			return rws[i].Host < rws[j].Host
+		}
+		if rws[i].Match != rws[j].Match {
+			return rws[i].Match < rws[j].Match
+		}
+		return rws[i].To < rws[j].To
+	})
+	return rws
+}
+
+// rewritesForSite mirrors headersForSite for URL rewrites: global/zone-wide
+// rewrites apply to every site; a host-scoped one applies only to its host,
+// emitted unmatched there (Host cleared).
+func rewritesForSite(all []ir.Rewrite, host string) []ir.Rewrite {
+	var out []ir.Rewrite
+	for _, rw := range all {
+		switch {
+		case rw.Host == "": // global or path-scoped (zone-wide)
+			out = append(out, rw)
+		case rw.Host == host: // host-scoped → this site; drop the scope, emit plainly
+			rw.Host = ""
+			out = append(out, rw)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Match != out[j].Match {
+			return out[i].Match < out[j].Match
+		}
+		return out[i].To < out[j].To
+	})
+	return out
 }
 
 // redirectsForHost collects redirects that faithfully bind to a given host:

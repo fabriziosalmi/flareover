@@ -36,26 +36,60 @@ func find(r report.Report, kind, name string) *report.Finding {
 	return nil
 }
 
-// TestScopedHeaderTransformIsManual is the classify ⟺ generate guard for #6:
-// the generator only emits globally-matched header transforms, so a host/path-
-// scoped one must be MANUAL — never a silent AUTO that is then dropped.
-func TestScopedHeaderTransformIsManual(t *testing.T) {
+// TestHeaderTransformScopeSymmetry pins classify ⟺ generate for header
+// transforms: global and path-scoped are AUTO; a host-scoped rule is AUTO only
+// when its host is a proxied record (so the plan has a site to attach it to) and
+// MANUAL otherwise; a compound host+path expression stays MANUAL.
+func TestHeaderTransformScopeSymmetry(t *testing.T) {
 	hdr := map[string]any{"headers": map[string]any{
 		"X-Frame-Options": map[string]any{"operation": "set", "value": "DENY"},
 	}}
-	snap := cf.Snapshot{Rulesets: []cf.Ruleset{{
-		Phase: "http_response_headers_transform",
-		Rules: []cf.Rule{
-			{Description: "global header", Expression: "true", ActionParams: hdr, Enabled: true},
-			{Description: "scoped header", Expression: `http.host eq "app.example.com"`, ActionParams: hdr, Enabled: true},
-		},
-	}}}
-	r := Classify(snap)
-	if g := find(r, "transform", "global header"); g == nil || g.Verdict != report.Auto {
-		t.Errorf("global header transform should be AUTO, got %v", g)
+	snap := cf.Snapshot{
+		DNSRecords: []cf.DNSRecord{{Type: "A", Name: "app.example.com", Content: "192.0.2.1", Proxied: true}},
+		Rulesets: []cf.Ruleset{{
+			Phase: "http_response_headers_transform",
+			Rules: []cf.Rule{
+				{Description: "global header", Expression: "true", ActionParams: hdr, Enabled: true},
+				{Description: "host with site", Expression: `http.host eq "app.example.com"`, ActionParams: hdr, Enabled: true},
+				{Description: "host without site", Expression: `http.host eq "ghost.example.com"`, ActionParams: hdr, Enabled: true},
+				{Description: "compound", Expression: `http.host eq "app.example.com" and http.request.uri.path eq "/x"`, ActionParams: hdr, Enabled: true},
+			},
+		}},
 	}
-	if s := find(r, "transform", "scoped header"); s == nil || s.Verdict != report.Manual {
-		t.Errorf("scoped header transform must be MANUAL (not a silent AUTO), got %v", s)
+	r := Classify(snap)
+	want := map[string]report.Verdict{
+		"global header":     report.Auto,
+		"host with site":    report.Auto,   // app.example.com is a proxied site
+		"host without site": report.Manual, // no migrated site to attach to
+		"compound":          report.Manual, // no faithful single matcher
+	}
+	for name, v := range want {
+		f := find(r, "transform", name)
+		if f == nil || f.Verdict != v {
+			t.Errorf("%q: got %v, want %v", name, f, v)
+		}
+	}
+}
+
+// TestURLRewriteSymmetry pins the #6 rewrite half: a static URL rewrite is AUTO
+// (and actually emitted as a Caddy rewrite), while a dynamic, expression-derived
+// target is MANUAL — never a silent AUTO the generator would then drop.
+func TestURLRewriteSymmetry(t *testing.T) {
+	static := map[string]any{"uri": map[string]any{"path": map[string]any{"value": "/modern"}}}
+	dynamic := map[string]any{"uri": map[string]any{"path": map[string]any{"expression": `concat("/x", http.request.uri.path)`}}}
+	snap := cf.Snapshot{
+		DNSRecords: []cf.DNSRecord{{Type: "A", Name: "app.example.com", Proxied: true}},
+		Rulesets: []cf.Ruleset{{Phase: "http_request_transform", Rules: []cf.Rule{
+			{Description: "static rewrite", Expression: `starts_with(http.request.uri.path, "/legacy")`, ActionParams: static, Enabled: true},
+			{Description: "dynamic rewrite", Expression: "true", ActionParams: dynamic, Enabled: true},
+		}}},
+	}
+	r := Classify(snap)
+	if f := find(r, "transform", "static rewrite"); f == nil || f.Verdict != report.Auto {
+		t.Errorf("static URL rewrite should be AUTO (and emitted), got %v", f)
+	}
+	if f := find(r, "transform", "dynamic rewrite"); f == nil || f.Verdict != report.Manual {
+		t.Errorf("dynamic URL rewrite must be MANUAL (no faithful static mapping), got %v", f)
 	}
 }
 

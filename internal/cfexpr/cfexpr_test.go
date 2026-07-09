@@ -66,6 +66,54 @@ func TestHostEq(t *testing.T) {
 	}
 }
 
+func TestTransformScope(t *testing.T) {
+	cases := []struct {
+		expr        string
+		host, match string
+		ok          bool
+	}{
+		{"true", "", "", true},
+		{" TRUE ", "", "", true},
+		{`http.host eq "app.example.com"`, "app.example.com", "", true},
+		{`starts_with(http.request.uri.path, "/api")`, "", "path /api*", true},
+		{`http.request.uri.path eq "/health"`, "", "path /health", true},
+		// compound host+path → no faithful single matcher → not AUTO
+		{`http.host eq "a" and starts_with(http.request.uri.path, "/x")`, "", "", false},
+		{`http.user_agent contains "bot"`, "", "", false}, // not a scope we emit
+		{"", "", "", false},
+	}
+	for _, c := range cases {
+		h, m, ok := TransformScope(c.expr)
+		if h != c.host || m != c.match || ok != c.ok {
+			t.Errorf("TransformScope(%q) = (%q,%q,%v), want (%q,%q,%v)", c.expr, h, m, ok, c.host, c.match, c.ok)
+		}
+	}
+}
+
+func TestRewriteTarget(t *testing.T) {
+	val := func(s string) map[string]any { return map[string]any{"value": s} }
+	expr := map[string]any{"expression": `concat("/x", http.request.uri.path)`}
+	cases := []struct {
+		name string
+		uri  map[string]any
+		to   string
+		ok   bool
+	}{
+		{"static path", map[string]any{"path": val("/modern")}, "/modern", true},
+		{"static query", map[string]any{"query": val("a=b")}, "{http.request.uri.path}?a=b", true},
+		{"path and query", map[string]any{"path": val("/m"), "query": val("a=b")}, "/m?a=b", true},
+		{"dynamic path", map[string]any{"path": expr}, "", false},
+		{"dynamic query", map[string]any{"query": expr}, "", false},
+		{"empty", map[string]any{}, "", false},
+	}
+	for _, c := range cases {
+		to, ok := RewriteTarget(c.uri)
+		if to != c.to || ok != c.ok {
+			t.Errorf("%s: RewriteTarget = (%q,%v), want (%q,%v)", c.name, to, ok, c.to, c.ok)
+		}
+	}
+}
+
 func TestIsPerIPRateLimit(t *testing.T) {
 	if !IsPerIPRateLimit([]string{"ip.src"}) {
 		t.Error("ip.src alone is per-IP")

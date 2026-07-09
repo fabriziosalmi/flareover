@@ -200,6 +200,7 @@ func classifyPageRules(s cf.Snapshot, add func(report.Finding)) {
 // --- Rules engine ------------------------------------------------------------
 
 func classifyRulesets(s cf.Snapshot, add func(report.Finding)) {
+	proxied := s.ProxiedHTTPHosts() // hosts that become a Caddy site (for host-scoped rules)
 	for _, rs := range s.Rulesets {
 		for _, rule := range rs.Rules {
 			if !rule.Enabled {
@@ -212,7 +213,7 @@ func classifyRulesets(s cf.Snapshot, add func(report.Finding)) {
 			case "http_ratelimit":
 				classifyRateLimit(rule, name, add)
 			case "http_request_transform", "http_request_late_transform", "http_response_headers_transform":
-				classifyTransform(rule, name, add)
+				classifyTransform(rule, name, proxied, add)
 			case "http_request_dynamic_redirect":
 				classifyRedirect(rule, name, add)
 			case "http_request_cache_settings":
@@ -298,31 +299,45 @@ func classifyRateLimit(rule cf.Rule, name string, add func(report.Finding)) {
 	})
 }
 
-func classifyTransform(rule cf.Rule, name string, add func(report.Finding)) {
+func classifyTransform(rule cf.Rule, name string, proxied map[string]bool, add func(report.Finding)) {
 	// Header transforms and simple URL rewrites map cleanly onto Caddy, which —
 	// unlike some proxies — supports arbitrary request/response header ops.
 	if _, ok := rule.ActionParams["headers"]; ok {
-		// Global (expression == "true") applies to every site; a path-scoped
-		// expression the generator can turn into a Caddy path matcher is emitted
-		// matcher-guarded (same cfexpr.CaddyMatcher predicate the plan uses). A
-		// host-scoped or compound expression has no faithful matcher — MANUAL,
-		// never a silent AUTO (classify ⟺ generate).
-		_, pathScoped := cfexpr.CaddyMatcher(rule.Expression)
+		// Same cfexpr.TransformScope predicate the plan builder emits from, so a
+		// header transform is AUTO only when config is actually generated for it
+		// (classify ⟺ generate). Global → every site; path-scoped → a matcher-
+		// guarded directive on every site; host-scoped → an unmatched directive in
+		// that host's block, but only if the host is a proxied record (else there
+		// is no site to attach it to). Compound/host+path → MANUAL, never silent.
+		host, match, ok := cfexpr.TransformScope(rule.Expression)
 		switch {
-		case strings.TrimSpace(strings.ToLower(rule.Expression)) == "true":
-			add(auto("transform", name, "caddy", "Global header transform → Caddy header directive (add/set/remove request or response headers)."))
-		case pathScoped:
+		case !ok:
+			add(manual("transform", name, "Compound or host+path header transform — no faithful Caddy matcher; reproduce it by hand (e.g. `@m <matcher>` then `header @m …`)."))
+		case host != "" && !proxied[host]:
+			add(manual("transform", name, "Header transform scoped to a host with no proxied record — there is no migrated site to attach it to; reproduce it by hand."))
+		case host != "":
+			add(auto("transform", name, "caddy", "Host-scoped header transform → Caddy header directive in that host's site block."))
+		case match != "":
 			add(auto("transform", name, "caddy", "Path-scoped header transform → Caddy header directive guarded by a path matcher."))
 		default:
-			add(manual("transform", name, "Host-scoped or compound header transform — no faithful Caddy matcher; reproduce it by hand (e.g. `@m <matcher>` then `header @m …`)."))
+			add(auto("transform", name, "caddy", "Global header transform → Caddy header directive (add/set/remove request or response headers)."))
 		}
 		return
 	}
-	if _, ok := rule.ActionParams["uri"]; ok {
-		if cfexpr.IsSimple(rule.Expression) {
-			add(auto("transform", name, "caddy", "URL rewrite → Caddy rewrite directive."))
-		} else {
-			add(partial("transform", name, "caddy", "URL rewrite with a compound condition → Caddy rewrite guarded by a matcher; review the matcher translation."))
+	if uri, ok := rule.ActionParams["uri"].(map[string]any); ok {
+		// Same predicates the plan emits from: the scope must be a faithful Caddy
+		// matcher (global/host/path) AND the target must be static (a literal path/
+		// query, not expression-derived). A host-scoped rewrite also needs its host
+		// to be a proxied site. Anything else → MANUAL, never a silent AUTO.
+		host, _, scopeOK := cfexpr.TransformScope(rule.Expression)
+		_, targetOK := cfexpr.RewriteTarget(uri)
+		switch {
+		case !scopeOK || !targetOK:
+			add(manual("transform", name, "URL rewrite with a dynamic (expression-derived) target or a compound/unmappable match — no faithful static Caddy rewrite; reproduce it by hand."))
+		case host != "" && !proxied[host]:
+			add(manual("transform", name, "URL rewrite scoped to a host with no proxied record — there is no migrated site to attach it to; reproduce it by hand."))
+		default:
+			add(auto("transform", name, "caddy", "Static URL rewrite → Caddy rewrite directive (matcher-guarded when path-scoped)."))
 		}
 		return
 	}

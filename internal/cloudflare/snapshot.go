@@ -119,6 +119,25 @@ type DNSRecord struct {
 	Comment  string `json:"comment,omitempty"`
 }
 
+// ProxiedHTTPHosts returns the set of hostnames served by a proxied,
+// HTTP-frontable record (A/AAAA/CNAME). These are exactly the hosts that become
+// a Caddy site, so both the classifier and the plan builder use it to decide
+// whether a host-scoped rule has a site to attach to — the classify ⟺ generate
+// symmetry the 0% false-positive contract requires.
+func (s Snapshot) ProxiedHTTPHosts() map[string]bool {
+	hosts := map[string]bool{}
+	for _, r := range s.DNSRecords {
+		if !r.Proxied {
+			continue
+		}
+		switch strings.ToUpper(r.Type) {
+		case "A", "AAAA", "CNAME":
+			hosts[r.Name] = true
+		}
+	}
+	return hosts
+}
+
 // PageRule is a legacy Page Rule (ordered, first-match).
 type PageRule struct {
 	Target   string         `json:"target"`  // URL pattern with wildcards

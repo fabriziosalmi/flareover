@@ -136,3 +136,62 @@ func TestOriginRuleAppliedToSite(t *testing.T) {
 		t.Errorf("origin-rule override not applied to the site: %+v", o)
 	}
 }
+
+// TestHostScopedHeaderLandsOnlyInItsSite pins #6: a host-scoped header transform
+// is emitted unmatched inside its own host's block (the block is already that
+// host) and does not leak into any other site; a global one is on every site.
+func TestHostScopedHeaderLandsOnlyInItsSite(t *testing.T) {
+	snap := cf.Snapshot{
+		Zone: cf.Zone{Name: "example.com"},
+		DNSRecords: []cf.DNSRecord{
+			{Type: "A", Name: "app.example.com", Content: "192.0.2.1", Proxied: true},
+			{Type: "A", Name: "blog.example.com", Content: "192.0.2.2", Proxied: true},
+		},
+		Rulesets: []cf.Ruleset{{Phase: "http_response_headers_transform", Rules: []cf.Rule{
+			{Description: "global", Expression: "true", Enabled: true, ActionParams: map[string]any{
+				"headers": map[string]any{"X-Global": map[string]any{"operation": "set", "value": "1"}}}},
+			{Description: "app only", Expression: `http.host eq "app.example.com"`, Enabled: true, ActionParams: map[string]any{
+				"headers": map[string]any{"X-App": map[string]any{"operation": "set", "value": "yes"}}}},
+		}}},
+	}
+	p, err := Build(snap, Options{EdgeIP: "5.9.1.1", Decisions: map[string]string{
+		"origin:app.example.com":  "10.0.0.1:80",
+		"origin:blog.example.com": "10.0.0.2:80",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// get returns the op's (match, host, found) for a header name on a given site.
+	get := func(host, name string) (match, hostf string, found bool) {
+		for _, s := range p.Sites {
+			if s.Host != host {
+				continue
+			}
+			for _, op := range s.Headers {
+				if op.Name == name {
+					return op.Match, op.Host, true
+				}
+			}
+		}
+		return "", "", false
+	}
+
+	// Global header on both sites.
+	if _, _, ok := get("app.example.com", "X-Global"); !ok {
+		t.Error("global header missing from app site")
+	}
+	if _, _, ok := get("blog.example.com", "X-Global"); !ok {
+		t.Error("global header missing from blog site")
+	}
+	// Host-scoped header only on its own site, emitted unmatched (no Match, no Host).
+	m, h, ok := get("app.example.com", "X-App")
+	if !ok {
+		t.Fatal("host-scoped header missing from its own site")
+	}
+	if m != "" || h != "" {
+		t.Errorf("host-scoped header must be emitted unmatched in its block, got Match=%q Host=%q", m, h)
+	}
+	if _, _, ok := get("blog.example.com", "X-App"); ok {
+		t.Error("host-scoped header leaked into another host's site")
+	}
+}

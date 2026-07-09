@@ -27,6 +27,8 @@
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	header X-Content-Type-Options "nosniff"
 	header X-Frame-Options "DENY"
+	@r0 path /legacy*
+	rewrite @r0 /modern
 	import waf
 	cache
 	reverse_proxy https://10.0.0.10:8080 {
@@ -44,6 +46,8 @@ api.conformance.example {
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	header X-Content-Type-Options "nosniff"
 	header X-Frame-Options "DENY"
+	@r0 path /legacy*
+	rewrite @r0 /modern
 	import waf
 	cache
 	reverse_proxy https://10.0.0.10:8081 {
@@ -61,6 +65,8 @@ blog.conformance.example {
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	header X-Content-Type-Options "nosniff"
 	header X-Frame-Options "DENY"
+	@r0 path /legacy*
+	rewrite @r0 /modern
 	import waf
 	cache
 	reverse_proxy https://10.0.0.10:8082 {
@@ -78,6 +84,8 @@ conformance.example {
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	header X-Content-Type-Options "nosniff"
 	header X-Frame-Options "DENY"
+	@r0 path /legacy*
+	rewrite @r0 /modern
 	import waf
 	cache
 	redir https://www.conformance.example{uri} 301
@@ -96,6 +104,8 @@ shop.conformance.example {
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	header X-Content-Type-Options "nosniff"
 	header X-Frame-Options "DENY"
+	@r0 path /legacy*
+	rewrite @r0 /modern
 	import waf
 	cache
 	reverse_proxy https://10.0.0.10:8083 {
@@ -113,6 +123,8 @@ www.conformance.example {
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	header X-Content-Type-Options "nosniff"
 	header X-Frame-Options "DENY"
+	@r0 path /legacy*
+	rewrite @r0 /modern
 	import waf
 	cache
 	reverse_proxy https://10.0.0.10:8080 {

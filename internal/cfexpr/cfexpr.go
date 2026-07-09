@@ -101,6 +101,71 @@ func HostEq(expr string) (string, bool) {
 	return m[1], true
 }
 
+// TransformScope decides how a transform (header/rewrite) rule's expression
+// scopes, for BOTH the classifier and the plan builder (classify ⟺ generate):
+//
+//   - global: expr == "true"          → ("", "", true)        applies to every site
+//   - host:   http.host eq "H"        → ("H", "", true)       the whole H site
+//   - path:   starts_with/eq on path  → ("", "path …", true)  that path, all sites
+//
+// A compound, combined host+path, or otherwise unmappable expression returns
+// ok=false and must stay MANUAL — never a silent AUTO. Host- and path-scoping are
+// mutually exclusive here (different fields), so exactly one of host/match is set.
+func TransformScope(expr string) (host, match string, ok bool) {
+	if strings.TrimSpace(strings.ToLower(expr)) == "true" {
+		return "", "", true
+	}
+	if h, ok := HostEq(expr); ok {
+		return h, "", true
+	}
+	if m, ok := CaddyMatcher(expr); ok {
+		return "", m, true
+	}
+	return "", "", false
+}
+
+// RewriteTarget maps a Cloudflare URL-rewrite action's `uri` parameters to a
+// Caddy rewrite target, for BOTH the classifier and the plan builder
+// (classify ⟺ generate). Only STATIC rewrites are faithful: a path/query given
+// by a literal value maps 1:1; a path/query built from an expression at runtime
+// does not, so it returns ok=false → MANUAL. A path-only rewrite keeps the query
+// (Caddy preserves an unspecified query), a query-only rewrite keeps the path via
+// the {http.request.uri.path} placeholder, and both may be set together.
+func RewriteTarget(uri map[string]any) (string, bool) {
+	path, pStatic, pDyn := uriPart(uri["path"])
+	query, qStatic, qDyn := uriPart(uri["query"])
+	if pDyn || qDyn { // any expression-derived part → not faithfully static
+		return "", false
+	}
+	if !pStatic && !qStatic {
+		return "", false
+	}
+	to := path
+	if !pStatic {
+		to = "{http.request.uri.path}" // query-only rewrite must preserve the path
+	}
+	if qStatic {
+		to += "?" + query
+	}
+	return to, true
+}
+
+// uriPart inspects a uri sub-parameter, which is either a literal
+// ({"value": "/x"}) or expression-derived ({"expression": "…"}).
+func uriPart(v any) (value string, static, dynamic bool) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return "", false, false
+	}
+	if _, ok := m["expression"]; ok {
+		return "", false, true
+	}
+	if s, ok := m["value"].(string); ok && s != "" {
+		return s, true, false
+	}
+	return "", false, false
+}
+
 // Override is an Origin Rule mapping flareover can faithfully emit as Caddy
 // reverse_proxy directives. Exactly one of Host (host-scoped → the whole site's
 // origin) or Match (path-scoped → a matcher-guarded reverse_proxy) is set.

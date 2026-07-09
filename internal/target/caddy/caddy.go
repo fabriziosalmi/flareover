@@ -93,6 +93,20 @@ func renderSite(s ir.Site, waf ir.WAFPolicy) string {
 		}
 	}
 
+	// URL rewrites — global/host-scoped emit bare; a path-scoped one goes under its
+	// own named matcher. Caddy runs `rewrite` before `reverse_proxy` regardless of
+	// file order, so placement here is purely for readability.
+	ri := 0
+	for _, rw := range s.Rewrites {
+		if rw.Match != "" {
+			name := fmt.Sprintf("@r%d", ri)
+			ri++
+			fmt.Fprintf(&b, "\t%s %s\n\trewrite %s %s\n", name, rw.Match, name, rw.To)
+		} else {
+			fmt.Fprintf(&b, "\trewrite %s\n", rw.To)
+		}
+	}
+
 	// WAF (zone-global snippet).
 	if wafActive(waf) {
 		b.WriteString("\timport waf\n")

@@ -99,12 +99,24 @@ type HeaderOp struct {
 	// Match is a Caddy request-matcher directive (e.g. `path /api*`) that scopes
 	// this op; empty means it applies to the whole site.
 	Match string `json:"match,omitempty"`
+	// Host scopes this op to a single host's site (from `http.host eq "…"`). It is
+	// a plan-internal routing hint: buildSites keeps the op only for that host and
+	// clears Host, so the op is emitted unmatched inside that host's block (the
+	// whole block is already that host). Never set on a serialized site.
+	Host string `json:"host,omitempty"`
 }
 
 // Rewrite is an internal URL rewrite (path/query), not a client-visible redirect.
 type Rewrite struct {
+	// Match is a Caddy request-matcher directive (e.g. `path /legacy*`) that scopes
+	// the rewrite; empty means it applies to the whole site.
 	Match string `json:"match"`
-	To    string `json:"to"`
+	// To is the Caddy rewrite target, e.g. `/modern` or `/modern?a=b`.
+	To string `json:"to"`
+	// Host scopes the rewrite to a single host's site (plan-internal, like
+	// HeaderOp.Host): buildSites keeps it only for that host and clears Host, so it
+	// emits unmatched in that block. Never set on a serialized site.
+	Host string `json:"host,omitempty"`
 }
 
 // Redirect is a client-visible redirect.
