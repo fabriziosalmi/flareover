@@ -1,0 +1,38 @@
+name: pages
+
+# Deploy docs/ to GitHub Pages via Actions (replaces the built-in
+# "deploy from a branch" builder, which has no concurrency control and raced
+# itself into a 400 "deployment already in progress" on rapid pushes).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Serialize deploys: never start a second while one is in flight, and don't
+# cancel the running one (a half-published site is worse than a short queue).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs # includes CNAME → the www.flareover.com custom domain is preserved
+      - id: deployment
+        uses: actions/deploy-pages@v4

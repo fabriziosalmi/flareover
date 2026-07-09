@@ -21,6 +21,9 @@
 # Infrastructure notes, recon, deploy artifacts, secrets — NEVER tracked
 /infra/
 
+# Private roadmap scratch — never tracked
+/PLAN.md
+
 # macOS
 .DS_Store
 
