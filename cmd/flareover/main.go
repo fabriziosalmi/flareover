@@ -45,6 +45,7 @@ import (
 	"github.com/fabriziosalmi/flareover/internal/target/bunnydns"
 	"github.com/fabriziosalmi/flareover/internal/target/certmate"
 	"github.com/fabriziosalmi/flareover/internal/target/mesh"
+	"github.com/fabriziosalmi/flareover/internal/target/ovhdns"
 	"github.com/fabriziosalmi/flareover/internal/target/powerdns"
 	"github.com/fabriziosalmi/flareover/internal/target/scalewaydns"
 	"github.com/fabriziosalmi/flareover/internal/target/spm"
@@ -72,8 +73,8 @@ PHASES
                             caddy-waf rules, PowerDNS zone) for the AUTO plus
                             answered-ASK surface.
   provision ...             Stand up the target via APIs (DNS zone + DNSSEC,
-                            CertMate DNS-01 certs). --pdns-url (PowerDNS) or
-                            --dns scaleway (Scaleway managed DNS) / --certmate-url.
+                            CertMate DNS-01 certs). --pdns-url (PowerDNS), or
+                            --dns scaleway|ovh (managed EU DNS) / --certmate-url.
   present ...               Parity gate: live edge vs staged edge (--after-addr).
   execute ...               Orchestrate the phases live up to the gated cutover.
   storage <buckets.json>    Migrate object storage (R2/S3) → self-hosted MinIO
@@ -104,10 +105,9 @@ PREPARE FLAGS
   --edge-ip <ip>       public IP of the new Caddy edge (proxied records repoint here)
   --ca <name>          default cert CA: letsencrypt (default) | actalis
   --stack <id>         target stack profile (default: caddy)
-  --dns <id>           authoritative DNS target: powerdns (default, self-hosted)
-                       | bunny (bunny.net managed EU DNS via its CLI) | scaleway
-                       (Scaleway managed EU DNS — apply live with
-                       "provision --dns scaleway", SCW_SECRET_KEY in the env)
+  --dns <id>           authoritative DNS target: powerdns (default, self-hosted),
+                       bunny (bunny.net CLI), or scaleway / ovh (managed EU DNS —
+                       apply live with "provision --dns scaleway|ovh", creds in env)
   --out <dir>          write artifacts under <dir> (default: stdout preview)
   --validate           prove the generated Caddyfile + zone parse (caddy validate)
   --mesh-edge [name=]<host:port>  sovereign WireGuard tunnel to keep an existing
@@ -805,22 +805,30 @@ func cmdProvision(args []string) int {
 	// DNS backend selection (default: self-hosted PowerDNS). Scaleway managed DNS
 	// takes its credentials from the environment, never from argv.
 	var scwSecret, scwProject string
-	var useScaleway bool
+	var ovhKey, ovhSecret, ovhConsumer string
+	var useScaleway, useOVH bool
 	switch dnsTarget {
 	case "", "powerdns":
 	case "scaleway", "scaleway-dns", "scalewaydns":
 		useScaleway = true
 		scwSecret, scwProject = os.Getenv("SCW_SECRET_KEY"), os.Getenv("SCW_DEFAULT_PROJECT_ID")
+	case "ovh", "ovh-dns", "ovhdns":
+		useOVH = true
+		ovhKey, ovhSecret, ovhConsumer = os.Getenv("OVH_APPLICATION_KEY"), os.Getenv("OVH_APPLICATION_SECRET"), os.Getenv("OVH_CONSUMER_KEY")
 	default:
-		fmt.Fprintf(os.Stderr, "flareover provision: unknown --dns %q (want: powerdns | scaleway)\n", dnsTarget)
+		fmt.Fprintf(os.Stderr, "flareover provision: unknown --dns %q (want: powerdns | scaleway | ovh)\n", dnsTarget)
 		return 2
 	}
-	if snapPath == "" || (pdnsURL == "" && cmURL == "" && !useScaleway) {
-		fmt.Fprintln(os.Stderr, "flareover provision: need --snapshot and at least one of --pdns-url / --certmate-url / --dns scaleway")
+	if snapPath == "" || (pdnsURL == "" && cmURL == "" && !useScaleway && !useOVH) {
+		fmt.Fprintln(os.Stderr, "flareover provision: need --snapshot and at least one of --pdns-url / --certmate-url / --dns scaleway|ovh")
 		return 2
 	}
 	if useScaleway && (scwSecret == "" || scwProject == "") {
 		fmt.Fprintln(os.Stderr, "flareover provision: --dns scaleway needs SCW_SECRET_KEY and SCW_DEFAULT_PROJECT_ID in the environment")
+		return 2
+	}
+	if useOVH && (ovhKey == "" || ovhSecret == "" || ovhConsumer == "") {
+		fmt.Fprintln(os.Stderr, "flareover provision: --dns ovh needs OVH_APPLICATION_KEY, OVH_APPLICATION_SECRET and OVH_CONSUMER_KEY in the environment")
 		return 2
 	}
 	if ca == "" {
@@ -865,6 +873,23 @@ func cmdProvision(args []string) int {
 		}
 		if built.DNS.DNSSEC {
 			detail += " · DNSSEC: enable in the Scaleway console (not yet automated)"
+		}
+		pr.Done(0, detail)
+	case useOVH:
+		op := ovhdns.NewProvisioner(ovhKey, ovhSecret, ovhConsumer)
+		if u := os.Getenv("OVH_ENDPOINT"); u != "" { // e.g. https://eu.api.ovh.com/1.0, or a test mock
+			op.BaseURL = u
+		}
+		if err := op.Provision(ctx, built.DNS); err != nil {
+			pr.Fail(0, err.Error())
+			return 1
+		}
+		detail := fmt.Sprintf("%d records (OVHcloud)", len(built.DNS.Records))
+		if ns, err := op.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
+			detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
+		}
+		if built.DNS.DNSSEC {
+			detail += " · DNSSEC: enable in the OVH panel (not yet automated)"
 		}
 		pr.Done(0, detail)
 	case pdnsURL != "":
@@ -1083,8 +1108,10 @@ func cmdPrepare(args []string) int {
 		profile.DNS = bunnydns.Generator{}
 	case "scaleway", "scaleway-dns", "scalewaydns":
 		profile.DNS = scalewaydns.Generator{}
+	case "ovh", "ovh-dns", "ovhdns":
+		profile.DNS = ovhdns.Generator{}
 	default:
-		fmt.Fprintf(os.Stderr, "flareover prepare: unknown --dns %q (want: powerdns | bunny | scaleway)\n", dnsTarget)
+		fmt.Fprintf(os.Stderr, "flareover prepare: unknown --dns %q (want: powerdns | bunny | scaleway | ovh)\n", dnsTarget)
 		return 2
 	}
 
