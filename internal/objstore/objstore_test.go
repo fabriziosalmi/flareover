@@ -100,6 +100,64 @@ func TestRcloneAndProvisionArtifacts(t *testing.T) {
 	}
 }
 
+// TestScalewayDestination checks the managed-EU-S3 preset: right endpoint,
+// region, credentials env, alias, and artifact folder.
+func TestScalewayDestination(t *testing.T) {
+	arts := Generate(load(t), GenOptions{Dest: "scaleway"})
+	prov := artifact(arts, "scaleway-object-storage/provision.sh")
+	if prov == "" {
+		t.Fatal("no scaleway-object-storage/provision.sh artifact")
+	}
+	for _, want := range []string{
+		"mc alias set scw https://s3.fr-par.scw.cloud \"$SCW_ACCESS_KEY\" \"$SCW_SECRET_KEY\"",
+		"mc mb -p scw/public-assets",
+		"mc version enable scw/public-assets",
+		"Scaleway Object Storage (EU-owned, fr-par)",
+	} {
+		if !strings.Contains(prov, want) {
+			t.Errorf("scaleway provision.sh missing %q", want)
+		}
+	}
+	// It must NOT leak the MinIO defaults.
+	if strings.Contains(prov, "MINIO_ACCESS_KEY") || strings.Contains(prov, "mc mb -p eu/") {
+		t.Error("scaleway provision leaked MinIO alias/creds")
+	}
+	// rclone destination remote follows the alias.
+	rc := artifact(arts, "rclone/migrate.sh")
+	if !strings.Contains(rc, "rclone sync --progress src:public-assets scw:public-assets") {
+		t.Error("rclone plan should target the scw: remote")
+	}
+
+	// Region override flows into the endpoint.
+	nl := artifact(Generate(load(t), GenOptions{Dest: "scaleway", Region: "nl-ams"}), "scaleway-object-storage/provision.sh")
+	if !strings.Contains(nl, "https://s3.nl-ams.scw.cloud") {
+		t.Error("region override did not reach the endpoint")
+	}
+}
+
+// TestScalewayPublicGuard: the 0%-FP public-read guard holds for Scaleway too.
+func TestScalewayPublicGuard(t *testing.T) {
+	prov := artifact(Generate(load(t), GenOptions{Dest: "scaleway"}), "scaleway-object-storage/provision.sh")
+	if strings.Contains(prov, "anonymous set download") {
+		t.Error("public read reproduced on Scaleway without an explicit yes")
+	}
+	prov = artifact(Generate(load(t), GenOptions{Dest: "scaleway", Decisions: map[string]string{"public-read:public-assets": "yes"}}), "scaleway-object-storage/provision.sh")
+	if !strings.Contains(prov, "mc anonymous set download scw/public-assets") {
+		t.Error("confirmed public read should be reproduced on Scaleway")
+	}
+}
+
+func TestValidScalewayRegion(t *testing.T) {
+	for _, r := range ScalewayRegions {
+		if !ValidScalewayRegion(r) {
+			t.Errorf("%q should be valid", r)
+		}
+	}
+	if ValidScalewayRegion("us-east-1") {
+		t.Error("us-east-1 must not be a valid Scaleway region")
+	}
+}
+
 func artifact(arts []Artifact, path string) string {
 	for _, a := range arts {
 		if a.Path == path {

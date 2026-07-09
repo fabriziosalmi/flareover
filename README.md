@@ -66,7 +66,7 @@ assess → prepare → present → execute → guard
 | Edge cache | souin (Caddy module) |
 | WAF | caddy-waf (OWASP/rate-limit/IP·ASN·country/blocklists) |
 | Certificates | CertMate — DNS-01, wildcard, Let's Encrypt or **Actalis** (EU CA) |
-| Object storage (R2/S3 →) | MinIO (buckets + versioning + lifecycle; rclone data copy) |
+| Object storage (R2/S3 →) | MinIO self-hosted, or **Scaleway** Object Storage (`storage --dest scaleway`) — buckets + versioning + lifecycle + CORS; rclone data copy |
 | Egress shield (optional) | secure-proxy-manager (default-deny + allowlist, fail-closed) |
 | Sovereign origin link | WireGuard mesh (replaces the Cloudflare Tunnel; origin stays inbound-free) |
 | Blocklists | blacklists feeds |

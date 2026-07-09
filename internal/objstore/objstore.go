@@ -106,6 +106,75 @@ type GenOptions struct {
 	MinIOAlias    string // mc alias name, e.g. "eu"
 	MinIOEndpoint string // e.g. https://s3.contabo.example
 	Decisions     map[string]string
+	// Dest selects the destination preset: "" / "minio" (self-hosted, default)
+	// or "scaleway" (Scaleway Object Storage — managed EU S3).
+	Dest string
+	// Region is the Scaleway region (default fr-par) when Dest == "scaleway".
+	Region string
+}
+
+// destination is the resolved target: everything downstream is S3, so MinIO and
+// Scaleway differ only in endpoint, credentials env, artifact folder, and the
+// sovereignty note. mc speaks plain S3, so it drives both.
+type destination struct {
+	dir       string // artifact folder + provisioning label base
+	alias     string // mc alias and rclone remote name
+	endpoint  string // S3 endpoint
+	accessEnv string // env var holding the access key
+	secretEnv string // env var holding the secret key
+	label     string // human note, carries the sovereignty tier
+}
+
+// ScalewayRegions are the EU regions Scaleway Object Storage runs in.
+var ScalewayRegions = []string{"fr-par", "nl-ams", "pl-waw", "it-mil"}
+
+// ValidScalewayRegion reports whether region is a known Scaleway region.
+func ValidScalewayRegion(region string) bool {
+	for _, r := range ScalewayRegions {
+		if r == region {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveDest turns the options into a concrete destination. It trusts the
+// caller (the CLI) to have validated Dest/Region, and defaults defensively.
+func resolveDest(opts GenOptions) destination {
+	if opts.Dest == "scaleway" {
+		region := opts.Region
+		if region == "" {
+			region = "fr-par"
+		}
+		alias := opts.MinIOAlias
+		if alias == "" {
+			alias = "scw"
+		}
+		return destination{
+			dir:       "scaleway-object-storage",
+			alias:     alias,
+			endpoint:  "https://s3." + region + ".scw.cloud",
+			accessEnv: "SCW_ACCESS_KEY",
+			secretEnv: "SCW_SECRET_KEY",
+			label:     "Scaleway Object Storage (EU-owned, " + region + ")",
+		}
+	}
+	alias := opts.MinIOAlias
+	if alias == "" {
+		alias = "eu"
+	}
+	endpoint := opts.MinIOEndpoint
+	if endpoint == "" {
+		endpoint = "https://MINIO_ENDPOINT"
+	}
+	return destination{
+		dir:       "minio",
+		alias:     alias,
+		endpoint:  endpoint,
+		accessEnv: "MINIO_ACCESS_KEY",
+		secretEnv: "MINIO_SECRET_KEY",
+		label:     "self-hosted MinIO",
+	}
 }
 
 // Artifact is a generated file (mirrors target.Artifact to avoid a dependency).
@@ -118,20 +187,16 @@ type Artifact struct {
 // Generate emits the MinIO provisioning script, the rclone data-copy plan, and a
 // runbook — for the AUTO plus answered-ASK surface only.
 func Generate(s Snapshot, opts GenOptions) []Artifact {
-	if opts.MinIOAlias == "" {
-		opts.MinIOAlias = "eu"
-	}
-	if opts.MinIOEndpoint == "" {
-		opts.MinIOEndpoint = "https://MINIO_ENDPOINT"
-	}
-	alias := opts.MinIOAlias
+	d := resolveDest(opts)
+	alias := d.alias
 
 	var prov strings.Builder
 	prov.WriteString("#!/usr/bin/env bash\n")
-	prov.WriteString("# flareover-generated MinIO provisioning. Requires the MinIO client `mc`.\n")
-	prov.WriteString("# Set MINIO_ACCESS_KEY / MINIO_SECRET_KEY in the environment first.\n")
+	fmt.Fprintf(&prov, "# flareover-generated provisioning for %s.\n", d.label)
+	prov.WriteString("# Requires the MinIO client `mc` (it speaks plain S3, so it drives any S3 target).\n")
+	fmt.Fprintf(&prov, "# Set %s / %s in the environment first.\n", d.accessEnv, d.secretEnv)
 	prov.WriteString("set -euo pipefail\n\n")
-	fmt.Fprintf(&prov, "mc alias set %s %s \"$MINIO_ACCESS_KEY\" \"$MINIO_SECRET_KEY\"\n\n", alias, opts.MinIOEndpoint)
+	fmt.Fprintf(&prov, "mc alias set %s %s \"$%s\" \"$%s\"\n\n", alias, d.endpoint, d.accessEnv, d.secretEnv)
 
 	for _, b := range s.Buckets {
 		fmt.Fprintf(&prov, "# --- bucket %s ---\n", b.Name)
@@ -147,7 +212,7 @@ func Generate(s Snapshot, opts GenOptions) []Artifact {
 				lc.ExpireDays, ilmPrefix(lc.Prefix), alias, b.Name)
 		}
 		if len(b.CORS) > 0 {
-			fmt.Fprintf(&prov, "mc cors set %s/%s /etc/minio/cors/%s.json  # see cors artifact\n", alias, b.Name, b.Name)
+			fmt.Fprintf(&prov, "mc cors set %s/%s %s/cors/%s.json  # see cors artifact\n", alias, b.Name, d.dir, b.Name)
 		}
 		if b.PublicRead && answered(opts.Decisions, "public-read:"+b.Name, "yes") {
 			fmt.Fprintf(&prov, "mc anonymous set download %s/%s   # confirmed public read\n", alias, b.Name)
@@ -157,7 +222,8 @@ func Generate(s Snapshot, opts GenOptions) []Artifact {
 		prov.WriteString("\n")
 	}
 
-	arts := []Artifact{{Path: "minio/provision.sh", Content: []byte(prov.String()), Note: "run with mc installed + MINIO_* creds set"}}
+	arts := []Artifact{{Path: d.dir + "/provision.sh", Content: []byte(prov.String()),
+		Note: fmt.Sprintf("run with mc installed + %s / %s set", d.accessEnv, d.secretEnv)}}
 
 	// CORS artifacts (one JSON per bucket that has rules).
 	for _, b := range s.Buckets {
@@ -165,7 +231,7 @@ func Generate(s Snapshot, opts GenOptions) []Artifact {
 			continue
 		}
 		body, _ := json.MarshalIndent(map[string]any{"corsRules": b.CORS}, "", "  ")
-		arts = append(arts, Artifact{Path: "minio/cors/" + b.Name + ".json", Content: append(body, '\n')})
+		arts = append(arts, Artifact{Path: d.dir + "/cors/" + b.Name + ".json", Content: append(body, '\n')})
 	}
 
 	// rclone data-copy plan.
@@ -173,18 +239,18 @@ func Generate(s Snapshot, opts GenOptions) []Artifact {
 	rc.WriteString("#!/usr/bin/env bash\n")
 	rc.WriteString("# flareover-generated rclone data migration. The engine maps config; rclone copies data.\n")
 	rc.WriteString("# Configure two rclone remotes first:\n")
-	fmt.Fprintf(&rc, "#   [src]  = the %s source (endpoint + keys)\n", strings.ToUpper(s.Source))
-	rc.WriteString("#   [eu]   = the MinIO destination (endpoint + keys)\n")
+	fmt.Fprintf(&rc, "#   [src]   = the %s source (endpoint + keys)\n", strings.ToUpper(s.Source))
+	fmt.Fprintf(&rc, "#   [%s] = %s (%s)\n", alias, d.label, d.endpoint)
 	rc.WriteString("set -euo pipefail\n\n")
 	for _, b := range s.Buckets {
 		sz := ""
 		if b.ApproxGB > 0 {
 			sz = fmt.Sprintf("  # ~%dGB, %d objects", b.ApproxGB, b.ApproxObjs)
 		}
-		fmt.Fprintf(&rc, "rclone sync --progress src:%s eu:%s%s\n", b.Name, b.Name, sz)
+		fmt.Fprintf(&rc, "rclone sync --progress src:%s %s:%s%s\n", b.Name, alias, b.Name, sz)
 	}
 	arts = append(arts, Artifact{Path: "rclone/migrate.sh", Content: []byte(rc.String()),
-		Note: "no-egress-fee copy into EU MinIO; run once to seed, again to catch up before cutover"})
+		Note: fmt.Sprintf("no-egress-fee copy into %s; run once to seed, again to catch up before cutover", d.label)})
 
 	return arts
 }

@@ -76,7 +76,9 @@ PHASES
                             --dns scaleway (Scaleway managed DNS) / --certmate-url.
   present ...               Parity gate: live edge vs staged edge (--after-addr).
   execute ...               Orchestrate the phases live up to the gated cutover.
-  storage <buckets.json>    Migrate object storage (R2/S3) → MinIO + rclone plan.
+  storage <buckets.json>    Migrate object storage (R2/S3) → self-hosted MinIO
+                            (default) or Scaleway Object Storage (--dest scaleway
+                            [--region fr-par|nl-ams|pl-waw|it-mil]) + rclone plan.
   guard --url ...           Failguards watchdog: health-watch + rollback/failover
                             trigger (--on-unhealthy "<cmd>", --interval, --once).
   doctor ...                Read-only pre-flight: is every target reachable,
@@ -439,7 +441,7 @@ func cmdCost(args []string) int {
 }
 
 func cmdStorage(args []string) int {
-	var path, decisionsPath, outDir, endpoint, alias, s3Endpoint, s3Region string
+	var path, decisionsPath, outDir, endpoint, alias, s3Endpoint, s3Region, dest, region string
 	var extractR2, extractS3 bool
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -448,7 +450,7 @@ func cmdStorage(args []string) int {
 			extractR2 = true
 		case "--extract-s3":
 			extractS3 = true
-		case "--decisions", "--out", "--minio-endpoint", "--minio-alias", "--s3-endpoint", "--s3-region":
+		case "--decisions", "--out", "--minio-endpoint", "--minio-alias", "--s3-endpoint", "--s3-region", "--dest", "--region":
 			if i+1 >= len(args) {
 				fmt.Fprintf(os.Stderr, "flareover storage: %s needs a value\n", a)
 				return 2
@@ -467,6 +469,10 @@ func cmdStorage(args []string) int {
 				s3Endpoint = args[i]
 			case "--s3-region":
 				s3Region = args[i]
+			case "--dest":
+				dest = args[i]
+			case "--region":
+				region = args[i]
 			}
 		default:
 			if len(a) > 0 && a[0] == '-' {
@@ -530,7 +536,17 @@ func cmdStorage(args []string) int {
 			fmt.Fprintf(os.Stderr, "flareover storage: %v\n", err)
 			return 1
 		}
-		arts := objstore.Generate(snap, objstore.GenOptions{MinIOAlias: alias, MinIOEndpoint: endpoint, Decisions: decisions})
+		if dest != "" && dest != "minio" && dest != "scaleway" {
+			fmt.Fprintf(os.Stderr, "flareover storage: unknown --dest %q (want: minio | scaleway)\n", dest)
+			return 2
+		}
+		if dest == "scaleway" && region != "" && !objstore.ValidScalewayRegion(region) {
+			fmt.Fprintf(os.Stderr, "flareover storage: unknown Scaleway --region %q (want one of: %s)\n", region, strings.Join(objstore.ScalewayRegions, ", "))
+			return 2
+		}
+		arts := objstore.Generate(snap, objstore.GenOptions{
+			MinIOAlias: alias, MinIOEndpoint: endpoint, Decisions: decisions, Dest: dest, Region: region,
+		})
 		for _, a := range arts {
 			dst := filepath.Join(outDir, a.Path)
 			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
