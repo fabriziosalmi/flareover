@@ -187,6 +187,40 @@ func TestOVHDestination(t *testing.T) {
 	}
 }
 
+// TestContaboDestination checks the Contabo managed-S3 preset (EU-owned,
+// S3-compatible; region eu2 in the endpoint hostname, not an "s3." prefix).
+func TestContaboDestination(t *testing.T) {
+	prov := artifact(Generate(load(t), GenOptions{Dest: "contabo"}), "contabo-object-storage/provision.sh")
+	if prov == "" {
+		t.Fatal("no contabo-object-storage/provision.sh artifact")
+	}
+	for _, want := range []string{
+		"mc alias set contabo https://eu2.contabostorage.com \"$CONTABO_S3_ACCESS_KEY\" \"$CONTABO_S3_SECRET_KEY\"",
+		"mc mb -p contabo/public-assets",
+		"Contabo Object Storage (EU-owned, eu2)",
+	} {
+		if !strings.Contains(prov, want) {
+			t.Errorf("contabo provision.sh missing %q", want)
+		}
+	}
+	if strings.Contains(prov, "scw/") || strings.Contains(prov, "ovh/") || strings.Contains(prov, "MINIO_ACCESS_KEY") {
+		t.Error("contabo provision leaked another destination's alias/creds")
+	}
+	// The public-read guard holds here too.
+	if strings.Contains(prov, "anonymous set download") {
+		t.Error("public read reproduced on Contabo without an explicit yes")
+	}
+}
+
+func TestValidContaboStorageRegion(t *testing.T) {
+	if !ValidContaboStorageRegion("eu2") {
+		t.Error("eu2 must be a valid Contabo region")
+	}
+	if ValidContaboStorageRegion("usc1") {
+		t.Error("non-EU Contabo regions must be rejected (EU-scoped migration)")
+	}
+}
+
 // TestValidOVHStorageRegion: only EU regions are accepted (uk/bhs excluded).
 func TestValidOVHStorageRegion(t *testing.T) {
 	for _, r := range OVHStorageRegions {

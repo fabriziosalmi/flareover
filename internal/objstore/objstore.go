@@ -133,6 +133,17 @@ func ValidScalewayRegion(region string) bool {
 	return contains(ScalewayRegions, region)
 }
 
+// ContaboStorageRegions are the EU Contabo Object Storage regions. Contabo's
+// only EU-resident region is the European Union one (eu2, Germany); its other
+// regions (US/Asia/Australia) are deliberately excluded to keep the migration
+// EU-scoped.
+var ContaboStorageRegions = []string{"eu2"}
+
+// ValidContaboStorageRegion reports whether region is a known EU Contabo region.
+func ValidContaboStorageRegion(region string) bool {
+	return contains(ContaboStorageRegions, region)
+}
+
 // OVHStorageRegions are OVHcloud Object Storage regions that keep data inside
 // the EU. OVH also runs uk (London) and bhs (Beauharnois, Canada); those are
 // deliberately excluded so an OVH destination provably stays EU-scoped.
@@ -189,6 +200,24 @@ func resolveDest(opts GenOptions) destination {
 			accessEnv: "OVH_S3_ACCESS_KEY",
 			secretEnv: "OVH_S3_SECRET_KEY",
 			label:     "OVHcloud Object Storage (EU-owned, " + region + ")",
+		}
+	}
+	if opts.Dest == "contabo" {
+		region := opts.Region
+		if region == "" {
+			region = "eu2"
+		}
+		alias := opts.MinIOAlias
+		if alias == "" {
+			alias = "contabo"
+		}
+		return destination{
+			dir:       "contabo-object-storage",
+			alias:     alias,
+			endpoint:  "https://" + region + ".contabostorage.com",
+			accessEnv: "CONTABO_S3_ACCESS_KEY",
+			secretEnv: "CONTABO_S3_SECRET_KEY",
+			label:     "Contabo Object Storage (EU-owned, " + region + ")",
 		}
 	}
 	alias := opts.MinIOAlias
