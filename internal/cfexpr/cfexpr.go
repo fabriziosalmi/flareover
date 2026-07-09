@@ -66,6 +66,29 @@ func SimpleWAFMatch(expr string) (WAFMatch, bool) {
 	return WAFMatch{}, false
 }
 
+var (
+	pathStartsWith = regexp.MustCompile(`(?i)^\s*starts_with\(\s*http\.request\.uri\.path\s*,\s*"([^"]+)"\s*\)\s*$`)
+	pathEq         = regexp.MustCompile(`(?i)^\s*http\.request\.uri\.path\s+eq\s+"([^"]+)"\s*$`)
+)
+
+// CaddyMatcher translates a simple PATH-scoped Cloudflare expression into a Caddy
+// `path` matcher directive (the body of an @named matcher). It is the SINGLE
+// predicate the classifier and the plan builder use for path-scoped rules
+// (transforms, config rules, origin rules), so such a rule is AUTO only when its
+// scope is faithfully reproducible — a wrong matcher would be worse than MANUAL.
+// Deliberately narrow: prefix (starts_with) and exact (eq) only. `contains`,
+// compound expressions, or host scoping (that is HostEq's job) return ok=false
+// and must stay MANUAL.
+func CaddyMatcher(expr string) (string, bool) {
+	if m := pathStartsWith.FindStringSubmatch(expr); m != nil {
+		return "path " + m[1] + "*", true // prefix → Caddy path glob
+	}
+	if m := pathEq.FindStringSubmatch(expr); m != nil {
+		return "path " + m[1], true // exact
+	}
+	return "", false
+}
+
 var hostEq = regexp.MustCompile(`(?i)^\s*http\.host\s+eq\s+"([^"]+)"\s*$`)
 
 // HostEq extracts the host from a `http.host eq "example.com"` expression.

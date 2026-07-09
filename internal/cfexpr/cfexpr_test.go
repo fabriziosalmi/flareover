@@ -128,3 +128,22 @@ func TestOriginOverride(t *testing.T) {
 		t.Error("an empty rule → not mappable")
 	}
 }
+
+func TestCaddyMatcher(t *testing.T) {
+	cases := []struct {
+		expr, want string
+		ok         bool
+	}{
+		{`starts_with(http.request.uri.path, "/api")`, "path /api*", true},
+		{`http.request.uri.path eq "/health"`, "path /health", true},
+		{`http.host eq "app.example.com"`, "", false},                               // host scope is HostEq's job
+		{`starts_with(http.request.uri.path,"/x") and http.host eq "h"`, "", false}, // compound
+		{`http.request.uri.path contains "/admin"`, "", false},                      // contains: too loose, stays MANUAL
+	}
+	for _, c := range cases {
+		got, ok := CaddyMatcher(c.expr)
+		if ok != c.ok || got != c.want {
+			t.Errorf("CaddyMatcher(%q) = (%q,%v), want (%q,%v)", c.expr, got, ok, c.want, c.ok)
+		}
+	}
+}

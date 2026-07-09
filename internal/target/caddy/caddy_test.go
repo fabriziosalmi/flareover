@@ -113,3 +113,28 @@ func TestReverseProxyOriginOverride(t *testing.T) {
 		}
 	}
 }
+
+func TestMatcherGuardedHeader(t *testing.T) {
+	plan := ir.Plan{
+		Zone: "example.com",
+		Sites: []ir.Site{{
+			Host:   "example.com",
+			Origin: ir.Origin{Upstreams: []string{"10.0.0.1:80"}, Scheme: "http"},
+			TLS:    ir.TLS{Provider: "certmate"},
+			Headers: []ir.HeaderOp{
+				{Phase: "response", Op: "set", Name: "X-Global", Value: "g"},                   // unscoped → flat
+				{Phase: "response", Op: "set", Name: "X-Api", Value: "a", Match: "path /api*"}, // path-scoped → matcher
+			},
+		}},
+	}
+	arts, err := Generator{}.Generate(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(arts[0].Content)
+	for _, w := range []string{`header X-Global "g"`, "@h0 path /api*", `header @h0 X-Api "a"`} {
+		if !strings.Contains(out, w) {
+			t.Errorf("Caddyfile missing %q\n---\n%s", w, out)
+		}
+	}
+}

@@ -302,14 +302,19 @@ func classifyTransform(rule cf.Rule, name string, add func(report.Finding)) {
 	// Header transforms and simple URL rewrites map cleanly onto Caddy, which —
 	// unlike some proxies — supports arbitrary request/response header ops.
 	if _, ok := rule.ActionParams["headers"]; ok {
-		// Only a globally-matched header transform (expression == "true") is
-		// auto-emitted; the generator applies it to every site. A host/path-scoped
-		// header transform needs a Caddy matcher the generator does not emit yet —
-		// so it is MANUAL, never a silent AUTO (keeps classify ⟺ generate honest).
-		if strings.TrimSpace(strings.ToLower(rule.Expression)) == "true" {
+		// Global (expression == "true") applies to every site; a path-scoped
+		// expression the generator can turn into a Caddy path matcher is emitted
+		// matcher-guarded (same cfexpr.CaddyMatcher predicate the plan uses). A
+		// host-scoped or compound expression has no faithful matcher — MANUAL,
+		// never a silent AUTO (classify ⟺ generate).
+		_, pathScoped := cfexpr.CaddyMatcher(rule.Expression)
+		switch {
+		case strings.TrimSpace(strings.ToLower(rule.Expression)) == "true":
 			add(auto("transform", name, "caddy", "Global header transform → Caddy header directive (add/set/remove request or response headers)."))
-		} else {
-			add(manual("transform", name, "Host/path-scoped header transform needs a Caddy matcher and is not auto-emitted yet — reproduce it by hand (e.g. `@m <matcher>` then `header @m …`)."))
+		case pathScoped:
+			add(auto("transform", name, "caddy", "Path-scoped header transform → Caddy header directive guarded by a path matcher."))
+		default:
+			add(manual("transform", name, "Host-scoped or compound header transform — no faithful Caddy matcher; reproduce it by hand (e.g. `@m <matcher>` then `header @m …`)."))
 		}
 		return
 	}

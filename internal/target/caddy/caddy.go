@@ -76,9 +76,19 @@ func renderSite(s ir.Site, waf ir.WAFPolicy) string {
 		fmt.Fprintf(&b, "\theader Strict-Transport-Security \"%s\"\n", hstsValue(h))
 	}
 
-	// Header transforms.
-	for _, op := range s.Headers {
-		if line := headerDirective(op); line != "" {
+	// Header transforms — unscoped ops first (sorted so Match "" leads), then each
+	// path-scoped group under its own named matcher.
+	mi, lastMatch, mname := 0, "", ""
+	for i, op := range s.Headers {
+		if i == 0 || op.Match != lastMatch {
+			lastMatch, mname = op.Match, ""
+			if op.Match != "" {
+				mname = fmt.Sprintf("@h%d", mi)
+				mi++
+				fmt.Fprintf(&b, "\t%s %s\n", mname, op.Match)
+			}
+		}
+		if line := headerDirective(op, mname); line != "" {
 			b.WriteString("\t" + line + "\n")
 		}
 	}
@@ -211,26 +221,31 @@ func anyCache(p ir.Plan) bool {
 	return false
 }
 
-func headerDirective(op ir.HeaderOp) string {
+func headerDirective(op ir.HeaderOp, matcher string) string {
 	// Caddy header directive prefixes: no prefix = set (response), + = add,
-	// - = remove; request_header handles the request phase.
+	// - = remove; request_header handles the request phase. A non-empty matcher
+	// (e.g. "@h0") scopes the op and slots in right after the directive name.
+	m := ""
+	if matcher != "" {
+		m = matcher + " "
+	}
 	name, val := op.Name, op.Value
 	switch op.Phase {
 	case "request":
 		switch op.Op {
 		case "remove":
-			return fmt.Sprintf("request_header -%s", name)
+			return fmt.Sprintf("request_header %s-%s", m, name)
 		default:
-			return strings.TrimSpace(fmt.Sprintf("request_header %s %q", name, val))
+			return strings.TrimSpace(fmt.Sprintf("request_header %s%s %q", m, name, val))
 		}
 	default: // response
 		switch op.Op {
 		case "add":
-			return fmt.Sprintf("header +%s %q", name, val)
+			return fmt.Sprintf("header %s+%s %q", m, name, val)
 		case "remove":
-			return fmt.Sprintf("header -%s", name)
+			return fmt.Sprintf("header %s-%s", m, name)
 		default:
-			return fmt.Sprintf("header %s %q", name, val)
+			return fmt.Sprintf("header %s%s %q", m, name, val)
 		}
 	}
 }

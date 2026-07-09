@@ -128,7 +128,7 @@ func buildDNS(s cf.Snapshot, opts Options) ir.DNSZone {
 
 func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 	scheme, verify := originScheme(s, opts)
-	globalHeaders := buildGlobalHeaders(s)
+	siteHeaders := buildHeaders(s)
 	wildcard := hasWildcardCert(s)
 
 	var sites []ir.Site
@@ -165,7 +165,7 @@ func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 				Wildcard:   wildcard,
 				HSTS:       buildHSTS(s),
 			},
-			Headers:   append([]ir.HeaderOp(nil), globalHeaders...),
+			Headers:   append([]ir.HeaderOp(nil), siteHeaders...),
 			Redirects: redirectsForHost(s, rec.Name),
 			Cache:     cacheForZone(s),
 		}
@@ -248,12 +248,13 @@ func buildHSTS(s cf.Snapshot) *ir.HSTS {
 	return &ir.HSTS{MaxAge: h.MaxAge, IncludeSubDomains: h.IncludeSubDomains, Preload: h.Preload}
 }
 
-// buildGlobalHeaders translates header-transform rules whose match is global
-// (expression == "true") into header ops that apply to every site. Host- or
-// path-scoped header rules are intentionally not emitted here — they need a
-// matcher translation and are classified MANUAL in the assessment, never a
-// silent AUTO (classify ⟺ generate).
-func buildGlobalHeaders(s cf.Snapshot) []ir.HeaderOp {
+// buildHeaders translates header-transform rules into header ops applied to
+// every site. A global rule (expression == "true") is unscoped; a path-scoped
+// rule whose expression maps to a Caddy matcher (cfexpr.CaddyMatcher) carries
+// that matcher on the op. Host-scoped or compound expressions have no faithful
+// matcher — they are skipped here and classified MANUAL, never a silent AUTO
+// (classify ⟺ generate, via the same CaddyMatcher predicate).
+func buildHeaders(s cf.Snapshot) []ir.HeaderOp {
 	var ops []ir.HeaderOp
 	for _, rs := range s.Rulesets {
 		phase := ""
@@ -266,8 +267,16 @@ func buildGlobalHeaders(s cf.Snapshot) []ir.HeaderOp {
 			continue
 		}
 		for _, rule := range rs.Rules {
-			if !rule.Enabled || strings.TrimSpace(strings.ToLower(rule.Expression)) != "true" {
+			if !rule.Enabled {
 				continue
+			}
+			match := ""
+			if strings.TrimSpace(strings.ToLower(rule.Expression)) != "true" {
+				m, ok := cfexpr.CaddyMatcher(rule.Expression)
+				if !ok {
+					continue // host-scoped or compound → left MANUAL by the classifier
+				}
+				match = m
 			}
 			headers, ok := rule.ActionParams["headers"].(map[string]any)
 			if !ok {
@@ -283,11 +292,17 @@ func buildGlobalHeaders(s cf.Snapshot) []ir.HeaderOp {
 				if op == "" {
 					op = "set"
 				}
-				ops = append(ops, ir.HeaderOp{Phase: phase, Op: op, Name: name, Value: val})
+				ops = append(ops, ir.HeaderOp{Phase: phase, Op: op, Name: name, Value: val, Match: match})
 			}
 		}
 	}
-	sort.SliceStable(ops, func(i, j int) bool { return ops[i].Name < ops[j].Name })
+	// Deterministic: unscoped ops (Match "") first, then grouped by matcher.
+	sort.SliceStable(ops, func(i, j int) bool {
+		if ops[i].Match != ops[j].Match {
+			return ops[i].Match < ops[j].Match
+		}
+		return ops[i].Name < ops[j].Name
+	})
 	return ops
 }
 

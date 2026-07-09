@@ -85,6 +85,9 @@ type HeaderOp struct {
 	Op    string `json:"op"`    // "add" | "set" | "remove"
 	Name  string `json:"name"`
 	Value string `json:"value,omitempty"`
+	// Match is a Caddy request-matcher directive (e.g. `path /api*`) that scopes
+	// this op; empty means it applies to the whole site.
+	Match string `json:"match,omitempty"`
 }
 
 // Rewrite is an internal URL rewrite (path/query), not a client-visible redirect.

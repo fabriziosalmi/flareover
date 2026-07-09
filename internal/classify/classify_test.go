@@ -210,3 +210,21 @@ func TestOriginRuleVerdicts(t *testing.T) {
 		t.Errorf("path-scoped origin rule → MANUAL, got %v", f)
 	}
 }
+
+func TestPathScopedHeaderTransformIsAuto(t *testing.T) {
+	hdr := map[string]any{"headers": map[string]any{"X-Api": map[string]any{"operation": "set", "value": "1"}}}
+	snap := cf.Snapshot{Rulesets: []cf.Ruleset{{
+		Phase: "http_response_headers_transform",
+		Rules: []cf.Rule{
+			{Description: "path scoped", Expression: `starts_with(http.request.uri.path, "/api")`, ActionParams: hdr, Enabled: true},
+			{Description: "host scoped", Expression: `http.host eq "app.example.com"`, ActionParams: hdr, Enabled: true},
+		},
+	}}}
+	r := Classify(snap)
+	if f := find(r, "transform", "path scoped"); f == nil || f.Verdict != report.Auto {
+		t.Errorf("path-scoped header transform → AUTO (matcher-guarded), got %v", f)
+	}
+	if f := find(r, "transform", "host scoped"); f == nil || f.Verdict != report.Manual {
+		t.Errorf("host-scoped header transform → MANUAL, got %v", f)
+	}
+}
