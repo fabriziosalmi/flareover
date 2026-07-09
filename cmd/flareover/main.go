@@ -87,7 +87,8 @@ PHASES
   storage <buckets.json>    Migrate object storage (R2/S3) → self-hosted MinIO
                             (default), or managed EU S3: --dest scaleway [--region
                             fr-par|nl-ams|pl-waw|it-mil] / --dest ovh [--region
-                            gra|sbg|de|waw] / --dest contabo [--region eu2].
+                            gra|sbg|de|waw] / --dest contabo [--region eu2] /
+                            --dest aruba --minio-endpoint <service-point-url>.
                             Emits an rclone data-copy plan too.
   guard --url ...           Failguards watchdog: health-watch + rollback/failover
                             trigger (--on-unhealthy "<cmd>", --interval, --once).
@@ -547,8 +548,12 @@ func cmdStorage(args []string) int {
 			fmt.Fprintf(os.Stderr, "flareover storage: %v\n", err)
 			return 1
 		}
-		if dest != "" && dest != "minio" && dest != "scaleway" && dest != "ovh" && dest != "contabo" {
-			fmt.Fprintf(os.Stderr, "flareover storage: unknown --dest %q (want: minio | scaleway | ovh | contabo)\n", dest)
+		if dest != "" && dest != "minio" && dest != "scaleway" && dest != "ovh" && dest != "contabo" && dest != "aruba" {
+			fmt.Fprintf(os.Stderr, "flareover storage: unknown --dest %q (want: minio | scaleway | ovh | contabo | aruba)\n", dest)
+			return 2
+		}
+		if dest == "aruba" && endpoint == "" {
+			fmt.Fprintln(os.Stderr, "flareover storage: --dest aruba needs --minio-endpoint <your Aruba Service Point URL> (Aruba's S3 endpoint is account-specific — copy it from the Object Storage account page; it is never guessed)")
 			return 2
 		}
 		if dest == "scaleway" && region != "" && !objstore.ValidScalewayRegion(region) {

@@ -221,6 +221,29 @@ func TestValidContaboStorageRegion(t *testing.T) {
 	}
 }
 
+// TestArubaDestination checks the Aruba preset: EU-owned (IT) tier label, Aruba
+// env vars, and the operator-supplied endpoint carried through verbatim (Aruba's
+// S3 host is account-specific, so it is never baked in / guessed).
+func TestArubaDestination(t *testing.T) {
+	ep := "https://sp-eu-it1.arubacloud.example"
+	prov := artifact(Generate(load(t), GenOptions{Dest: "aruba", MinIOEndpoint: ep}), "aruba-object-storage/provision.sh")
+	if prov == "" {
+		t.Fatal("no aruba-object-storage/provision.sh artifact")
+	}
+	for _, want := range []string{
+		"mc alias set aruba " + ep + " \"$ARUBA_S3_ACCESS_KEY\" \"$ARUBA_S3_SECRET_KEY\"",
+		"mc mb -p aruba/public-assets",
+		"Aruba Cloud Object Storage (EU-owned, IT",
+	} {
+		if !strings.Contains(prov, want) {
+			t.Errorf("aruba provision.sh missing %q", want)
+		}
+	}
+	if strings.Contains(prov, "scw/") || strings.Contains(prov, "ovh/") || strings.Contains(prov, "contabo/") || strings.Contains(prov, "MINIO_ACCESS_KEY") {
+		t.Error("aruba provision leaked another destination's alias/creds")
+	}
+}
+
 // TestValidOVHStorageRegion: only EU regions are accepted (uk/bhs excluded).
 func TestValidOVHStorageRegion(t *testing.T) {
 	for _, r := range OVHStorageRegions {

@@ -106,10 +106,12 @@ type GenOptions struct {
 	MinIOAlias    string // mc alias name, e.g. "eu"
 	MinIOEndpoint string // e.g. https://s3.contabo.example
 	Decisions     map[string]string
-	// Dest selects the destination preset: "" / "minio" (self-hosted, default)
-	// or "scaleway" (Scaleway Object Storage — managed EU S3).
+	// Dest selects the destination preset: "" / "minio" (self-hosted, default),
+	// or a managed EU S3 — "scaleway" / "ovh" / "contabo" (fixed region hosts) or
+	// "aruba" (endpoint operator-supplied via MinIOEndpoint, account-specific).
 	Dest string
-	// Region is the Scaleway region (default fr-par) when Dest == "scaleway".
+	// Region is the provider region (Scaleway/OVH/Contabo) when set; Aruba takes
+	// its endpoint from MinIOEndpoint instead.
 	Region string
 }
 
@@ -218,6 +220,23 @@ func resolveDest(opts GenOptions) destination {
 			accessEnv: "CONTABO_S3_ACCESS_KEY",
 			secretEnv: "CONTABO_S3_SECRET_KEY",
 			label:     "Contabo Object Storage (EU-owned, " + region + ")",
+		}
+	}
+	if opts.Dest == "aruba" {
+		alias := opts.MinIOAlias
+		if alias == "" {
+			alias = "aruba"
+		}
+		// Aruba's S3 endpoint is account-specific (the "Service Point URL" from the
+		// Object Storage account page), not a fixed public region host — so it is
+		// operator-supplied (--minio-endpoint), never guessed. The CLI enforces it.
+		return destination{
+			dir:       "aruba-object-storage",
+			alias:     alias,
+			endpoint:  opts.MinIOEndpoint,
+			accessEnv: "ARUBA_S3_ACCESS_KEY",
+			secretEnv: "ARUBA_S3_SECRET_KEY",
+			label:     "Aruba Cloud Object Storage (EU-owned, IT · endpoint " + opts.MinIOEndpoint + ")",
 		}
 	}
 	alias := opts.MinIOAlias
