@@ -92,3 +92,24 @@ func TestDeterministic(t *testing.T) {
 		t.Error("Caddyfile generation is not deterministic")
 	}
 }
+
+func TestReverseProxyOriginOverride(t *testing.T) {
+	plan := ir.Plan{
+		Zone: "example.com",
+		Sites: []ir.Site{{
+			Host:   "app.example.com",
+			Origin: ir.Origin{Upstreams: []string{"backend.internal:8443"}, Scheme: "https", VerifyTLS: true, HostHeader: "app.origin", SNI: "backend.tls"},
+			TLS:    ir.TLS{Provider: "certmate"},
+		}},
+	}
+	arts, err := Generator{}.Generate(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(arts[0].Content)
+	for _, w := range []string{"reverse_proxy https://backend.internal:8443", "header_up Host app.origin", "tls_server_name backend.tls"} {
+		if !strings.Contains(out, w) {
+			t.Errorf("Caddyfile missing %q\n---\n%s", w, out)
+		}
+	}
+}

@@ -101,3 +101,30 @@ func TestRedirectStatusAndTarget(t *testing.T) {
 		t.Error("an expression-derived target must not be treated as static")
 	}
 }
+
+func TestOriginOverride(t *testing.T) {
+	params := map[string]any{
+		"host_header": "app.origin",
+		"origin":      map[string]any{"host": "backend.internal", "port": float64(8443)},
+		"sni":         map[string]any{"value": "backend.tls"},
+	}
+	ov, ok := OriginOverride(`http.host eq "app.example.com"`, params)
+	if !ok {
+		t.Fatal("host-scoped, fully-mappable origin rule should be ok")
+	}
+	if ov.Host != "app.example.com" || ov.HostHeader != "app.origin" || ov.Upstream != "backend.internal:8443" || ov.SNI != "backend.tls" {
+		t.Errorf("override = %+v", ov)
+	}
+	// path-scoped → not mappable (stays MANUAL)
+	if _, ok := OriginOverride(`starts_with(http.request.uri.path,"/api")`, map[string]any{"host_header": "x"}); ok {
+		t.Error("a path-scoped origin rule must not be mappable")
+	}
+	// an unrecognized parameter → not mappable
+	if _, ok := OriginOverride(`http.host eq "x"`, map[string]any{"host_header": "h", "cache": true}); ok {
+		t.Error("an unrecognized parameter must make the rule not mappable")
+	}
+	// no parameters → not mappable
+	if _, ok := OriginOverride(`http.host eq "x"`, map[string]any{}); ok {
+		t.Error("an empty rule → not mappable")
+	}
+}

@@ -193,3 +193,20 @@ func TestDeterministic(t *testing.T) {
 		t.Fatal("classification is not deterministic across runs")
 	}
 }
+
+func TestOriginRuleVerdicts(t *testing.T) {
+	snap := cf.Snapshot{Rulesets: []cf.Ruleset{{
+		Phase: "http_request_origin",
+		Rules: []cf.Rule{
+			{Description: "host scoped", Expression: `http.host eq "app.example.com"`, ActionParams: map[string]any{"host_header": "h.origin"}, Enabled: true},
+			{Description: "path scoped", Expression: `starts_with(http.request.uri.path,"/api")`, ActionParams: map[string]any{"host_header": "h.origin"}, Enabled: true},
+		},
+	}}}
+	r := Classify(snap)
+	if f := find(r, "origin-rule", "host scoped"); f == nil || f.Verdict != report.Auto {
+		t.Errorf("host-scoped origin rule → AUTO, got %v", f)
+	}
+	if f := find(r, "origin-rule", "path scoped"); f == nil || f.Verdict != report.Manual {
+		t.Errorf("path-scoped origin rule → MANUAL, got %v", f)
+	}
+}

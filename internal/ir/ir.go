@@ -55,6 +55,11 @@ type Origin struct {
 	Upstreams []string `json:"upstreams"` // host:port list
 	Scheme    string   `json:"scheme"`    // http | https
 	VerifyTLS bool     `json:"verify_tls"`
+	// HostHeader and SNI are Origin-Rule overrides (empty when unset): the Host
+	// header sent upstream (→ Caddy header_up Host) and the TLS SNI
+	// (→ tls_server_name).
+	HostHeader string `json:"host_header,omitempty"`
+	SNI        string `json:"sni,omitempty"`
 }
 
 // TLS is the certificate intent for a Site.

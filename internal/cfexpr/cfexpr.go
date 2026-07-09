@@ -10,6 +10,7 @@ package cfexpr
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -75,6 +76,67 @@ func HostEq(expr string) (string, bool) {
 		return "", false
 	}
 	return m[1], true
+}
+
+// Override is a host-scoped Origin Rule mapping flareover can faithfully emit as
+// Caddy reverse_proxy directives.
+type Override struct {
+	Host       string // the http.host the rule is scoped to
+	Upstream   string // "host[:port]" if the origin param overrides the backend, else ""
+	HostHeader string // Host header override (→ header_up Host), else ""
+	SNI        string // SNI override (→ tls_server_name), else ""
+}
+
+// OriginOverride is the SINGLE predicate the classifier (AUTO decision) and the
+// plan builder (emission) use for Origin Rules, so a rule is AUTO only when Caddy
+// config is actually produced for it. It maps a host-scoped rule
+// (`http.host eq "…"`) whose action parameters are all faithfully reproducible —
+// host_header (→ header_up Host), origin {host,port} (→ the upstream), sni
+// (→ tls_server_name) — into an Override. A path-scoped rule, an empty rule, or
+// any unrecognized parameter returns ok=false and must stay MANUAL.
+func OriginOverride(expr string, params map[string]any) (Override, bool) {
+	host, ok := HostEq(expr)
+	if !ok || len(params) == 0 {
+		return Override{}, false
+	}
+	ov := Override{Host: host}
+	for k, v := range params {
+		switch k {
+		case "host_header":
+			s, ok := v.(string)
+			if !ok || s == "" {
+				return Override{}, false
+			}
+			ov.HostHeader = s
+		case "origin":
+			m, ok := v.(map[string]any)
+			if !ok {
+				return Override{}, false
+			}
+			h, _ := m["host"].(string)
+			if h == "" {
+				return Override{}, false
+			}
+			if p, ok := m["port"].(float64); ok && p > 0 {
+				ov.Upstream = h + ":" + strconv.Itoa(int(p))
+			} else {
+				ov.Upstream = h
+			}
+		case "sni":
+			m, ok := v.(map[string]any)
+			if !ok {
+				return Override{}, false
+			}
+			s, ok := m["value"].(string)
+			if !ok || s == "" {
+				return Override{}, false
+			}
+			ov.SNI = s
+		default:
+			return Override{}, false // an unmappable parameter → not AUTO
+		}
+	}
+	return ov, true
 }
 
 // IsPerIPRateLimit reports whether a rate-limit's characteristics reduce to a

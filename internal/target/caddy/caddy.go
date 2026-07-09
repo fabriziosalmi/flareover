@@ -117,8 +117,28 @@ func renderReverseProxy(o ir.Origin) string {
 		ups[i] = fmt.Sprintf("%s://%s", schemeOr(o.Scheme, "https"), u)
 	}
 	fmt.Fprintf(&b, "\treverse_proxy %s", strings.Join(ups, " "))
-	if o.Scheme == "https" && !o.VerifyTLS {
-		b.WriteString(" {\n\t\ttransport http {\n\t\t\ttls_insecure_skip_verify\n\t\t}\n\t}\n")
+
+	// Optional block: Origin-Rule Host-header override + a TLS transport carrying
+	// the SNI override and/or the skip-verify already implied by the scheme.
+	var body strings.Builder
+	if o.HostHeader != "" {
+		fmt.Fprintf(&body, "\t\theader_up Host %s\n", o.HostHeader)
+	}
+	insecure := o.Scheme == "https" && !o.VerifyTLS
+	if insecure || o.SNI != "" {
+		body.WriteString("\t\ttransport http {\n")
+		if o.SNI != "" {
+			fmt.Fprintf(&body, "\t\t\ttls_server_name %s\n", o.SNI)
+		}
+		if insecure {
+			body.WriteString("\t\t\ttls_insecure_skip_verify\n")
+		}
+		body.WriteString("\t\t}\n")
+	}
+	if body.Len() > 0 {
+		b.WriteString(" {\n")
+		b.WriteString(body.String())
+		b.WriteString("\t}\n")
 	} else {
 		b.WriteString("\n")
 	}

@@ -169,10 +169,40 @@ func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 			Redirects: redirectsForHost(s, rec.Name),
 			Cache:     cacheForZone(s),
 		}
+		// Apply a host-scoped Origin Rule (host_header / origin / sni), if the
+		// classifier judged it faithfully mappable — same predicate, so what is
+		// reported AUTO is exactly what gets emitted here.
+		if ov, ok := originOverrideForHost(s, rec.Name); ok {
+			if ov.Upstream != "" {
+				site.Origin.Upstreams = []string{ov.Upstream}
+			}
+			site.Origin.HostHeader = ov.HostHeader
+			site.Origin.SNI = ov.SNI
+		}
 		sites = append(sites, site)
 	}
 	sort.SliceStable(sites, func(i, j int) bool { return sites[i].Host < sites[j].Host })
 	return sites
+}
+
+// originOverrideForHost returns the faithfully-mappable Origin-Rule override
+// scoped to host, if any. Path-scoped or unmappable rules return ok=false (the
+// classifier keeps them MANUAL), so they are ignored here.
+func originOverrideForHost(s cf.Snapshot, host string) (cfexpr.Override, bool) {
+	for _, rs := range s.Rulesets {
+		if rs.Phase != "http_request_origin" {
+			continue
+		}
+		for _, rule := range rs.Rules {
+			if !rule.Enabled {
+				continue
+			}
+			if ov, ok := cfexpr.OriginOverride(rule.Expression, rule.ActionParams); ok && ov.Host == host {
+				return ov, true
+			}
+		}
+	}
+	return cfexpr.Override{}, false
 }
 
 // resolveOrigin splits an origin answer into (host:port, scheme, verifyTLS).

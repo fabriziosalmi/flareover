@@ -113,3 +113,26 @@ func TestBuildWithoutOriginDecision(t *testing.T) {
 		t.Errorf("expected 2 unproxied records, got %d", len(p.DNS.Records))
 	}
 }
+
+func TestOriginRuleAppliedToSite(t *testing.T) {
+	snap := cf.Snapshot{
+		Zone:       cf.Zone{Name: "example.com"},
+		DNSRecords: []cf.DNSRecord{{Type: "A", Name: "app.example.com", Content: "192.0.2.1", Proxied: true}},
+		Rulesets: []cf.Ruleset{{Phase: "http_request_origin", Rules: []cf.Rule{
+			{Expression: `http.host eq "app.example.com"`, Enabled: true, ActionParams: map[string]any{
+				"host_header": "app.origin",
+				"sni":         map[string]any{"value": "app.tls"},
+			}},
+		}}},
+	}
+	p, err := Build(snap, Options{EdgeIP: "5.9.1.1", Decisions: map[string]string{"origin:app.example.com": "10.0.0.9:8080"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Sites) != 1 {
+		t.Fatalf("sites = %d, want 1", len(p.Sites))
+	}
+	if o := p.Sites[0].Origin; o.HostHeader != "app.origin" || o.SNI != "app.tls" {
+		t.Errorf("origin-rule override not applied to the site: %+v", o)
+	}
+}

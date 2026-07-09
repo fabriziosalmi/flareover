@@ -361,6 +361,13 @@ func classifyConfigRule(rule cf.Rule, name string, add func(report.Finding)) {
 // / SNI overrides are reproducible in Caddy (header_up Host, upstream, matchers)
 // but no generator emits them yet, so MANUAL with the concrete params named.
 func classifyOriginRule(rule cf.Rule, name string, add func(report.Finding)) {
+	// A host-scoped rule whose parameters all map (host_header / origin / sni) is
+	// emitted as a Caddy reverse_proxy override — the same predicate the plan uses.
+	if _, ok := cfexpr.OriginOverride(rule.Expression, rule.ActionParams); ok {
+		add(auto("origin-rule", name, "caddy",
+			"Host-scoped Origin Rule → Caddy reverse_proxy override (header_up Host / upstream / tls_server_name)."))
+		return
+	}
 	var keys []string
 	for k := range rule.ActionParams {
 		keys = append(keys, k)
@@ -371,7 +378,7 @@ func classifyOriginRule(rule cf.Rule, name string, add func(report.Finding)) {
 		detail = strings.Join(keys, ", ")
 	}
 	add(manual("origin-rule", name,
-		"Origin Rule ("+detail+") — reproducible in Caddy (reverse_proxy header_up Host / upstream / matchers) but no generator emits it yet; recreate by hand."))
+		"Origin Rule ("+detail+") — path-scoped, or a parameter with no faithful Caddy mapping; recreate by hand (reverse_proxy header_up Host / upstream / matchers)."))
 }
 
 func classifyRedirect(rule cf.Rule, name string, add func(report.Finding)) {
