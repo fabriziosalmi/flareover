@@ -42,6 +42,7 @@ import (
 	"github.com/fabriziosalmi/flareover/internal/runbook"
 	"github.com/fabriziosalmi/flareover/internal/stack"
 	"github.com/fabriziosalmi/flareover/internal/target"
+	"github.com/fabriziosalmi/flareover/internal/target/bunnydns"
 	"github.com/fabriziosalmi/flareover/internal/target/certmate"
 	"github.com/fabriziosalmi/flareover/internal/target/mesh"
 	"github.com/fabriziosalmi/flareover/internal/target/powerdns"
@@ -98,6 +99,9 @@ PREPARE FLAGS
   --edge-ip <ip>       public IP of the new Caddy edge (proxied records repoint here)
   --ca <name>          default cert CA: letsencrypt (default) | actalis
   --stack <id>         target stack profile (default: caddy)
+  --dns <id>           authoritative DNS target: powerdns (default, self-hosted)
+                       | bunny (bunny.net managed EU DNS: emits a records-only
+                       BIND zone + apply.sh using the bunny.net CLI)
   --out <dir>          write artifacts under <dir> (default: stdout preview)
   --validate           prove the generated Caddyfile + zone parse (caddy validate)
   --mesh-edge [name=]<host:port>  sovereign WireGuard tunnel to keep an existing
@@ -936,7 +940,7 @@ func cmdGuard(args []string) int {
 }
 
 func cmdPrepare(args []string) int {
-	var path, decisionsPath, edgeIP, ca, stackID, outDir, blocklists, egressAllow, edgeProvider string
+	var path, decisionsPath, edgeIP, ca, stackID, dnsTarget, outDir, blocklists, egressAllow, edgeProvider string
 	var meshEdges []string
 	var egressDeny, egressSSLBump, doValidate bool
 	for i := 0; i < len(args); i++ {
@@ -953,7 +957,7 @@ func cmdPrepare(args []string) int {
 			continue
 		}
 		switch a {
-		case "--decisions", "--edge-ip", "--ca", "--stack", "--out", "--blocklists", "--egress-allow", "--mesh-edge", "--edge-provider":
+		case "--decisions", "--edge-ip", "--ca", "--stack", "--dns", "--out", "--blocklists", "--egress-allow", "--mesh-edge", "--edge-provider":
 			if i+1 >= len(args) {
 				fmt.Fprintf(os.Stderr, "flareover prepare: %s needs a value\n", a)
 				return 2
@@ -968,6 +972,8 @@ func cmdPrepare(args []string) int {
 				ca = args[i]
 			case "--stack":
 				stackID = args[i]
+			case "--dns":
+				dnsTarget = args[i]
 			case "--out":
 				outDir = args[i]
 			case "--blocklists":
@@ -1005,6 +1011,17 @@ func cmdPrepare(args []string) int {
 	profile, err := stack.Profile(stackID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "flareover prepare: %v\n", err)
+		return 2
+	}
+	// The DNS target is orthogonal to the proxy profile: keep the self-hosted
+	// PowerDNS zone by default, or swap in bunny.net's managed EU DNS.
+	switch dnsTarget {
+	case "", "powerdns":
+		// profile default (self-hosted PowerDNS)
+	case "bunny", "bunny-dns", "bunnydns":
+		profile.DNS = bunnydns.Generator{}
+	default:
+		fmt.Fprintf(os.Stderr, "flareover prepare: unknown --dns %q (want: powerdns | bunny)\n", dnsTarget)
 		return 2
 	}
 
