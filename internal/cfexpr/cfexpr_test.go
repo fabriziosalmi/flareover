@@ -147,3 +147,15 @@ func TestCaddyMatcher(t *testing.T) {
 		}
 	}
 }
+
+func TestOriginOverridePathScoped(t *testing.T) {
+	origin := map[string]any{"origin": map[string]any{"host": "api.internal", "port": float64(8443)}}
+	ov, ok := OriginOverride(`starts_with(http.request.uri.path, "/api")`, origin)
+	if !ok || ov.Match != "path /api*" || ov.Upstream != "api.internal:8443" || ov.Host != "" {
+		t.Errorf("path-scoped origin override = %+v (ok=%v)", ov, ok)
+	}
+	// A path-scoped rule with no origin has nothing to route to → stays MANUAL.
+	if _, ok := OriginOverride(`starts_with(http.request.uri.path, "/api")`, map[string]any{"host_header": "x"}); ok {
+		t.Error("a path-scoped rule without an origin must stay MANUAL")
+	}
+}

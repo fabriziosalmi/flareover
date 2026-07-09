@@ -129,6 +129,7 @@ func buildDNS(s cf.Snapshot, opts Options) ir.DNSZone {
 func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 	scheme, verify := originScheme(s, opts)
 	siteHeaders := buildHeaders(s)
+	scopedProxies := pathScopedProxies(s, scheme, verify)
 	wildcard := hasWildcardCert(s)
 
 	var sites []ir.Site
@@ -179,6 +180,9 @@ func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 			site.Origin.HostHeader = ov.HostHeader
 			site.Origin.SNI = ov.SNI
 		}
+		// Path-scoped Origin Rules route a matched path to a different origin;
+		// they apply zone-wide, so every site carries them.
+		site.ScopedProxies = scopedProxies
 		sites = append(sites, site)
 	}
 	sort.SliceStable(sites, func(i, j int) bool { return sites[i].Host < sites[j].Host })
@@ -203,6 +207,37 @@ func originOverrideForHost(s cf.Snapshot, host string) (cfexpr.Override, bool) {
 		}
 	}
 	return cfexpr.Override{}, false
+}
+
+// pathScopedProxies collects path-scoped Origin Rules (a path matcher + an
+// origin) as matcher-guarded reverse_proxies. They apply zone-wide; the scoped
+// origin inherits the site's default scheme/verify. Host-scoped and unmappable
+// rules are handled elsewhere / left MANUAL — the same OriginOverride predicate.
+func pathScopedProxies(s cf.Snapshot, scheme string, verify bool) []ir.ScopedProxy {
+	var out []ir.ScopedProxy
+	for _, rs := range s.Rulesets {
+		if rs.Phase != "http_request_origin" {
+			continue
+		}
+		for _, rule := range rs.Rules {
+			if !rule.Enabled {
+				continue
+			}
+			ov, ok := cfexpr.OriginOverride(rule.Expression, rule.ActionParams)
+			if !ok || ov.Match == "" { // host-scoped or unmappable → not here
+				continue
+			}
+			out = append(out, ir.ScopedProxy{
+				Match: ov.Match,
+				Origin: ir.Origin{
+					Upstreams: []string{ov.Upstream}, Scheme: scheme, VerifyTLS: verify,
+					HostHeader: ov.HostHeader, SNI: ov.SNI,
+				},
+			})
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Match < out[j].Match })
+	return out
 }
 
 // resolveOrigin splits an origin answer into (host:port, scheme, verifyTLS).

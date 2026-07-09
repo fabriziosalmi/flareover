@@ -113,20 +113,31 @@ func renderSite(s ir.Site, waf ir.WAFPolicy) string {
 		b.WriteString(renderRedirect(i, r))
 	}
 
-	// Reverse proxy to the de-proxied origin.
-	b.WriteString(renderReverseProxy(s.Origin))
+	// Path-scoped origin overrides (matcher-guarded) come first, so the catch-all
+	// default below does not shadow them.
+	for i, sp := range s.ScopedProxies {
+		name := fmt.Sprintf("@p%d", i)
+		fmt.Fprintf(&b, "\t%s %s\n", name, sp.Match)
+		b.WriteString(renderReverseProxy(sp.Origin, name))
+	}
+	// Reverse proxy to the de-proxied origin (catch-all).
+	b.WriteString(renderReverseProxy(s.Origin, ""))
 
 	b.WriteString("}\n")
 	return b.String()
 }
 
-func renderReverseProxy(o ir.Origin) string {
+func renderReverseProxy(o ir.Origin, matcher string) string {
 	var b strings.Builder
 	ups := make([]string, len(o.Upstreams))
 	for i, u := range o.Upstreams {
 		ups[i] = fmt.Sprintf("%s://%s", schemeOr(o.Scheme, "https"), u)
 	}
-	fmt.Fprintf(&b, "\treverse_proxy %s", strings.Join(ups, " "))
+	m := ""
+	if matcher != "" {
+		m = matcher + " "
+	}
+	fmt.Fprintf(&b, "\treverse_proxy %s%s", m, strings.Join(ups, " "))
 
 	// Optional block: Origin-Rule Host-header override + a TLS transport carrying
 	// the SNI override and/or the skip-verify already implied by the scheme.

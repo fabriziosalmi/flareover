@@ -47,7 +47,18 @@ type Site struct {
 	Rewrites  []Rewrite    `json:"rewrites,omitempty"`
 	Redirects []Redirect   `json:"redirects,omitempty"`
 	Cache     *CachePolicy `json:"cache,omitempty"`
+	// ScopedProxies are path-scoped origin overrides (from path-scoped Origin
+	// Rules): each routes its matched path to a different origin, emitted as a
+	// matcher-guarded reverse_proxy ahead of the site default.
+	ScopedProxies []ScopedProxy `json:"scoped_proxies,omitempty"`
 	// HSTS, HTTP/3 etc. inherited from global unless overridden here.
+}
+
+// ScopedProxy is a matcher-guarded reverse_proxy: requests matching Match go to
+// Origin instead of the site default.
+type ScopedProxy struct {
+	Match  string `json:"match"` // a Caddy matcher directive, e.g. "path /api*"
+	Origin Origin `json:"origin"`
 }
 
 // Origin is where the edge forwards to (the true, de-proxied backend).

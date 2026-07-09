@@ -228,3 +228,16 @@ func TestPathScopedHeaderTransformIsAuto(t *testing.T) {
 		t.Errorf("host-scoped header transform → MANUAL, got %v", f)
 	}
 }
+
+func TestPathScopedOriginRuleIsAuto(t *testing.T) {
+	snap := cf.Snapshot{Rulesets: []cf.Ruleset{{
+		Phase: "http_request_origin",
+		Rules: []cf.Rule{{
+			Description: "route api", Expression: `starts_with(http.request.uri.path, "/api")`, Enabled: true,
+			ActionParams: map[string]any{"origin": map[string]any{"host": "api.internal", "port": float64(8443)}},
+		}},
+	}}}
+	if f := find(Classify(snap), "origin-rule", "route api"); f == nil || f.Verdict != report.Auto {
+		t.Errorf("path-scoped origin rule with an origin → AUTO, got %v", f)
+	}
+}

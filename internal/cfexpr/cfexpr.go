@@ -101,10 +101,12 @@ func HostEq(expr string) (string, bool) {
 	return m[1], true
 }
 
-// Override is a host-scoped Origin Rule mapping flareover can faithfully emit as
-// Caddy reverse_proxy directives.
+// Override is an Origin Rule mapping flareover can faithfully emit as Caddy
+// reverse_proxy directives. Exactly one of Host (host-scoped → the whole site's
+// origin) or Match (path-scoped → a matcher-guarded reverse_proxy) is set.
 type Override struct {
-	Host       string // the http.host the rule is scoped to
+	Host       string // the http.host the rule is scoped to (host-scoped)
+	Match      string // a Caddy path matcher, e.g. "path /api*" (path-scoped)
 	Upstream   string // "host[:port]" if the origin param overrides the backend, else ""
 	HostHeader string // Host header override (→ header_up Host), else ""
 	SNI        string // SNI override (→ tls_server_name), else ""
@@ -112,17 +114,25 @@ type Override struct {
 
 // OriginOverride is the SINGLE predicate the classifier (AUTO decision) and the
 // plan builder (emission) use for Origin Rules, so a rule is AUTO only when Caddy
-// config is actually produced for it. It maps a host-scoped rule
-// (`http.host eq "…"`) whose action parameters are all faithfully reproducible —
-// host_header (→ header_up Host), origin {host,port} (→ the upstream), sni
-// (→ tls_server_name) — into an Override. A path-scoped rule, an empty rule, or
-// any unrecognized parameter returns ok=false and must stay MANUAL.
+// config is actually produced for it. It maps a rule whose parameters are all
+// faithfully reproducible — host_header (→ header_up Host), origin {host,port}
+// (→ the upstream), sni (→ tls_server_name) — scoped either to a host
+// (`http.host eq "…"` → the whole site's origin) or to a path (starts_with / eq
+// → a matcher-guarded reverse_proxy). A path-scoped rule must carry an origin
+// (the upstream that path routes to). An empty rule, an unrecognized parameter,
+// or an unmappable expression returns ok=false and must stay MANUAL.
 func OriginOverride(expr string, params map[string]any) (Override, bool) {
-	host, ok := HostEq(expr)
-	if !ok || len(params) == 0 {
+	if len(params) == 0 {
 		return Override{}, false
 	}
-	ov := Override{Host: host}
+	var ov Override
+	if h, ok := HostEq(expr); ok {
+		ov.Host = h // host-scoped → the whole site origin
+	} else if m, ok := CaddyMatcher(expr); ok {
+		ov.Match = m // path-scoped → a matcher-guarded reverse_proxy
+	} else {
+		return Override{}, false
+	}
 	for k, v := range params {
 		switch k {
 		case "host_header":
@@ -158,6 +168,13 @@ func OriginOverride(expr string, params map[string]any) (Override, bool) {
 		default:
 			return Override{}, false // an unmappable parameter → not AUTO
 		}
+	}
+	// A path-scoped override needs an upstream: the whole point is routing that
+	// path to a different origin. A host_header/sni-only path rule (proxy the
+	// same backend with a different Host on one path) needs the site default
+	// upstream to be woven in — not modeled yet, so it stays MANUAL.
+	if ov.Match != "" && ov.Upstream == "" {
+		return Override{}, false
 	}
 	return ov, true
 }
