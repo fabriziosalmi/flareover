@@ -1235,6 +1235,21 @@ func edgeCloudInits(arts []target.Artifact, fallback provider.Provider) ([]targe
 			Mode:    0o600,
 			Note:    fmt.Sprintf("cloud-init for edge %q on %s (%s) — paste as instance user-data", name, prov.Name, prov.Exposure),
 		})
+		// Scaleway is fully API-driven, so we can also emit a create script that
+		// boots the edge from that cloud-init (the operator runs it — a paid
+		// server is never spun up silently).
+		if prov.Key == "scaleway" {
+			script := "edge/create.scaleway.sh"
+			if name != "edge" {
+				script = "edge/create-" + name + ".scaleway.sh"
+			}
+			out = append(out, target.Artifact{
+				Path:    script,
+				Content: provider.ScalewayInstanceScript(name, strings.TrimPrefix(dst, "edge/")),
+				Mode:    0o755,
+				Note:    fmt.Sprintf("create edge %q on Scaleway Instances from its cloud-init (paid server — review first)", name),
+			})
+		}
 	}
 	return out, nil
 }

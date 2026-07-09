@@ -114,7 +114,7 @@ flareover <phase> [args]
 | `assess <snapshot.json>` | Classify into an AUTO/ASK/MANUAL coverage report (`--md`, `--json`, `--html`). |
 | `resolve <snapshot.json>` | Walk the ASK questions into a `decisions.lock` (`--defaults`, `--merge`). |
 | `cost <snapshot.json>` | Cloudflare tier/add-on cost vs a flat EU stack (`--vps <eur/mo>`). |
-| `prepare <snapshot.json>` | Generate the artifacts (Caddyfile, caddy-waf rules, PowerDNS zone, egress, mesh) **plus a `MIGRATION.md` report** — a table of every Cloudflare element found and exactly what it became (1:1 AUTO / ASK / MANUAL). `--validate` proves they parse; `--edge-provider <key>` emits an edge cloud-init. |
+| `prepare <snapshot.json>` | Generate the artifacts (Caddyfile, caddy-waf rules, PowerDNS zone, egress, mesh) **plus a `MIGRATION.md` report** — a table of every Cloudflare element found and exactly what it became (1:1 AUTO / ASK / MANUAL). `--validate` proves they parse; `--edge-provider <key>` emits an edge cloud-init (and, for **Scaleway**, a `scw` script that creates and boots the edge instance from it). |
 | `doctor …` | Read-only pre-flight — every target reachable/authorized/configured? GO/NO-GO before you provision. |
 | `providers` | List EU edge providers with their honest sovereignty tier (EU-owned vs US-operator/EU-region). |
 | `provision …` | Stand the target up via APIs (`--pdns-url`, `--certmate-url`). |

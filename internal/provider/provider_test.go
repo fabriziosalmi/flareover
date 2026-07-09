@@ -38,6 +38,33 @@ func TestSovereigntyTiering(t *testing.T) {
 	}
 }
 
+// TestScalewayInstanceScript pins the create script to the verified scw CLI
+// surface and the env-only, never-silent-spend discipline.
+func TestScalewayInstanceScript(t *testing.T) {
+	s := string(ScalewayInstanceScript("scaleway", "cloud-init-scaleway.yaml"))
+	for _, want := range []string{
+		"#!/usr/bin/env sh",
+		"set -eu",
+		"scw instance server create",
+		`cloud-init=@"$CLOUD_INIT"`,            // the @ prefix loads the file (verified)
+		"cloud-init-scaleway.yaml",             // references the generated cloud-init
+		"SCW_SECRET_KEY",                       // env-only auth
+		`NAME="flareover-edge-scaleway"`,       // deterministic name
+		`ZONE="${SCW_DEFAULT_ZONE:-fr-par-1}"`, // EU zone default
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("create script missing %q", want)
+		}
+	}
+	// A paid server must be flagged, never silent; creds never on argv.
+	if !strings.Contains(s, "PAID") {
+		t.Error("script must flag that it provisions a paid server")
+	}
+	if strings.Contains(s, "--secret-key") || strings.Contains(s, "secret-key=") {
+		t.Error("secret key must stay in the env, never on argv")
+	}
+}
+
 func TestLookupUnknown(t *testing.T) {
 	if _, ok := Lookup("digitalocean"); ok {
 		t.Error("unknown provider must not resolve")
