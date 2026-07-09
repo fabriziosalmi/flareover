@@ -222,11 +222,11 @@ flareover provision --snapshot snap.json --decisions decisions.lock \
           <tr><td class="k">resolve</td><td>Walk the ASK questions into a <code>decisions.lock</code> (interactive, or <code>--defaults</code> / <code>--merge</code>).</td></tr>
           <tr><td class="k">cost</td><td>Estimate the Cloudflare tier/add-on cost vs a flat EU stack (<code>--vps</code> to override).</td></tr>
           <tr><td class="k">prepare</td><td>Generate the target artifacts + a <code>MIGRATION.md</code> report. <code>--edge-ip</code>, <code>--dns</code>, <code>--stack</code>, <code>--validate</code>, <code>--edge-provider</code>, <code>--mesh-edge</code>.</td></tr>
-          <tr><td class="k">provision</td><td>Stand the target up via APIs: DNS zone + DNSSEC, CertMate DNS-01. <code>--pdns-url</code> or <code>--dns scaleway|ovh|gandi|leaseweb</code>.</td></tr>
+          <tr><td class="k">provision</td><td>Stand the target up via APIs: DNS zone + DNSSEC, CertMate DNS-01. <code>--pdns-url</code> or <code>--dns scaleway|ovh|gandi|leaseweb|hetzner|route53|clouddns|azure</code>.</td></tr>
           <tr><td class="k">present</td><td>Parity gate: probe the live edge vs the staged edge (<code>--after-addr</code>). PASS/FAIL.</td></tr>
           <tr><td class="k">execute</td><td>Orchestrate the phases live up to the gated cutover; the DNS flip stays your explicit step.</td></tr>
           <tr><td class="k">guard</td><td>Failguards watchdog: health-watch + rollback/failover trigger (<code>--on-unhealthy</code>, <code>--interval</code>).</td></tr>
-          <tr><td class="k">storage</td><td>Migrate object storage (R2/S3) → MinIO or managed EU S3 (<code>--dest scaleway|ovh</code>) + an rclone plan.</td></tr>
+          <tr><td class="k">storage</td><td>Migrate object storage (R2/S3) → MinIO or managed EU S3 (<code>--dest scaleway|ovh|contabo|aruba</code>) + an rclone plan.</td></tr>
           <tr><td class="k">doctor</td><td>Read-only pre-flight: is every target reachable, authorized, configured? GO/NO-GO.</td></tr>
           <tr><td class="k">providers</td><td>List EU edge providers with their honest sovereignty tier.</td></tr>
         </table>
@@ -245,6 +245,10 @@ flareover provision --snapshot snap.json --decisions decisions.lock \
           <tr><td class="k">ovh</td><td><code>provision --dns ovh</code>: REPLACE per rrset + zone refresh (stdlib signed auth).</td><td class="muted">OVH_APPLICATION_KEY/SECRET · OVH_CONSUMER_KEY</td></tr>
           <tr><td class="k">gandi</td><td><code>provision --dns gandi</code>: idempotent PUT per rrset (LiveDNS).</td><td class="muted">GANDI_PAT</td></tr>
           <tr><td class="k">leaseweb</td><td><code>provision --dns leaseweb</code>: delete-then-create REPLACE.</td><td class="muted">LEASEWEB_API_KEY</td></tr>
+          <tr><td class="k">hetzner</td><td><code>provision --dns hetzner</code>: create-if-absent per record (EU-owned, sovereign).</td><td class="muted">HETZNER_DNS_TOKEN</td></tr>
+          <tr><td class="k">route53</td><td><code>provision --dns route53</code>: UPSERT per rrset (SigV4). <b>US-operated — not sovereign.</b></td><td class="muted">AWS_ACCESS_KEY_ID · AWS_SECRET_ACCESS_KEY</td></tr>
+          <tr><td class="k">clouddns</td><td><code>provision --dns clouddns</code>: create-or-patch per rrset (service-account JWT). <b>US-operated.</b></td><td class="muted">GOOGLE_APPLICATION_CREDENTIALS</td></tr>
+          <tr><td class="k">azure</td><td><code>provision --dns azure</code>: PUT recordset per type (AAD client-credentials). <b>US-operated.</b></td><td class="muted">AZURE_TENANT_ID · CLIENT_ID · CLIENT_SECRET · SUBSCRIPTION_ID · RESOURCE_GROUP</td></tr>
         </table>
         <h3>The rest of the stack</h3>
         <table>
@@ -252,7 +256,7 @@ flareover provision --snapshot snap.json --decisions decisions.lock \
           <tr><td class="k">caddy-waf</td><td>WAF: OWASP, rate-limit, IP·ASN·country blocking, external blocklists.</td></tr>
           <tr><td class="k">souin</td><td>Edge cache (Caddy module).</td></tr>
           <tr><td class="k">CertMate</td><td>Certificates via DNS-01: wildcard, Let's Encrypt or Actalis (EU CA).</td></tr>
-          <tr><td class="k">MinIO / EU S3</td><td>Object storage target — self-hosted MinIO or managed Scaleway/OVH; rclone copies the data.</td></tr>
+          <tr><td class="k">MinIO / EU S3</td><td>Object storage target — self-hosted MinIO or managed Scaleway/OVH/Contabo/Aruba; rclone copies the data.</td></tr>
           <tr><td class="k">WireGuard mesh</td><td>Keep an unchanged origin: the edge dials in over an encrypted tunnel; origin has zero public inbound.</td></tr>
         </table>
         <div class="note">Managed DNS/storage/edge adapters are unit- and wire-verified against each
@@ -289,15 +293,18 @@ flareover present --after-addr <span class="fl">$EDGE_IP</span>   <span class="d
 flareover provision --snapshot snap.json --decisions decisions.lock --dns scaleway
 <span class="dm"># → prints the delegation nameservers; set them at your registrar, then let TTLs expire.</span></pre></div>
         <p class="muted">Re-running <code>provision</code> is the idempotency check: a correct adapter
-          converges with no duplicate records. Swap <code>scaleway</code> for <code>ovh</code>,
-          <code>gandi</code>, <code>leaseweb</code>, or <code>bunny</code>.</p>
+          converges with no duplicate records. Swap <code>scaleway</code> for another EU-owned provider —
+          <code>ovh</code>, <code>gandi</code>, <code>leaseweb</code>, <code>hetzner</code>, or
+          <code>bunny</code> (preview + <code>apply.sh</code>) — or, honestly tiered as US-operated,
+          <code>route53</code> / <code>clouddns</code> / <code>azure</code>.</p>
       </section>
 
       <section id="cb-mesh">
         <h2>Cookbook — keep your origin (WireGuard mesh)</h2>
         <p class="lead">The lowest-risk shape leaves your origin exactly where it is and just re-tunnels it:
           swap <code>cloudflared</code> for WireGuard. flareover can also emit a create script that boots the
-          edge on Scaleway or OVH from the generated cloud-init.</p>
+          edge on Scaleway or OVH from the generated cloud-init, or a <code>terraform/hetzner/</code> module
+          that boots it on Hetzner.</p>
         <div class="term"><div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
 <pre>flareover prepare snap.json --decisions decisions.lock \
   --mesh-edge scaleway=<span class="fl">$ORIGIN_IP</span>:51820 --edge-provider scaleway --out out/

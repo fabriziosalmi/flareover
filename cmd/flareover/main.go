@@ -914,7 +914,7 @@ func cmdProvision(args []string) int {
 	}
 	if useRoute53 || useCloudDNS || useAzure {
 		// Honest tier: never let a US-operated target pass as sovereign.
-		fmt.Fprintln(os.Stderr, "flareover provision: NOTE — Route 53 / Cloud DNS / Azure DNS are US-operated (AWS/Google/Microsoft), NOT sovereign (US CLOUD Act reach). For EU sovereignty: --dns scaleway|ovh|gandi|leaseweb|bunny.")
+		fmt.Fprintln(os.Stderr, "flareover provision: NOTE — Route 53 / Cloud DNS / Azure DNS are US-operated (AWS/Google/Microsoft), NOT sovereign (US CLOUD Act reach). For EU sovereignty: --dns scaleway|ovh|gandi|leaseweb|hetzner (or bunny via `prepare --dns bunny` + apply.sh).")
 	}
 	if ca == "" {
 		ca = "letsencrypt"

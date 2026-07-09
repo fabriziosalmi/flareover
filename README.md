@@ -157,9 +157,9 @@ generated (and stays visible as ASK in `assess`) — never guessed. The default 
 
 ## Status
 
-**End-to-end and proven live.** All five phases are implemented, and every target adapter has been
-exercised against a **real running service**, not just mocks — each one caught real bugs a mock could
-not:
+**End-to-end and proven live.** All five phases are implemented, and every **core** target adapter has
+been exercised against a **real running service**, not just mocks — each one caught real bugs a mock
+could not:
 
 | Adapter | Live proof |
 |---------|-----------|
@@ -171,6 +171,14 @@ not:
 
 The hand-rolled protocol code (AWS SigV4, PowerDNS rrsets, WireGuard X25519 keys, CertMate DNS-01) is
 verified against the real endpoints.
+
+**Honest tiering of the managed adapters.** The five above are *live-proven* (Tier A). The managed
+DNS backends beyond PowerDNS — **Scaleway · OVH · Gandi · Leaseweb · Hetzner** (EU-owned) and **Route 53
+· Cloud DNS · Azure** (US-operated) — and the managed S3 destinations (**Scaleway · OVH · Contabo ·
+Aruba**), plus the `terraform/hetzner/` edge module, are *Tier B*: verified against each vendor's
+documented API and `httptest`/`terraform validate` — **not yet exercised against the live service**.
+They are flagged as such and promoted to Tier A only after a real run (see
+[`docs/live-proof.md`](docs/live-proof.md)); nothing claims a live proof it hasn't earned.
 
 The free-tier WAF mainstays **are** mapped, AUTO, to caddy-waf: **country and ASN blocking**
 (`block_countries` / `block_asns`, L3 source scoped) and **rate limiting** — a per-IP limit →
