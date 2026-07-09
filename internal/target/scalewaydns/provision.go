@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fabriziosalmi/flareover/internal/ir"
+	"github.com/fabriziosalmi/flareover/internal/target/zonefile"
 )
 
 const defaultBaseURL = "https://api.scaleway.com"
@@ -142,7 +143,7 @@ type scwChange struct {
 // buildChanges groups the IR records by (name,type) and emits one idempotent
 // `set` change per group, so each rrset is REPLACEd wholesale.
 func buildChanges(z ir.DNSZone) []scwChange {
-	origin := fqdn(z.Name)
+	origin := zonefile.FQDN(z.Name)
 	type key struct{ name, typ string }
 	groups := map[key][]scwRecord{}
 	order := []key{}
@@ -157,7 +158,7 @@ func buildChanges(z ir.DNSZone) []scwChange {
 		groups[k] = append(groups[k], scwRecord{
 			Data:     scwData(r),
 			Name:     name,
-			Priority: uint32(priority(r)),
+			Priority: uint32(zonefile.Priority(r)),
 			TTL:      ttlOrDefault(r.TTL),
 			Type:     typ,
 		})
@@ -178,9 +179,9 @@ func buildChanges(z ir.DNSZone) []scwChange {
 func scwData(r ir.DNSRecord) string {
 	switch strings.ToUpper(r.Type) {
 	case "CNAME", "MX", "NS":
-		return fqdn(r.Content)
+		return zonefile.FQDN(r.Content)
 	case "SRV":
-		return srvTargetFQDN(r.Content) // "weight port target." — priority is a separate field
+		return zonefile.SRVTargetFQDN(r.Content) // "weight port target." — priority is a separate field
 	default: // A, AAAA, TXT, CAA, ... take the raw value
 		return r.Content
 	}
@@ -189,7 +190,7 @@ func scwData(r ir.DNSRecord) string {
 // scwName renders a record name relative to the zone; Scaleway uses the empty
 // string for the apex (not "@").
 func scwName(origin, name string) string {
-	n := fqdn(name)
+	n := zonefile.FQDN(name)
 	if n == origin {
 		return ""
 	}

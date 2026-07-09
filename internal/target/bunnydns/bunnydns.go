@@ -23,6 +23,7 @@ import (
 
 	"github.com/fabriziosalmi/flareover/internal/ir"
 	"github.com/fabriziosalmi/flareover/internal/target"
+	"github.com/fabriziosalmi/flareover/internal/target/zonefile"
 )
 
 // Generator renders the bunny.net zone import + apply script.
@@ -34,7 +35,7 @@ func (Generator) Name() string { return "bunny-dns" }
 // Generate implements target.Generator. It is a pure function of the plan.
 func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 	z := p.DNS
-	origin := fqdn(z.Name)
+	origin := zonefile.FQDN(z.Name)
 
 	// 1) A records-only BIND zone. bunny.net is authoritative, so it manages the
 	// SOA and NS — emitting placeholders here would import bogus apex NS and
@@ -46,7 +47,7 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 	fmt.Fprintf(&b, "$ORIGIN %s\n", origin)
 	b.WriteString("$TTL 300\n\n")
 	for _, r := range z.Records {
-		b.WriteString(renderRecord(origin, r))
+		b.WriteString(zonefile.RenderRecord(origin, r))
 	}
 	zoneFile := z.Name + ".zone"
 	zoneArt := target.Artifact{
@@ -108,63 +109,4 @@ func renderApply(z ir.DNSZone, zoneFile string) string {
 	b.WriteString("# then let the old TTLs expire. flareover never touches the registrar.\n")
 	b.WriteString("bunny dns zones nameservers \"$ZONE\"\n")
 	return b.String()
-}
-
-// renderRecord serializes one de-proxied record as a BIND line. It mirrors the
-// powerdns target's proven rendering (canonical BIND rdata order — e.g. MX is
-// "priority target", not the CLI's "target priority"), which is exactly why the
-// import-from-BIND path is more robust than composing per-record `records add`.
-func renderRecord(origin string, r ir.DNSRecord) string {
-	name := recordName(origin, r.Name)
-	ttl := r.TTL
-	if ttl <= 0 {
-		ttl = 300
-	}
-	switch strings.ToUpper(r.Type) {
-	case "MX":
-		prio := 0
-		if r.Priority != nil {
-			prio = *r.Priority
-		}
-		return fmt.Sprintf("%s\t%d\tIN\tMX\t%d %s\n", name, ttl, prio, fqdn(r.Content))
-	case "SRV":
-		prio := 0
-		if r.Priority != nil {
-			prio = *r.Priority
-		}
-		return fmt.Sprintf("%s\t%d\tIN\tSRV\t%d %s\n", name, ttl, prio, srvTargetFQDN(r.Content))
-	case "TXT":
-		return fmt.Sprintf("%s\t%d\tIN\tTXT\t%q\n", name, ttl, r.Content)
-	case "CNAME":
-		return fmt.Sprintf("%s\t%d\tIN\tCNAME\t%s\n", name, ttl, fqdn(r.Content))
-	default: // A, AAAA, CAA, NS-at-subdomain, and other address-like records
-		return fmt.Sprintf("%s\t%d\tIN\t%s\t%s\n", name, ttl, strings.ToUpper(r.Type), r.Content)
-	}
-}
-
-// recordName renders a record name relative to the zone origin ("@" for apex).
-func recordName(origin, name string) string {
-	n := fqdn(name)
-	if n == origin {
-		return "@"
-	}
-	return strings.TrimSuffix(n, "."+origin)
-}
-
-func fqdn(s string) string {
-	if strings.HasSuffix(s, ".") {
-		return s
-	}
-	return s + "."
-}
-
-// srvTargetFQDN ensures the SRV target (last field of "weight port target")
-// carries a trailing dot.
-func srvTargetFQDN(content string) string {
-	fields := strings.Fields(content)
-	if len(fields) == 0 {
-		return content
-	}
-	fields[len(fields)-1] = fqdn(fields[len(fields)-1])
-	return strings.Join(fields, " ")
 }

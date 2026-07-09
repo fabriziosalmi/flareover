@@ -13,6 +13,7 @@ import (
 
 	"github.com/fabriziosalmi/flareover/internal/ir"
 	"github.com/fabriziosalmi/flareover/internal/target"
+	"github.com/fabriziosalmi/flareover/internal/target/zonefile"
 )
 
 // Generator renders the zone file.
@@ -24,7 +25,7 @@ func (Generator) Name() string { return "powerdns" }
 // Generate implements target.Generator.
 func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 	z := p.DNS
-	origin := fqdn(z.Name)
+	origin := zonefile.FQDN(z.Name)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "; flareover-generated authoritative zone for %s\n", z.Name)
@@ -43,7 +44,7 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 	b.WriteString("@\tIN\tNS\tns2.NAMESERVER_PLACEHOLDER.\n\n")
 
 	for _, r := range z.Records {
-		b.WriteString(renderRecord(origin, r))
+		b.WriteString(zonefile.RenderRecord(origin, r))
 	}
 
 	note := "SOA/NS are placeholders — set ns1/ns2 to the target PowerDNS servers before load."
@@ -54,48 +55,4 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 	return []target.Artifact{{
 		Path: "powerdns/" + z.Name + ".zone", Content: []byte(b.String()), Mode: 0o644, Note: note,
 	}}, nil
-}
-
-func renderRecord(origin string, r ir.DNSRecord) string {
-	name := recordName(origin, r.Name)
-	ttl := r.TTL
-	if ttl <= 0 {
-		ttl = 300
-	}
-	switch strings.ToUpper(r.Type) {
-	case "MX":
-		prio := 0
-		if r.Priority != nil {
-			prio = *r.Priority
-		}
-		return fmt.Sprintf("%s\t%d\tIN\tMX\t%d %s\n", name, ttl, prio, fqdn(r.Content))
-	case "SRV":
-		prio := 0
-		if r.Priority != nil {
-			prio = *r.Priority
-		}
-		return fmt.Sprintf("%s\t%d\tIN\tSRV\t%d %s\n", name, ttl, prio, srvTargetFQDN(r.Content))
-	case "TXT":
-		return fmt.Sprintf("%s\t%d\tIN\tTXT\t%q\n", name, ttl, r.Content)
-	case "CNAME":
-		return fmt.Sprintf("%s\t%d\tIN\tCNAME\t%s\n", name, ttl, fqdn(r.Content))
-	default: // A, AAAA, and other address-like records
-		return fmt.Sprintf("%s\t%d\tIN\t%s\t%s\n", name, ttl, strings.ToUpper(r.Type), r.Content)
-	}
-}
-
-// recordName renders a record name relative to the zone origin ("@" for apex).
-func recordName(origin, name string) string {
-	n := fqdn(name)
-	if n == origin {
-		return "@"
-	}
-	return strings.TrimSuffix(n, "."+origin)
-}
-
-func fqdn(s string) string {
-	if strings.HasSuffix(s, ".") {
-		return s
-	}
-	return s + "."
 }

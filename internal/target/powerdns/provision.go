@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fabriziosalmi/flareover/internal/ir"
+	"github.com/fabriziosalmi/flareover/internal/target/zonefile"
 )
 
 // Provisioner stands the zone up on a live PowerDNS via its Authoritative HTTP
@@ -84,7 +85,7 @@ type pdnsRec struct {
 // Provision creates (if needed) and fully reconciles the zone. nameservers are
 // the authoritative NS the zone should carry (the target PowerDNS servers).
 func (p *Provisioner) Provision(ctx context.Context, z ir.DNSZone, nameservers []string) error {
-	zoneID := fqdn(z.Name)
+	zoneID := zonefile.FQDN(z.Name)
 	rrsets := buildRRSets(z, nameservers)
 
 	// Does the zone already exist?
@@ -118,7 +119,7 @@ func (p *Provisioner) Provision(ctx context.Context, z ir.DNSZone, nameservers [
 // EnableDNSSEC activates zone signing and returns the DS records to publish at
 // the registrar. Publishing the DS is deliberately left to the human.
 func (p *Provisioner) EnableDNSSEC(ctx context.Context, zone string) ([]string, error) {
-	zoneID := fqdn(zone)
+	zoneID := zonefile.FQDN(zone)
 	key := map[string]any{"keytype": "csk", "active": true}
 	if err := p.do(ctx, http.MethodPost, "/api/v1/servers/"+p.Server+"/zones/"+zoneID+"/cryptokeys", key, nil); err != nil {
 		return nil, fmt.Errorf("create signing key: %w", err)
@@ -142,14 +143,14 @@ func (p *Provisioner) EnableDNSSEC(ctx context.Context, zone string) ([]string, 
 // buildRRSets turns the IR zone into PowerDNS rrsets, grouping records by
 // (name,type) and adding the apex SOA/NS.
 func buildRRSets(z ir.DNSZone, nameservers []string) []rrset {
-	origin := fqdn(z.Name)
+	origin := zonefile.FQDN(z.Name)
 	type key struct{ name, typ string }
 	groups := map[key][]pdnsRec{}
 	ttls := map[key]int{}
 	order := []key{}
 
 	add := func(name, typ, content string, ttl int) {
-		k := key{fqdn(name), strings.ToUpper(typ)}
+		k := key{zonefile.FQDN(name), strings.ToUpper(typ)}
 		if _, ok := groups[k]; !ok {
 			order = append(order, k)
 			ttls[k] = ttl
@@ -159,40 +160,16 @@ func buildRRSets(z ir.DNSZone, nameservers []string) []rrset {
 
 	// SOA + NS at the apex.
 	if len(nameservers) > 0 {
-		add(z.Name, "SOA", fmt.Sprintf("%s hostmaster.%s 1 3600 600 1209600 300", fqdn(nameservers[0]), origin), 300)
+		add(z.Name, "SOA", fmt.Sprintf("%s hostmaster.%s 1 3600 600 1209600 300", zonefile.FQDN(nameservers[0]), origin), 300)
 		for _, ns := range nameservers {
-			add(z.Name, "NS", fqdn(ns), 300)
+			add(z.Name, "NS", zonefile.FQDN(ns), 300)
 		}
 	}
 
+	// The rrset content is the same BIND rdata the zone file carries (priority
+	// embedded, FQDNs dotted, TXT quoted) — shared with the Generator via zonefile.
 	for _, r := range z.Records {
-		ttl := r.TTL
-		if ttl <= 0 {
-			ttl = 300
-		}
-		switch strings.ToUpper(r.Type) {
-		case "MX":
-			prio := 0
-			if r.Priority != nil {
-				prio = *r.Priority
-			}
-			add(r.Name, "MX", fmt.Sprintf("%d %s", prio, fqdn(r.Content)), ttl)
-		case "SRV":
-			// SRV rdata is "priority weight port target."; Cloudflare keeps the
-			// priority in a separate field (prepend it) and the target needs a
-			// trailing dot (weight/port/target are already in Content).
-			prio := 0
-			if r.Priority != nil {
-				prio = *r.Priority
-			}
-			add(r.Name, "SRV", fmt.Sprintf("%d %s", prio, srvTargetFQDN(r.Content)), ttl)
-		case "CNAME":
-			add(r.Name, "CNAME", fqdn(r.Content), ttl)
-		case "TXT":
-			add(r.Name, "TXT", fmt.Sprintf("%q", r.Content), ttl)
-		default:
-			add(r.Name, r.Type, r.Content, ttl)
-		}
+		add(r.Name, r.Type, zonefile.RData(r), zonefile.TTLOrDefault(r.TTL))
 	}
 
 	out := make([]rrset, 0, len(order))
@@ -200,15 +177,4 @@ func buildRRSets(z ir.DNSZone, nameservers []string) []rrset {
 		out = append(out, rrset{Name: k.name, Type: k.typ, TTL: ttls[k], Records: groups[k]})
 	}
 	return out
-}
-
-// srvTargetFQDN ensures the SRV target (last field of "weight port target")
-// carries a trailing dot, which PowerDNS requires.
-func srvTargetFQDN(content string) string {
-	fields := strings.Fields(content)
-	if len(fields) == 0 {
-		return content
-	}
-	fields[len(fields)-1] = fqdn(fields[len(fields)-1])
-	return strings.Join(fields, " ")
 }
