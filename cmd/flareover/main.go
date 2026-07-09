@@ -44,6 +44,8 @@ import (
 	"github.com/fabriziosalmi/flareover/internal/target"
 	"github.com/fabriziosalmi/flareover/internal/target/bunnydns"
 	"github.com/fabriziosalmi/flareover/internal/target/certmate"
+	"github.com/fabriziosalmi/flareover/internal/target/gandidns"
+	"github.com/fabriziosalmi/flareover/internal/target/leasewebdns"
 	"github.com/fabriziosalmi/flareover/internal/target/mesh"
 	"github.com/fabriziosalmi/flareover/internal/target/ovhdns"
 	"github.com/fabriziosalmi/flareover/internal/target/powerdns"
@@ -74,7 +76,8 @@ PHASES
                             answered-ASK surface.
   provision ...             Stand up the target via APIs (DNS zone + DNSSEC,
                             CertMate DNS-01 certs). --pdns-url (PowerDNS), or
-                            --dns scaleway|ovh (managed EU DNS) / --certmate-url.
+                            --dns scaleway|ovh|gandi|leaseweb (managed EU DNS) /
+                            --certmate-url.
   present ...               Parity gate: live edge vs staged edge (--after-addr).
   execute ...               Orchestrate the phases live up to the gated cutover.
   storage <buckets.json>    Migrate object storage (R2/S3) → self-hosted MinIO
@@ -106,8 +109,9 @@ PREPARE FLAGS
   --ca <name>          default cert CA: letsencrypt (default) | actalis
   --stack <id>         target stack profile (default: caddy)
   --dns <id>           authoritative DNS target: powerdns (default, self-hosted),
-                       bunny (bunny.net CLI), or scaleway / ovh (managed EU DNS —
-                       apply live with "provision --dns scaleway|ovh", creds in env)
+                       bunny (bunny.net CLI), or scaleway / ovh / gandi / leaseweb
+                       (managed EU DNS — apply live with "provision --dns <id>",
+                       creds in env)
   --out <dir>          write artifacts under <dir> (default: stdout preview)
   --validate           prove the generated Caddyfile + zone parse (caddy validate)
   --mesh-edge [name=]<host:port>  sovereign WireGuard tunnel to keep an existing
@@ -806,7 +810,8 @@ func cmdProvision(args []string) int {
 	// takes its credentials from the environment, never from argv.
 	var scwSecret, scwProject string
 	var ovhKey, ovhSecret, ovhConsumer string
-	var useScaleway, useOVH bool
+	var gandiPAT, lswKey string
+	var useScaleway, useOVH, useGandi, useLeaseweb bool
 	switch dnsTarget {
 	case "", "powerdns":
 	case "scaleway", "scaleway-dns", "scalewaydns":
@@ -815,12 +820,19 @@ func cmdProvision(args []string) int {
 	case "ovh", "ovh-dns", "ovhdns":
 		useOVH = true
 		ovhKey, ovhSecret, ovhConsumer = os.Getenv("OVH_APPLICATION_KEY"), os.Getenv("OVH_APPLICATION_SECRET"), os.Getenv("OVH_CONSUMER_KEY")
+	case "gandi", "gandi-dns", "gandidns":
+		useGandi = true
+		gandiPAT = os.Getenv("GANDI_PAT")
+	case "leaseweb", "leaseweb-dns", "leasewebdns":
+		useLeaseweb = true
+		lswKey = os.Getenv("LEASEWEB_API_KEY")
 	default:
-		fmt.Fprintf(os.Stderr, "flareover provision: unknown --dns %q (want: powerdns | scaleway | ovh)\n", dnsTarget)
+		fmt.Fprintf(os.Stderr, "flareover provision: unknown --dns %q (want: powerdns | scaleway | ovh | gandi | leaseweb)\n", dnsTarget)
 		return 2
 	}
-	if snapPath == "" || (pdnsURL == "" && cmURL == "" && !useScaleway && !useOVH) {
-		fmt.Fprintln(os.Stderr, "flareover provision: need --snapshot and at least one of --pdns-url / --certmate-url / --dns scaleway|ovh")
+	anyDNS := useScaleway || useOVH || useGandi || useLeaseweb
+	if snapPath == "" || (pdnsURL == "" && cmURL == "" && !anyDNS) {
+		fmt.Fprintln(os.Stderr, "flareover provision: need --snapshot and at least one of --pdns-url / --certmate-url / --dns scaleway|ovh|gandi|leaseweb")
 		return 2
 	}
 	if useScaleway && (scwSecret == "" || scwProject == "") {
@@ -829,6 +841,14 @@ func cmdProvision(args []string) int {
 	}
 	if useOVH && (ovhKey == "" || ovhSecret == "" || ovhConsumer == "") {
 		fmt.Fprintln(os.Stderr, "flareover provision: --dns ovh needs OVH_APPLICATION_KEY, OVH_APPLICATION_SECRET and OVH_CONSUMER_KEY in the environment")
+		return 2
+	}
+	if useGandi && gandiPAT == "" {
+		fmt.Fprintln(os.Stderr, "flareover provision: --dns gandi needs GANDI_PAT in the environment")
+		return 2
+	}
+	if useLeaseweb && lswKey == "" {
+		fmt.Fprintln(os.Stderr, "flareover provision: --dns leaseweb needs LEASEWEB_API_KEY in the environment")
 		return 2
 	}
 	if ca == "" {
@@ -892,6 +912,37 @@ func cmdProvision(args []string) int {
 			detail += " · DNSSEC: enable in the OVH panel (not yet automated)"
 		}
 		pr.Done(0, detail)
+	case useGandi:
+		gp := gandidns.NewProvisioner(gandiPAT)
+		if u := os.Getenv("GANDI_ENDPOINT"); u != "" {
+			gp.BaseURL = u
+		}
+		if err := gp.Provision(ctx, built.DNS); err != nil {
+			pr.Fail(0, err.Error())
+			return 1
+		}
+		detail := fmt.Sprintf("%d records (Gandi LiveDNS)", len(built.DNS.Records))
+		if ns, err := gp.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
+			detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
+		}
+		if built.DNS.DNSSEC {
+			detail += " · DNSSEC: manage in the Gandi panel (not yet automated)"
+		}
+		pr.Done(0, detail)
+	case useLeaseweb:
+		lp := leasewebdns.NewProvisioner(lswKey)
+		if u := os.Getenv("LEASEWEB_ENDPOINT"); u != "" {
+			lp.BaseURL = u
+		}
+		if err := lp.Provision(ctx, built.DNS); err != nil {
+			pr.Fail(0, err.Error())
+			return 1
+		}
+		detail := fmt.Sprintf("%d records (Leaseweb)", len(built.DNS.Records))
+		if built.DNS.DNSSEC {
+			detail += " · DNSSEC: manage in the Leaseweb panel (not yet automated)"
+		}
+		pr.Done(0, detail)
 	case pdnsURL != "":
 		var ns []string
 		for _, n := range strings.Split(nsList, ",") {
@@ -913,7 +964,7 @@ func cmdProvision(args []string) int {
 		}
 		pr.Done(0, detail)
 	default:
-		pr.Done(0, "skipped (no --pdns-url / --dns scaleway)")
+		pr.Done(0, "skipped (no --pdns-url / --dns scaleway|ovh|gandi|leaseweb)")
 	}
 
 	// CertMate
@@ -1110,8 +1161,12 @@ func cmdPrepare(args []string) int {
 		profile.DNS = scalewaydns.Generator{}
 	case "ovh", "ovh-dns", "ovhdns":
 		profile.DNS = ovhdns.Generator{}
+	case "gandi", "gandi-dns", "gandidns":
+		profile.DNS = gandidns.Generator{}
+	case "leaseweb", "leaseweb-dns", "leasewebdns":
+		profile.DNS = leasewebdns.Generator{}
 	default:
-		fmt.Fprintf(os.Stderr, "flareover prepare: unknown --dns %q (want: powerdns | bunny | scaleway | ovh)\n", dnsTarget)
+		fmt.Fprintf(os.Stderr, "flareover prepare: unknown --dns %q (want: powerdns | bunny | scaleway | ovh | gandi | leaseweb)\n", dnsTarget)
 		return 2
 	}
 

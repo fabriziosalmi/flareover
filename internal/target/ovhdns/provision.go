@@ -161,7 +161,7 @@ func (p *Provisioner) Provision(ctx context.Context, z ir.DNSZone) error {
 		if _, ok := groups[k]; !ok {
 			order = append(order, k)
 		}
-		groups[k] = append(groups[k], ovhRecordBody{FieldType: typ, SubDomain: sub, Target: ovhTarget(r), TTL: zonefile.TTLOrDefault(r.TTL)})
+		groups[k] = append(groups[k], ovhRecordBody{FieldType: typ, SubDomain: sub, Target: zonefile.APIValue(r), TTL: zonefile.TTLOrDefault(r.TTL)})
 	}
 
 	base := "/domain/zone/" + z.Name
@@ -201,23 +201,6 @@ func (p *Provisioner) Nameservers(ctx context.Context, zone string) ([]string, e
 		return nil, err
 	}
 	return out.NameServers, nil
-}
-
-// ovhTarget renders the record value as OVH's `target` — the BIND rdata, with
-// the MX/SRV priority embedded (OVH has no separate priority field). TXT is the
-// one place OVH diverges from a BIND zone file: it wants the raw value and quotes
-// it itself, so this does not reuse zonefile.RData (which quotes TXT).
-func ovhTarget(r ir.DNSRecord) string {
-	switch strings.ToUpper(r.Type) {
-	case "MX":
-		return fmt.Sprintf("%d %s", zonefile.Priority(r), zonefile.FQDN(r.Content))
-	case "SRV":
-		return fmt.Sprintf("%d %s", zonefile.Priority(r), zonefile.SRVTargetFQDN(r.Content))
-	case "CNAME", "NS":
-		return zonefile.FQDN(r.Content)
-	default: // A, AAAA, TXT, CAA, ... — OVH takes the raw value
-		return r.Content
-	}
 }
 
 // ovhSubDomain renders a record name relative to the zone; OVH uses the empty

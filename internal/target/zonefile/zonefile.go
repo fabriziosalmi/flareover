@@ -81,3 +81,21 @@ func RData(r ir.DNSRecord) string {
 func RenderRecord(origin string, r ir.DNSRecord) string {
 	return fmt.Sprintf("%s\t%d\tIN\t%s\t%s\n", RecordName(origin, r.Name), TTLOrDefault(r.TTL), strings.ToUpper(r.Type), RData(r))
 }
+
+// APIValue renders the rdata the way most managed-DNS REST APIs want it: like
+// RData (MX/SRV priority embedded, CNAME/NS dotted), except TXT and address
+// records are the raw value — these APIs quote TXT themselves. Use this for a
+// provider whose record `value`/`content` field is not a BIND zone-file line
+// (OVH, Leaseweb); use RData for BIND-quoting providers (PowerDNS, Gandi).
+func APIValue(r ir.DNSRecord) string {
+	switch strings.ToUpper(r.Type) {
+	case "MX":
+		return fmt.Sprintf("%d %s", Priority(r), FQDN(r.Content))
+	case "SRV":
+		return fmt.Sprintf("%d %s", Priority(r), SRVTargetFQDN(r.Content))
+	case "CNAME", "NS":
+		return FQDN(r.Content)
+	default: // A, AAAA, TXT, CAA, ... — the raw value
+		return r.Content
+	}
+}

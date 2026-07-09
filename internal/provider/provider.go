@@ -46,6 +46,7 @@ var Registry = []Provider{
 	{"contabo", "Contabo", "DE (Munich) + EU", EUOwned, "EU jurisdiction only"},
 	{"aruba", "Aruba", "IT (Arezzo/Milan)", EUOwned, "EU jurisdiction only · Italian operator"},
 	{"scaleway", "Scaleway", "FR (Paris) · NL · PL", EUOwned, "EU jurisdiction only"},
+	{"leaseweb", "Leaseweb", "NL (Amsterdam) + EU", EUOwned, "EU jurisdiction only · Dutch operator"},
 	{"aws-milano", "AWS (eu-south-1, Milan)", "IT (Milan)", USHyperscaler, "EU residency, but US CLOUD Act / FISA reach"},
 	{"gcp-milano", "Google Cloud (europe-west8, Milan)", "IT (Milan)", USHyperscaler, "EU residency, but US CLOUD Act / FISA reach"},
 	{"azure-milano", "Azure (Italy North, Milan)", "IT (Milan)", USHyperscaler, "EU residency, but US CLOUD Act / FISA reach"},
