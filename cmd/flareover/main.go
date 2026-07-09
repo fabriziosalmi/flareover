@@ -1267,20 +1267,27 @@ func edgeCloudInits(arts []target.Artifact, fallback provider.Provider) ([]targe
 			Mode:    0o600,
 			Note:    fmt.Sprintf("cloud-init for edge %q on %s (%s) — paste as instance user-data", name, prov.Name, prov.Exposure),
 		})
-		// Scaleway is fully API-driven, so we can also emit a create script that
-		// boots the edge from that cloud-init (the operator runs it — a paid
-		// server is never spun up silently).
-		if prov.Key == "scaleway" {
-			script := "edge/create.scaleway.sh"
+		// API-driven providers also get a create script that boots the edge from
+		// that cloud-init (the operator runs it — a paid server is never spun up
+		// silently).
+		ciBase := strings.TrimPrefix(dst, "edge/")
+		emitCreate := func(suffix string, content []byte, where string) {
+			script := "edge/create." + suffix + ".sh"
 			if name != "edge" {
-				script = "edge/create-" + name + ".scaleway.sh"
+				script = "edge/create-" + name + "." + suffix + ".sh"
 			}
 			out = append(out, target.Artifact{
 				Path:    script,
-				Content: provider.ScalewayInstanceScript(name, strings.TrimPrefix(dst, "edge/")),
+				Content: content,
 				Mode:    0o755,
-				Note:    fmt.Sprintf("create edge %q on Scaleway Instances from its cloud-init (paid server — review first)", name),
+				Note:    fmt.Sprintf("create edge %q on %s from its cloud-init (paid server — review first)", name, where),
 			})
+		}
+		switch prov.Key {
+		case "scaleway":
+			emitCreate("scaleway", provider.ScalewayInstanceScript(name, ciBase), "Scaleway Instances")
+		case "ovh":
+			emitCreate("ovh", provider.OVHInstanceScript(name, ciBase), "OVHcloud Public Cloud")
 		}
 	}
 	return out, nil

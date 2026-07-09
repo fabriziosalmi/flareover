@@ -65,6 +65,29 @@ func TestScalewayInstanceScript(t *testing.T) {
 	}
 }
 
+// TestOVHInstanceScript pins the OVH create script to the OpenStack CLI surface
+// and the openrc (env) auth / never-silent-spend discipline.
+func TestOVHInstanceScript(t *testing.T) {
+	s := string(OVHInstanceScript("ovh", "cloud-init-ovh.yaml"))
+	for _, want := range []string{
+		"#!/usr/bin/env sh",
+		"openstack server create",
+		`--user-data "$CLOUD_INIT"`,
+		`--network "$NETWORK"`,
+		"Ext-Net",             // OVH public network default
+		"cloud-init-ovh.yaml", // references the generated cloud-init
+		"OS_AUTH_URL",         // openrc (env) auth
+		`NAME="flareover-edge-ovh"`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("OVH create script missing %q", want)
+		}
+	}
+	if !strings.Contains(s, "PAID") {
+		t.Error("script must flag that it provisions a paid server")
+	}
+}
+
 func TestLookupUnknown(t *testing.T) {
 	if _, ok := Lookup("digitalocean"); ok {
 		t.Error("unknown provider must not resolve")
