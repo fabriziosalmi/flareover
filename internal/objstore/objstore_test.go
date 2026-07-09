@@ -158,6 +158,49 @@ func TestValidScalewayRegion(t *testing.T) {
 	}
 }
 
+// TestOVHDestination checks the OVHcloud managed-S3 preset.
+func TestOVHDestination(t *testing.T) {
+	prov := artifact(Generate(load(t), GenOptions{Dest: "ovh"}), "ovh-object-storage/provision.sh")
+	if prov == "" {
+		t.Fatal("no ovh-object-storage/provision.sh artifact")
+	}
+	for _, want := range []string{
+		"mc alias set ovh https://s3.gra.io.cloud.ovh.net \"$OVH_S3_ACCESS_KEY\" \"$OVH_S3_SECRET_KEY\"",
+		"mc mb -p ovh/public-assets",
+		"OVHcloud Object Storage (EU-owned, gra)",
+	} {
+		if !strings.Contains(prov, want) {
+			t.Errorf("ovh provision.sh missing %q", want)
+		}
+	}
+	if strings.Contains(prov, "scw/") || strings.Contains(prov, "MINIO_ACCESS_KEY") {
+		t.Error("ovh provision leaked another destination's alias/creds")
+	}
+	// Region override → endpoint.
+	de := artifact(Generate(load(t), GenOptions{Dest: "ovh", Region: "de"}), "ovh-object-storage/provision.sh")
+	if !strings.Contains(de, "https://s3.de.io.cloud.ovh.net") {
+		t.Error("OVH region override did not reach the endpoint")
+	}
+	// The public-read guard holds here too.
+	if strings.Contains(prov, "anonymous set download") {
+		t.Error("public read reproduced on OVH without an explicit yes")
+	}
+}
+
+// TestValidOVHStorageRegion: only EU regions are accepted (uk/bhs excluded).
+func TestValidOVHStorageRegion(t *testing.T) {
+	for _, r := range OVHStorageRegions {
+		if !ValidOVHStorageRegion(r) {
+			t.Errorf("%q should be valid", r)
+		}
+	}
+	for _, bad := range []string{"uk", "bhs", "us-east-1"} {
+		if ValidOVHStorageRegion(bad) {
+			t.Errorf("%q must not be a valid EU OVH region", bad)
+		}
+	}
+}
+
 func artifact(arts []Artifact, path string) string {
 	for _, a := range arts {
 		if a.Path == path {

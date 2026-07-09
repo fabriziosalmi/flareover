@@ -130,8 +130,22 @@ var ScalewayRegions = []string{"fr-par", "nl-ams", "pl-waw", "it-mil"}
 
 // ValidScalewayRegion reports whether region is a known Scaleway region.
 func ValidScalewayRegion(region string) bool {
-	for _, r := range ScalewayRegions {
-		if r == region {
+	return contains(ScalewayRegions, region)
+}
+
+// OVHStorageRegions are OVHcloud Object Storage regions that keep data inside
+// the EU. OVH also runs uk (London) and bhs (Beauharnois, Canada); those are
+// deliberately excluded so an OVH destination provably stays EU-scoped.
+var OVHStorageRegions = []string{"gra", "sbg", "de", "waw"}
+
+// ValidOVHStorageRegion reports whether region is a known EU OVH region.
+func ValidOVHStorageRegion(region string) bool {
+	return contains(OVHStorageRegions, region)
+}
+
+func contains(xs []string, x string) bool {
+	for _, v := range xs {
+		if v == x {
 			return true
 		}
 	}
@@ -157,6 +171,24 @@ func resolveDest(opts GenOptions) destination {
 			accessEnv: "SCW_ACCESS_KEY",
 			secretEnv: "SCW_SECRET_KEY",
 			label:     "Scaleway Object Storage (EU-owned, " + region + ")",
+		}
+	}
+	if opts.Dest == "ovh" {
+		region := opts.Region
+		if region == "" {
+			region = "gra"
+		}
+		alias := opts.MinIOAlias
+		if alias == "" {
+			alias = "ovh"
+		}
+		return destination{
+			dir:       "ovh-object-storage",
+			alias:     alias,
+			endpoint:  "https://s3." + region + ".io.cloud.ovh.net",
+			accessEnv: "OVH_S3_ACCESS_KEY",
+			secretEnv: "OVH_S3_SECRET_KEY",
+			label:     "OVHcloud Object Storage (EU-owned, " + region + ")",
 		}
 	}
 	alias := opts.MinIOAlias

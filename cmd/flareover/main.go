@@ -77,8 +77,9 @@ PHASES
   present ...               Parity gate: live edge vs staged edge (--after-addr).
   execute ...               Orchestrate the phases live up to the gated cutover.
   storage <buckets.json>    Migrate object storage (R2/S3) → self-hosted MinIO
-                            (default) or Scaleway Object Storage (--dest scaleway
-                            [--region fr-par|nl-ams|pl-waw|it-mil]) + rclone plan.
+                            (default), or managed EU S3: --dest scaleway [--region
+                            fr-par|nl-ams|pl-waw|it-mil] / --dest ovh [--region
+                            gra|sbg|de|waw]. Emits an rclone data-copy plan too.
   guard --url ...           Failguards watchdog: health-watch + rollback/failover
                             trigger (--on-unhealthy "<cmd>", --interval, --once).
   doctor ...                Read-only pre-flight: is every target reachable,
@@ -536,12 +537,16 @@ func cmdStorage(args []string) int {
 			fmt.Fprintf(os.Stderr, "flareover storage: %v\n", err)
 			return 1
 		}
-		if dest != "" && dest != "minio" && dest != "scaleway" {
-			fmt.Fprintf(os.Stderr, "flareover storage: unknown --dest %q (want: minio | scaleway)\n", dest)
+		if dest != "" && dest != "minio" && dest != "scaleway" && dest != "ovh" {
+			fmt.Fprintf(os.Stderr, "flareover storage: unknown --dest %q (want: minio | scaleway | ovh)\n", dest)
 			return 2
 		}
 		if dest == "scaleway" && region != "" && !objstore.ValidScalewayRegion(region) {
 			fmt.Fprintf(os.Stderr, "flareover storage: unknown Scaleway --region %q (want one of: %s)\n", region, strings.Join(objstore.ScalewayRegions, ", "))
+			return 2
+		}
+		if dest == "ovh" && region != "" && !objstore.ValidOVHStorageRegion(region) {
+			fmt.Fprintf(os.Stderr, "flareover storage: unknown OVH --region %q (EU regions: %s)\n", region, strings.Join(objstore.OVHStorageRegions, ", "))
 			return 2
 		}
 		arts := objstore.Generate(snap, objstore.GenOptions{
