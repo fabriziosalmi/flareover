@@ -138,3 +138,28 @@ func TestMatcherGuardedHeader(t *testing.T) {
 		}
 	}
 }
+
+func TestScopedProxyEmission(t *testing.T) {
+	plan := ir.Plan{Zone: "example.com", Sites: []ir.Site{{
+		Host:   "example.com",
+		Origin: ir.Origin{Upstreams: []string{"10.0.0.1:80"}, Scheme: "http"},
+		TLS:    ir.TLS{Provider: "certmate"},
+		ScopedProxies: []ir.ScopedProxy{{
+			Match:  "path /api*",
+			Origin: ir.Origin{Upstreams: []string{"api.internal:8443"}, Scheme: "https", VerifyTLS: true},
+		}},
+	}}}
+	arts, err := Generator{}.Generate(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(arts[0].Content)
+	scoped := strings.Index(out, "reverse_proxy @p0 https://api.internal:8443")
+	deflt := strings.Index(out, "reverse_proxy http://10.0.0.1:80")
+	if scoped < 0 || deflt < 0 || scoped > deflt {
+		t.Errorf("scoped proxy must precede the catch-all default:\n%s", out)
+	}
+	if !strings.Contains(out, "@p0 path /api*") {
+		t.Error("named path matcher missing")
+	}
+}
