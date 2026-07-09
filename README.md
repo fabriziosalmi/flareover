@@ -61,7 +61,7 @@ assess → prepare → present → execute → guard
 
 | Concern | Tool |
 |---------|------|
-| Authoritative DNS | PowerDNS self-hosted (zone + records + DNSSEC → DS for the registrar), or a managed EU provider via `--dns`: **bunny.net**, **Scaleway**, **OVHcloud**, **Gandi** or **Leaseweb** (`provision --dns <id>`) |
+| Authoritative DNS | PowerDNS self-hosted, or managed via `--dns`: EU-owned **bunny.net** · **Scaleway** · **OVHcloud** · **Gandi** · **Leaseweb**, or **Route 53** (AWS — honestly tiered US-operator, *not* sovereign) |
 | Reverse proxy / CDN / TLS | Caddy (native ACME, HTTP/3) |
 | Edge cache | souin (Caddy module) |
 | WAF | caddy-waf (OWASP/rate-limit/IP·ASN·country/blocklists) |

@@ -49,6 +49,7 @@ import (
 	"github.com/fabriziosalmi/flareover/internal/target/mesh"
 	"github.com/fabriziosalmi/flareover/internal/target/ovhdns"
 	"github.com/fabriziosalmi/flareover/internal/target/powerdns"
+	"github.com/fabriziosalmi/flareover/internal/target/route53"
 	"github.com/fabriziosalmi/flareover/internal/target/scalewaydns"
 	"github.com/fabriziosalmi/flareover/internal/target/spm"
 	"github.com/fabriziosalmi/flareover/internal/validate"
@@ -76,8 +77,7 @@ PHASES
                             answered-ASK surface.
   provision ...             Stand up the target via APIs (DNS zone + DNSSEC,
                             CertMate DNS-01 certs). --pdns-url (PowerDNS), or
-                            --dns scaleway|ovh|gandi|leaseweb (managed EU DNS) /
-                            --certmate-url.
+                            --dns scaleway|ovh|gandi|leaseweb|route53 / --certmate-url.
   present ...               Parity gate: live edge vs staged edge (--after-addr).
   execute ...               Orchestrate the phases live up to the gated cutover.
   storage <buckets.json>    Migrate object storage (R2/S3) → self-hosted MinIO
@@ -109,9 +109,9 @@ PREPARE FLAGS
   --ca <name>          default cert CA: letsencrypt (default) | actalis
   --stack <id>         target stack profile (default: caddy)
   --dns <id>           authoritative DNS target: powerdns (default, self-hosted),
-                       bunny (bunny.net CLI), or scaleway / ovh / gandi / leaseweb
-                       (managed EU DNS — apply live with "provision --dns <id>",
-                       creds in env)
+                       bunny, or managed scaleway / ovh / gandi / leaseweb
+                       (EU-owned) · route53 (AWS — US-operated, NOT sovereign).
+                       Apply live: "provision --dns <id>", creds in env.
   --out <dir>          write artifacts under <dir> (default: stdout preview)
   --validate           prove the generated Caddyfile + zone parse (caddy validate)
   --mesh-edge [name=]<host:port>  sovereign WireGuard tunnel to keep an existing
@@ -811,7 +811,8 @@ func cmdProvision(args []string) int {
 	var scwSecret, scwProject string
 	var ovhKey, ovhSecret, ovhConsumer string
 	var gandiPAT, lswKey string
-	var useScaleway, useOVH, useGandi, useLeaseweb bool
+	var awsKey, awsSecret, awsSession string
+	var useScaleway, useOVH, useGandi, useLeaseweb, useRoute53 bool
 	switch dnsTarget {
 	case "", "powerdns":
 	case "scaleway", "scaleway-dns", "scalewaydns":
@@ -826,13 +827,16 @@ func cmdProvision(args []string) int {
 	case "leaseweb", "leaseweb-dns", "leasewebdns":
 		useLeaseweb = true
 		lswKey = os.Getenv("LEASEWEB_API_KEY")
+	case "route53", "aws", "aws-route53":
+		useRoute53 = true
+		awsKey, awsSecret, awsSession = os.Getenv("AWS_ACCESS_KEY_ID"), os.Getenv("AWS_SECRET_ACCESS_KEY"), os.Getenv("AWS_SESSION_TOKEN")
 	default:
-		fmt.Fprintf(os.Stderr, "flareover provision: unknown --dns %q (want: powerdns | scaleway | ovh | gandi | leaseweb)\n", dnsTarget)
+		fmt.Fprintf(os.Stderr, "flareover provision: unknown --dns %q (want: powerdns | scaleway | ovh | gandi | leaseweb | route53)\n", dnsTarget)
 		return 2
 	}
-	anyDNS := useScaleway || useOVH || useGandi || useLeaseweb
+	anyDNS := useScaleway || useOVH || useGandi || useLeaseweb || useRoute53
 	if snapPath == "" || (pdnsURL == "" && cmURL == "" && !anyDNS) {
-		fmt.Fprintln(os.Stderr, "flareover provision: need --snapshot and at least one of --pdns-url / --certmate-url / --dns scaleway|ovh|gandi|leaseweb")
+		fmt.Fprintln(os.Stderr, "flareover provision: need --snapshot and at least one of --pdns-url / --certmate-url / --dns scaleway|ovh|gandi|leaseweb|route53")
 		return 2
 	}
 	if useScaleway && (scwSecret == "" || scwProject == "") {
@@ -850,6 +854,14 @@ func cmdProvision(args []string) int {
 	if useLeaseweb && lswKey == "" {
 		fmt.Fprintln(os.Stderr, "flareover provision: --dns leaseweb needs LEASEWEB_API_KEY in the environment")
 		return 2
+	}
+	if useRoute53 && (awsKey == "" || awsSecret == "") {
+		fmt.Fprintln(os.Stderr, "flareover provision: --dns route53 needs AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in the environment")
+		return 2
+	}
+	if useRoute53 {
+		// Honest tier: never let a US-operated target pass as sovereign.
+		fmt.Fprintln(os.Stderr, "flareover provision: NOTE — Route 53 is US-operated (AWS), NOT sovereign (US CLOUD Act reach). For EU sovereignty: --dns scaleway|ovh|gandi|leaseweb|bunny.")
 	}
 	if ca == "" {
 		ca = "letsencrypt"
@@ -943,6 +955,23 @@ func cmdProvision(args []string) int {
 			detail += " · DNSSEC: manage in the Leaseweb panel (not yet automated)"
 		}
 		pr.Done(0, detail)
+	case useRoute53:
+		rp := route53.NewProvisioner(awsKey, awsSecret, awsSession)
+		if u := os.Getenv("AWS_ENDPOINT_URL_ROUTE53"); u != "" {
+			rp.Endpoint = u
+		}
+		if err := rp.Provision(ctx, built.DNS); err != nil {
+			pr.Fail(0, err.Error())
+			return 1
+		}
+		detail := fmt.Sprintf("%d records (Route 53 · US-operated, not sovereign)", len(built.DNS.Records))
+		if ns, err := rp.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
+			detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
+		}
+		if built.DNS.DNSSEC {
+			detail += " · DNSSEC: enable in the Route 53 console (not yet automated)"
+		}
+		pr.Done(0, detail)
 	case pdnsURL != "":
 		var ns []string
 		for _, n := range strings.Split(nsList, ",") {
@@ -964,7 +993,7 @@ func cmdProvision(args []string) int {
 		}
 		pr.Done(0, detail)
 	default:
-		pr.Done(0, "skipped (no --pdns-url / --dns scaleway|ovh|gandi|leaseweb)")
+		pr.Done(0, "skipped (no --pdns-url / --dns scaleway|ovh|gandi|leaseweb|route53)")
 	}
 
 	// CertMate
@@ -1165,8 +1194,10 @@ func cmdPrepare(args []string) int {
 		profile.DNS = gandidns.Generator{}
 	case "leaseweb", "leaseweb-dns", "leasewebdns":
 		profile.DNS = leasewebdns.Generator{}
+	case "route53", "aws", "aws-route53":
+		profile.DNS = route53.Generator{}
 	default:
-		fmt.Fprintf(os.Stderr, "flareover prepare: unknown --dns %q (want: powerdns | bunny | scaleway | ovh | gandi | leaseweb)\n", dnsTarget)
+		fmt.Fprintf(os.Stderr, "flareover prepare: unknown --dns %q (want: powerdns | bunny | scaleway | ovh | gandi | leaseweb | route53)\n", dnsTarget)
 		return 2
 	}
 
