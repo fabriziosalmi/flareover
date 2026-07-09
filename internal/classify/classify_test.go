@@ -36,6 +36,29 @@ func find(r report.Report, kind, name string) *report.Finding {
 	return nil
 }
 
+// TestScopedHeaderTransformIsManual is the classify ⟺ generate guard for #6:
+// the generator only emits globally-matched header transforms, so a host/path-
+// scoped one must be MANUAL — never a silent AUTO that is then dropped.
+func TestScopedHeaderTransformIsManual(t *testing.T) {
+	hdr := map[string]any{"headers": map[string]any{
+		"X-Frame-Options": map[string]any{"operation": "set", "value": "DENY"},
+	}}
+	snap := cf.Snapshot{Rulesets: []cf.Ruleset{{
+		Phase: "http_response_headers_transform",
+		Rules: []cf.Rule{
+			{Description: "global header", Expression: "true", ActionParams: hdr, Enabled: true},
+			{Description: "scoped header", Expression: `http.host eq "app.example.com"`, ActionParams: hdr, Enabled: true},
+		},
+	}}}
+	r := Classify(snap)
+	if g := find(r, "transform", "global header"); g == nil || g.Verdict != report.Auto {
+		t.Errorf("global header transform should be AUTO, got %v", g)
+	}
+	if s := find(r, "transform", "scoped header"); s == nil || s.Verdict != report.Manual {
+		t.Errorf("scoped header transform must be MANUAL (not a silent AUTO), got %v", s)
+	}
+}
+
 func TestClassifyFixtureVerdicts(t *testing.T) {
 	r := Classify(loadFixture(t))
 
@@ -49,8 +72,8 @@ func TestClassifyFixtureVerdicts(t *testing.T) {
 		{"tls", "ssl-mode", report.Ask},        // flexible → confirm scheme
 		{"tls", "hsts", report.Auto},
 		{"redirect", "always-use-https", report.Auto},
-		{"waf-custom", "block bad UA", report.Auto},            // single-field match
-		{"waf-custom", "block admin from outside", report.Ask}, // compound expr
+		{"waf-custom", "block bad UA", report.Auto},               // single-field match
+		{"waf-custom", "block admin from outside", report.Manual}, // compound expr → no faithful mapping, handled by hand
 		{"ratelimit", "login throttle", report.Auto},
 		{"transform", "add security header", report.Auto},
 		{"redirect", "apex to www", report.Auto},                      // static target

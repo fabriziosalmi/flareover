@@ -238,11 +238,11 @@ func classifyCustomWAFRule(rule cf.Rule, name string, add func(report.Finding)) 
 		if m, ok := cfexpr.SimpleWAFMatch(rule.Expression); ok {
 			add(auto("waf-custom", name, "caddy-waf", wafAutoRationale(m)))
 		} else {
-			add(report.Finding{
-				Kind: "waf-custom", Name: name, Verdict: report.Ask, Target: "caddy-waf",
-				Rationale: "Custom firewall rule uses a compound or non-standard Cloudflare expression. A best-effort caddy-waf translation is possible but may not be byte-identical.",
-				Question:  &report.Question{ID: "waf-translate:" + name, Prompt: "Accept a best-effort caddy-waf translation of this rule?", Options: []string{"yes", "no"}, Default: "no"},
-			})
+			// The plan emits only SimpleWAFMatch shapes, so a compound/non-standard
+			// expression has no faithful mapping — and no answer could change that.
+			// MANUAL, never an ASK the generator would silently ignore (0%FP).
+			add(manual("waf-custom", name,
+				"Custom firewall rule uses a compound or non-standard Cloudflare expression with no faithful caddy-waf translation — reproduce the intent by hand (compose caddy-waf conditions)."))
 		}
 	case "managed_challenge", "challenge", "js_challenge":
 		// caddy-waf can block or log, not issue a CAPTCHA/JS challenge — so this
@@ -294,7 +294,15 @@ func classifyTransform(rule cf.Rule, name string, add func(report.Finding)) {
 	// Header transforms and simple URL rewrites map cleanly onto Caddy, which —
 	// unlike some proxies — supports arbitrary request/response header ops.
 	if _, ok := rule.ActionParams["headers"]; ok {
-		add(auto("transform", name, "caddy", "Header transform → Caddy header directive (add/set/remove request or response headers)."))
+		// Only a globally-matched header transform (expression == "true") is
+		// auto-emitted; the generator applies it to every site. A host/path-scoped
+		// header transform needs a Caddy matcher the generator does not emit yet —
+		// so it is MANUAL, never a silent AUTO (keeps classify ⟺ generate honest).
+		if strings.TrimSpace(strings.ToLower(rule.Expression)) == "true" {
+			add(auto("transform", name, "caddy", "Global header transform → Caddy header directive (add/set/remove request or response headers)."))
+		} else {
+			add(manual("transform", name, "Host/path-scoped header transform needs a Caddy matcher and is not auto-emitted yet — reproduce it by hand (e.g. `@m <matcher>` then `header @m …`)."))
+		}
 		return
 	}
 	if _, ok := rule.ActionParams["uri"]; ok {

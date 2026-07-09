@@ -70,9 +70,11 @@ func RData(r ir.DNSRecord) string {
 		return fmt.Sprintf("%d %s", Priority(r), SRVTargetFQDN(r.Content))
 	case "TXT":
 		return fmt.Sprintf("%q", r.Content)
-	case "CNAME":
+	case "CNAME", "NS":
+		// NS/CNAME targets are hostnames and must be absolute; an undotted target
+		// would be read relative to $ORIGIN (e.g. a delegation NS silently wrong).
 		return FQDN(r.Content)
-	default: // A, AAAA, CAA, NS, and other address-like records
+	default: // A, AAAA, CAA, and other address-like records
 		return r.Content
 	}
 }

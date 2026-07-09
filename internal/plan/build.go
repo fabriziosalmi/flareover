@@ -221,7 +221,8 @@ func buildHSTS(s cf.Snapshot) *ir.HSTS {
 // buildGlobalHeaders translates header-transform rules whose match is global
 // (expression == "true") into header ops that apply to every site. Host- or
 // path-scoped header rules are intentionally not emitted here — they need a
-// matcher translation and surface as ASK in the assessment.
+// matcher translation and are classified MANUAL in the assessment, never a
+// silent AUTO (classify ⟺ generate).
 func buildGlobalHeaders(s cf.Snapshot) []ir.HeaderOp {
 	var ops []ir.HeaderOp
 	for _, rs := range s.Rulesets {

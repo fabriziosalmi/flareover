@@ -25,6 +25,8 @@ func TestRenderRecordAndValues(t *testing.T) {
 			"cdn\t3600\tIN\tCNAME\tedge.example.net.\n", "edge.example.net."},
 		{ir.DNSRecord{Type: "MX", Name: "example.com", Content: "mail.example.com", TTL: 300, Priority: p(10)},
 			"@\t300\tIN\tMX\t10 mail.example.com.\n", "10 mail.example.com."},
+		{ir.DNSRecord{Type: "NS", Name: "sub.example.com", Content: "ns1.external.net", TTL: 300}, // delegation NS must be dotted
+			"sub\t300\tIN\tNS\tns1.external.net.\n", "ns1.external.net."},
 		{ir.DNSRecord{Type: "TXT", Name: "example.com", Content: "v=spf1 -all", TTL: 300},
 			"@\t300\tIN\tTXT\t\"v=spf1 -all\"\n", "v=spf1 -all"}, // BIND quotes; APIValue raw
 	}
