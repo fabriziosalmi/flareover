@@ -30,3 +30,12 @@
 .claude/
 # deploy/ generated artifacts + secrets
 deploy/out/
+
+# Terraform — plugins/state/secrets never tracked; the lock file IS (pinned
+# provider versions), and *.tfvars.example is the sanitized template.
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log

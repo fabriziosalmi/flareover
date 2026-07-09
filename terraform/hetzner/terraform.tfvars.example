@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars and fill in. Do NOT commit terraform.tfvars.
+# The token is better passed as an env var: export TF_VAR_hcloud_token=…
+
+# hcloud_token   = "…"                     # or TF_VAR_hcloud_token (preferred)
+cloud_init_path = "../../out/edge/cloud-init.yaml" # from: flareover prepare … --edge-provider hetzner
+ssh_public_key  = "ssh-ed25519 AAAA… you@host"
+
+# Optional overrides:
+# name           = "flareover-edge"
+# server_type    = "cx22"
+# image          = "debian-12"
+# location       = "fsn1"            # EU: nbg1 / fsn1 (DE) · hel1 (FI)
+# wireguard_port = 51820             # match --mesh-edge <ip>:<port>
+# ssh_source_ips = ["203.0.113.4/32"] # your admin IP(s); empty = SSH closed

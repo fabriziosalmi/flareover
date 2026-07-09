@@ -82,7 +82,9 @@ explicit human steps.
 > **Already behind a Cloudflare Tunnel?** The lowest-risk path is to keep your origin exactly where
 > it is and just re-tunnel it: flareover stands up your own edge node(s) and a WireGuard tunnel, and
 > the origin only swaps `cloudflared` for `wg-quick`. Add `--mesh-edge` (repeat it for an HA edge
-> front). See [docs/scenario-edge-mesh.md](docs/scenario-edge-mesh.md).
+> front). See [docs/scenario-edge-mesh.md](docs/scenario-edge-mesh.md), and
+> [`terraform/hetzner/`](terraform/hetzner/) for a Terraform module that boots the
+> edge on Hetzner (EU-owned) straight from the generated cloud-init.
 
 ## Install
 
