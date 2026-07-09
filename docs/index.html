@@ -186,12 +186,12 @@
       is tagged with its jurisdiction, so the migration provably stays EU-scoped.</p>
     <table>
       <tr><th>Concern</th><th>Tool</th><th>where</th></tr>
-      <tr><td class="k">Authoritative DNS</td><td>PowerDNS</td><td class="juris">EU</td></tr>
+      <tr><td class="k">Authoritative DNS</td><td>PowerDNS · or managed EU: Scaleway / OVH / bunny.net / Gandi / Leaseweb</td><td class="juris">EU</td></tr>
       <tr><td class="k">Reverse proxy · TLS · HTTP/3</td><td>Caddy</td><td class="juris">free</td></tr>
       <tr><td class="k">WAF</td><td>caddy-waf</td><td class="juris">free</td></tr>
       <tr><td class="k">Edge cache</td><td>souin</td><td class="juris">free</td></tr>
       <tr><td class="k">Certificates</td><td>CertMate · Let's Encrypt / Actalis</td><td class="juris">EU CA option</td></tr>
-      <tr><td class="k">Object storage (S3-compatible →)</td><td>MinIO</td><td class="juris">no egress fee</td></tr>
+      <tr><td class="k">Object storage (S3-compatible →)</td><td>MinIO · or managed EU: Scaleway / OVH</td><td class="juris">no egress fee</td></tr>
       <tr><td class="k">Landing zone</td><td>refurbished bare metal → Proxmox → LXC</td><td class="juris">EU</td></tr>
     </table>
   </section>
@@ -199,7 +199,7 @@
   <section>
     <h2>Leave the storage too</h2>
     <p class="lead">The same 0% FP discipline migrates S3-compatible object storage (R2, S3, …) onto
-      sovereign MinIO. The engine maps the configuration; rclone copies the data — into the EU, with no egress fee.
+      sovereign MinIO — or managed EU S3 (Scaleway, OVH). The engine maps the configuration; rclone copies the data — into the EU, with no egress fee.
       A public bucket is never made public without your explicit yes; an IAM policy is flagged, never guessed.</p>
   </section>
 

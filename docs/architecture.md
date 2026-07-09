@@ -60,8 +60,10 @@ flowchart TB
   E2 -->|"WireGuard mesh"| O
 ```
 
-See [scenario-edge-mesh.md](scenario-edge-mesh.md) for the full walkthrough and
-[deploy-hardened.md](deploy-hardened.md) for the hardened landing zone.
+See [scenario-edge-mesh.md](scenario-edge-mesh.md) for the full walkthrough,
+[deploy-hardened.md](deploy-hardened.md) for the hardened landing zone, and
+[live-proof.md](live-proof.md) for the Tier-A runbook that proves each managed
+adapter against the real provider before you trust it.
 
 ## Package map
 
@@ -73,9 +75,9 @@ See [scenario-edge-mesh.md](scenario-edge-mesh.md) for the full walkthrough and
 | `internal/classify` | The verdict engine (AUTO/ASK/MANUAL) → `report.Report` |
 | `internal/report` | Verdict vocabulary + the coverage report (text / Markdown / JSON / HTML) |
 | `internal/plan` | Builds the deployable `ir.Plan` from snapshot + decisions — only the faithful surface |
-| `internal/target/*` | Adapters that render/provision: `caddy`, `caddywaf`, `powerdns`, `certmate`, `mesh`, `spm` |
-| `internal/objstore` | R2/S3 → MinIO (hand-rolled SigV4 extraction, `mc`/rclone generation) |
-| `internal/provider` | EU edge-provider catalogue + honest sovereignty tiering + edge cloud-init |
+| `internal/target/*` | Render/provision adapters: `caddy`, `caddywaf`, `certmate`, `mesh`, `spm`; DNS via `powerdns` (self-hosted) or a managed EU provider — `bunnydns`, `scalewaydns`, `ovhdns`, `gandidns`, `leasewebdns` — all sharing the BIND renderer in `zonefile` |
+| `internal/objstore` | R2/S3 → self-hosted MinIO **or** managed EU S3 (Scaleway/OVH); hand-rolled SigV4 extraction, `mc`/rclone generation |
+| `internal/provider` | EU edge-provider catalogue + honest sovereignty tiering + edge cloud-init (and Scaleway/OVH instance create scripts) |
 | `internal/parity` | The parity prober: live edge vs staged edge, HARD/SOFT divergence |
 | `internal/validate` | Proves generated artifacts parse (`caddy validate`, zone lint) |
 | `internal/doctor` | Read-only pre-flight: every target reachable/authorized/configured? |
