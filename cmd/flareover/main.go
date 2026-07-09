@@ -42,8 +42,10 @@ import (
 	"github.com/fabriziosalmi/flareover/internal/runbook"
 	"github.com/fabriziosalmi/flareover/internal/stack"
 	"github.com/fabriziosalmi/flareover/internal/target"
+	"github.com/fabriziosalmi/flareover/internal/target/azuredns"
 	"github.com/fabriziosalmi/flareover/internal/target/bunnydns"
 	"github.com/fabriziosalmi/flareover/internal/target/certmate"
+	"github.com/fabriziosalmi/flareover/internal/target/clouddns"
 	"github.com/fabriziosalmi/flareover/internal/target/gandidns"
 	"github.com/fabriziosalmi/flareover/internal/target/leasewebdns"
 	"github.com/fabriziosalmi/flareover/internal/target/mesh"
@@ -77,7 +79,8 @@ PHASES
                             answered-ASK surface.
   provision ...             Stand up the target via APIs (DNS zone + DNSSEC,
                             CertMate DNS-01 certs). --pdns-url (PowerDNS), or
-                            --dns scaleway|ovh|gandi|leaseweb|route53 / --certmate-url.
+                            --dns scaleway|ovh|gandi|leaseweb|route53|clouddns|azure
+                            / --certmate-url.
   present ...               Parity gate: live edge vs staged edge (--after-addr).
   execute ...               Orchestrate the phases live up to the gated cutover.
   storage <buckets.json>    Migrate object storage (R2/S3) → self-hosted MinIO
@@ -110,8 +113,9 @@ PREPARE FLAGS
   --stack <id>         target stack profile (default: caddy)
   --dns <id>           authoritative DNS target: powerdns (default, self-hosted),
                        bunny, or managed scaleway / ovh / gandi / leaseweb
-                       (EU-owned) · route53 (AWS — US-operated, NOT sovereign).
-                       Apply live: "provision --dns <id>", creds in env.
+                       (EU-owned) · route53 / clouddns / azure (AWS/Google/Microsoft
+                       — US-operated, NOT sovereign). Apply live: "provision --dns
+                       <id>", creds in env.
   --out <dir>          write artifacts under <dir> (default: stdout preview)
   --validate           prove the generated Caddyfile + zone parse (caddy validate)
   --mesh-edge [name=]<host:port>  sovereign WireGuard tunnel to keep an existing
@@ -812,7 +816,10 @@ func cmdProvision(args []string) int {
 	var ovhKey, ovhSecret, ovhConsumer string
 	var gandiPAT, lswKey string
 	var awsKey, awsSecret, awsSession string
-	var useScaleway, useOVH, useGandi, useLeaseweb, useRoute53 bool
+	var gcpSA []byte
+	var gcpProject, gcpErr string
+	var azTenant, azClient, azSecret, azSub, azRG string
+	var useScaleway, useOVH, useGandi, useLeaseweb, useRoute53, useCloudDNS, useAzure bool
 	switch dnsTarget {
 	case "", "powerdns":
 	case "scaleway", "scaleway-dns", "scalewaydns":
@@ -830,13 +837,27 @@ func cmdProvision(args []string) int {
 	case "route53", "aws", "aws-route53":
 		useRoute53 = true
 		awsKey, awsSecret, awsSession = os.Getenv("AWS_ACCESS_KEY_ID"), os.Getenv("AWS_SECRET_ACCESS_KEY"), os.Getenv("AWS_SESSION_TOKEN")
+	case "clouddns", "cloud-dns", "gcp", "google":
+		useCloudDNS = true
+		gcpProject = os.Getenv("GOOGLE_CLOUD_PROJECT")
+		if path := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); path != "" {
+			if b, err := os.ReadFile(path); err != nil {
+				gcpErr = fmt.Sprintf("read GOOGLE_APPLICATION_CREDENTIALS (%s): %v", path, err)
+			} else {
+				gcpSA = b
+			}
+		}
+	case "azure", "azure-dns", "azuredns":
+		useAzure = true
+		azTenant, azClient, azSecret = os.Getenv("AZURE_TENANT_ID"), os.Getenv("AZURE_CLIENT_ID"), os.Getenv("AZURE_CLIENT_SECRET")
+		azSub, azRG = os.Getenv("AZURE_SUBSCRIPTION_ID"), os.Getenv("AZURE_RESOURCE_GROUP")
 	default:
-		fmt.Fprintf(os.Stderr, "flareover provision: unknown --dns %q (want: powerdns | scaleway | ovh | gandi | leaseweb | route53)\n", dnsTarget)
+		fmt.Fprintf(os.Stderr, "flareover provision: unknown --dns %q (want: powerdns | scaleway | ovh | gandi | leaseweb | route53 | clouddns | azure)\n", dnsTarget)
 		return 2
 	}
-	anyDNS := useScaleway || useOVH || useGandi || useLeaseweb || useRoute53
+	anyDNS := useScaleway || useOVH || useGandi || useLeaseweb || useRoute53 || useCloudDNS || useAzure
 	if snapPath == "" || (pdnsURL == "" && cmURL == "" && !anyDNS) {
-		fmt.Fprintln(os.Stderr, "flareover provision: need --snapshot and at least one of --pdns-url / --certmate-url / --dns scaleway|ovh|gandi|leaseweb|route53")
+		fmt.Fprintln(os.Stderr, "flareover provision: need --snapshot and at least one of --pdns-url / --certmate-url / --dns scaleway|ovh|gandi|leaseweb|route53|clouddns|azure")
 		return 2
 	}
 	if useScaleway && (scwSecret == "" || scwProject == "") {
@@ -859,9 +880,23 @@ func cmdProvision(args []string) int {
 		fmt.Fprintln(os.Stderr, "flareover provision: --dns route53 needs AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in the environment")
 		return 2
 	}
-	if useRoute53 {
+	if useCloudDNS {
+		if gcpErr != "" {
+			fmt.Fprintf(os.Stderr, "flareover provision: --dns clouddns: %s\n", gcpErr)
+			return 2
+		}
+		if len(gcpSA) == 0 {
+			fmt.Fprintln(os.Stderr, "flareover provision: --dns clouddns needs GOOGLE_APPLICATION_CREDENTIALS (service-account key file) in the environment")
+			return 2
+		}
+	}
+	if useAzure && (azTenant == "" || azClient == "" || azSecret == "" || azSub == "" || azRG == "") {
+		fmt.Fprintln(os.Stderr, "flareover provision: --dns azure needs AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID and AZURE_RESOURCE_GROUP in the environment")
+		return 2
+	}
+	if useRoute53 || useCloudDNS || useAzure {
 		// Honest tier: never let a US-operated target pass as sovereign.
-		fmt.Fprintln(os.Stderr, "flareover provision: NOTE — Route 53 is US-operated (AWS), NOT sovereign (US CLOUD Act reach). For EU sovereignty: --dns scaleway|ovh|gandi|leaseweb|bunny.")
+		fmt.Fprintln(os.Stderr, "flareover provision: NOTE — Route 53 / Cloud DNS / Azure DNS are US-operated (AWS/Google/Microsoft), NOT sovereign (US CLOUD Act reach). For EU sovereignty: --dns scaleway|ovh|gandi|leaseweb|bunny.")
 	}
 	if ca == "" {
 		ca = "letsencrypt"
@@ -972,6 +1007,50 @@ func cmdProvision(args []string) int {
 			detail += " · DNSSEC: enable in the Route 53 console (not yet automated)"
 		}
 		pr.Done(0, detail)
+	case useCloudDNS:
+		cp, err := clouddns.NewProvisioner(gcpSA, gcpProject)
+		if err != nil {
+			pr.Fail(0, err.Error())
+			return 1
+		}
+		if u := os.Getenv("CLOUDDNS_ENDPOINT"); u != "" {
+			cp.BaseURL = u
+		}
+		if u := os.Getenv("GOOGLE_TOKEN_URI"); u != "" { // let tests point the token exchange at a mock
+			cp.TokenURI = u
+		}
+		if err := cp.Provision(ctx, built.DNS); err != nil {
+			pr.Fail(0, err.Error())
+			return 1
+		}
+		detail := fmt.Sprintf("%d records (Cloud DNS · US-operated, not sovereign)", len(built.DNS.Records))
+		if ns, err := cp.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
+			detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
+		}
+		if built.DNS.DNSSEC {
+			detail += " · DNSSEC: enable on the managed zone in the Cloud DNS console (not yet automated)"
+		}
+		pr.Done(0, detail)
+	case useAzure:
+		ap := azuredns.NewProvisioner(azTenant, azClient, azSecret, azSub, azRG)
+		if u := os.Getenv("AZURE_ARM_ENDPOINT"); u != "" {
+			ap.BaseURL = u
+		}
+		if u := os.Getenv("AZURE_AUTH_HOST"); u != "" { // let tests point the token exchange at a mock
+			ap.AuthHost = u
+		}
+		if err := ap.Provision(ctx, built.DNS); err != nil {
+			pr.Fail(0, err.Error())
+			return 1
+		}
+		detail := fmt.Sprintf("%d records (Azure DNS · US-operated, not sovereign)", len(built.DNS.Records))
+		if ns, err := ap.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
+			detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
+		}
+		if built.DNS.DNSSEC {
+			detail += " · DNSSEC: enable on the zone in the Azure portal (not yet automated)"
+		}
+		pr.Done(0, detail)
 	case pdnsURL != "":
 		var ns []string
 		for _, n := range strings.Split(nsList, ",") {
@@ -993,7 +1072,7 @@ func cmdProvision(args []string) int {
 		}
 		pr.Done(0, detail)
 	default:
-		pr.Done(0, "skipped (no --pdns-url / --dns scaleway|ovh|gandi|leaseweb|route53)")
+		pr.Done(0, "skipped (no --pdns-url / --dns scaleway|ovh|gandi|leaseweb|route53|clouddns|azure)")
 	}
 
 	// CertMate
@@ -1196,8 +1275,12 @@ func cmdPrepare(args []string) int {
 		profile.DNS = leasewebdns.Generator{}
 	case "route53", "aws", "aws-route53":
 		profile.DNS = route53.Generator{}
+	case "clouddns", "cloud-dns", "gcp", "google":
+		profile.DNS = clouddns.Generator{}
+	case "azure", "azure-dns", "azuredns":
+		profile.DNS = azuredns.Generator{}
 	default:
-		fmt.Fprintf(os.Stderr, "flareover prepare: unknown --dns %q (want: powerdns | bunny | scaleway | ovh | gandi | leaseweb | route53)\n", dnsTarget)
+		fmt.Fprintf(os.Stderr, "flareover prepare: unknown --dns %q (want: powerdns | bunny | scaleway | ovh | gandi | leaseweb | route53 | clouddns | azure)\n", dnsTarget)
 		return 2
 	}
 
