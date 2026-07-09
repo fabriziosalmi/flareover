@@ -10,6 +10,30 @@ import (
 	cf "github.com/fabriziosalmi/flareover/internal/cloudflare"
 )
 
+// TestChallengeConvertedToBlockOnYes pins the waf-challenge round-trip: the
+// answer key classify mints (via cf.Rule.Name) must route back here so that
+// opting in actually emits a hard block — and opting out emits nothing.
+func TestChallengeConvertedToBlockOnYes(t *testing.T) {
+	snap := cf.Snapshot{Rulesets: []cf.Ruleset{{
+		Phase: "http_request_firewall_custom",
+		Rules: []cf.Rule{{Description: "challenge scanner", Expression: `http.user_agent eq "scanner"`, Action: "managed_challenge", Enabled: true}},
+	}}}
+
+	// No opt-in → nothing emitted (never a silent conversion).
+	if p, _ := Build(snap, Options{}); len(p.WAF.CustomRules) != 0 {
+		t.Fatalf("challenge without opt-in must not emit, got %d rules", len(p.WAF.CustomRules))
+	}
+
+	// Opt-in "yes" → emitted as a hard block.
+	p, err := Build(snap, Options{Decisions: map[string]string{"waf-challenge:challenge scanner": "yes"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.WAF.CustomRules) != 1 || p.WAF.CustomRules[0].Action != "block" {
+		t.Fatalf("answered challenge should emit one hard-block rule, got %+v", p.WAF.CustomRules)
+	}
+}
+
 func fixture(t *testing.T) (cf.Snapshot, Options) {
 	t.Helper()
 	sb, err := os.ReadFile("../../testdata/fixtures/example.snapshot.json")

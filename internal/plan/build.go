@@ -63,7 +63,7 @@ func Build(s cf.Snapshot, opts Options) (ir.Plan, error) {
 	p := ir.Plan{Zone: s.Zone.Name}
 	p.DNS = buildDNS(s, opts)
 	p.Sites = buildSites(s, opts)
-	p.WAF = buildWAF(s)
+	p.WAF = buildWAF(s, opts)
 	for _, kind := range opts.Blocklists {
 		switch strings.ToLower(strings.TrimSpace(kind)) {
 		case "domain":
@@ -338,7 +338,7 @@ func cacheForZone(s cf.Snapshot) *ir.CachePolicy {
 
 // --- WAF ---------------------------------------------------------------------
 
-func buildWAF(s cf.Snapshot) ir.WAFPolicy {
+func buildWAF(s cf.Snapshot, opts Options) ir.WAFPolicy {
 	var w ir.WAFPolicy
 	for _, rs := range s.Rulesets {
 		switch rs.Phase {
@@ -347,7 +347,17 @@ func buildWAF(s cf.Snapshot) ir.WAFPolicy {
 				if !rule.Enabled {
 					continue
 				}
-				if rule.Action != "block" && rule.Action != "log" {
+				// block/log emit directly. A Cloudflare challenge emits only when
+				// the operator opted to harden it into a block (the waf-challenge
+				// ASK); otherwise it is skipped and classify surfaces it — never a
+				// silent drop. wafRuleFromMatch renders any non-log action as block.
+				allow := rule.Action == "block" || rule.Action == "log"
+				if !allow && isChallengeAction(rule.Action) {
+					if a, ok := opts.answer("waf-challenge:" + rule.Name()); ok && a == "yes" {
+						allow = true
+					}
+				}
+				if !allow {
 					continue
 				}
 				// Same predicate the classifier gates AUTO on, so what is reported
@@ -459,6 +469,12 @@ func parseASN(s string) (int, bool) {
 // wafRuleFromMatch turns a faithfully-matched single-field firewall rule into a
 // caddy-waf rule. The match came from cfexpr.SimpleWAFMatch (the shared
 // predicate), so this only ever runs for shapes the classifier reported AUTO.
+// isChallengeAction reports whether a Cloudflare firewall action is a challenge
+// (CAPTCHA/JS) — the actions the operator may opt to harden into a hard block.
+func isChallengeAction(a string) bool {
+	return a == "managed_challenge" || a == "challenge" || a == "js_challenge"
+}
+
 func wafRuleFromMatch(rule cf.Rule, m cfexpr.WAFMatch) ir.WAFRule {
 	action := "block"
 	if rule.Action == "log" {

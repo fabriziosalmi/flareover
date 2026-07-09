@@ -245,14 +245,22 @@ func classifyCustomWAFRule(rule cf.Rule, name string, add func(report.Finding)) 
 				"Custom firewall rule uses a compound or non-standard Cloudflare expression with no faithful caddy-waf translation — reproduce the intent by hand (compose caddy-waf conditions)."))
 		}
 	case "managed_challenge", "challenge", "js_challenge":
-		// caddy-waf can block or log, not issue a CAPTCHA/JS challenge — so this
-		// is never a faithful 1:1 (it was wrongly AUTO before). Offer the one
-		// bounded choice: convert to a hard block.
-		add(report.Finding{
-			Kind: "waf-custom", Name: name, Verdict: report.Ask, Target: "caddy-waf",
-			Rationale: "Cloudflare challenge (CAPTCHA/JS) has no caddy-waf equivalent; caddy-waf can block or log, not challenge.",
-			Question:  &report.Question{ID: "waf-challenge:" + name, Prompt: "Convert this challenge to a hard block?", Options: []string{"yes", "no"}, Default: "no"},
-		})
+		// caddy-waf can block or log, not issue a CAPTCHA/JS challenge. Converting
+		// to a hard block is a faithful-to-intent hardening the operator can opt
+		// into — but only when the match is one the plan can actually emit. Offer
+		// the ASK only for a SimpleWAFMatch expression (the plan honors it); a
+		// compound match can't be reproduced even as a block, so it is MANUAL,
+		// never an ASK the generator would then ignore.
+		if _, ok := cfexpr.SimpleWAFMatch(rule.Expression); ok {
+			add(report.Finding{
+				Kind: "waf-custom", Name: name, Verdict: report.Ask, Target: "caddy-waf",
+				Rationale: "Cloudflare challenge (CAPTCHA/JS) has no caddy-waf equivalent; caddy-waf can block or log, not challenge.",
+				Question:  &report.Question{ID: "waf-challenge:" + name, Prompt: "Convert this challenge to a hard block?", Options: []string{"yes", "no"}, Default: "no"},
+			})
+		} else {
+			add(manual("waf-custom", name,
+				"Cloudflare challenge on a compound/non-standard expression: caddy-waf cannot challenge, and the match can't be reproduced even as a hard block — handle by hand."))
+		}
 	case "skip", "set_config":
 		add(manual("waf-custom", name, "Rule uses skip/set_config (bypass/override semantics) that have no faithful caddy-waf equivalent."))
 	default:
@@ -523,12 +531,6 @@ func manual(kind, name, why string) report.Finding {
 	return report.Finding{Kind: kind, Name: name, Verdict: report.Manual, Rationale: why}
 }
 
-func ruleName(r cf.Rule) string {
-	if r.Description != "" {
-		return r.Description
-	}
-	if len(r.Expression) > 48 {
-		return r.Expression[:48] + "…"
-	}
-	return r.Expression
-}
+// ruleName delegates to cf.Rule.Name so classify and plan derive identical
+// decision-lock keys (an answered ASK must route back to the same rule).
+func ruleName(r cf.Rule) string { return r.Name() }

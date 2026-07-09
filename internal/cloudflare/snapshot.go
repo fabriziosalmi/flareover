@@ -150,6 +150,20 @@ type Rule struct {
 	RateLimit *RateLimit `json:"ratelimit,omitempty"`
 }
 
+// Name is the rule's stable identifier for report findings and decision-lock
+// keys: its description, or a truncated expression when unnamed. classify (which
+// mints the ASK) and plan (which honors the answer) both use this, so an
+// answered ASK always routes back to the right rule.
+func (r Rule) Name() string {
+	if r.Description != "" {
+		return r.Description
+	}
+	if len(r.Expression) > 48 {
+		return r.Expression[:48] + "…"
+	}
+	return r.Expression
+}
+
 // RateLimit describes a rate-limiting rule's shape.
 type RateLimit struct {
 	Characteristics   []string `json:"characteristics,omitempty"` // e.g. ["ip.src"]

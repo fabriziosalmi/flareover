@@ -59,6 +59,26 @@ func TestScopedHeaderTransformIsManual(t *testing.T) {
 	}
 }
 
+// TestChallengeAskOnlyWhenEmittable: a challenge rule is an honorable ASK
+// ("convert to a hard block?") only when the match is one the plan can emit; a
+// compound match is MANUAL — never an ASK the generator would then ignore.
+func TestChallengeAskOnlyWhenEmittable(t *testing.T) {
+	snap := cf.Snapshot{Rulesets: []cf.Ruleset{{
+		Phase: "http_request_firewall_custom",
+		Rules: []cf.Rule{
+			{Description: "challenge simple", Expression: `http.user_agent eq "scanner"`, Action: "managed_challenge", Enabled: true},
+			{Description: "challenge compound", Expression: `http.user_agent eq "scanner" and ip.src eq 203.0.113.5`, Action: "js_challenge", Enabled: true},
+		},
+	}}}
+	r := Classify(snap)
+	if s := find(r, "waf-custom", "challenge simple"); s == nil || s.Verdict != report.Ask || s.Question == nil || s.Question.ID != "waf-challenge:challenge simple" {
+		t.Errorf("simple-match challenge should be an honorable ASK, got %+v", s)
+	}
+	if c := find(r, "waf-custom", "challenge compound"); c == nil || c.Verdict != report.Manual {
+		t.Errorf("compound-match challenge should be MANUAL, got %v", c)
+	}
+}
+
 func TestClassifyFixtureVerdicts(t *testing.T) {
 	r := Classify(loadFixture(t))
 
