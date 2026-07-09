@@ -28,6 +28,9 @@ type Client struct {
 	// Optional; when empty those surfaces are skipped with a warning.
 	AccountID string
 	HTTP      *http.Client
+	// BaseURL overrides the API root (default apiBase). Set by tests to point at
+	// a mock; otherwise leave empty.
+	BaseURL string
 	// Warnings accumulates non-fatal extraction gaps (optional surfaces that
 	// could not be read). Surfaced to the user so nothing is silently missing.
 	Warnings []string
@@ -36,6 +39,14 @@ type Client struct {
 // NewClient builds a client with a sane default HTTP timeout.
 func NewClient(token string) *Client {
 	return &Client{Token: token, HTTP: &http.Client{Timeout: 30 * time.Second}}
+}
+
+// base is the API root — the mock override, or the real Cloudflare endpoint.
+func (c *Client) base() string {
+	if c.BaseURL != "" {
+		return strings.TrimRight(c.BaseURL, "/")
+	}
+	return apiBase
 }
 
 // envelope is the standard Cloudflare API response wrapper.
@@ -50,7 +61,7 @@ type envelope struct {
 }
 
 func (c *Client) get(ctx context.Context, path string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiBase+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base()+path, nil)
 	if err != nil {
 		return err
 	}
@@ -404,7 +415,7 @@ func (c *Client) getPaged(ctx context.Context, path string, out any) (*struct {
 	Page       int `json:"page"`
 	TotalPages int `json:"total_pages"`
 }, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiBase+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base()+path, nil)
 	if err != nil {
 		return nil, err
 	}
