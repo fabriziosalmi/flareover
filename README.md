@@ -70,7 +70,7 @@ assess → prepare → present → execute → guard
 | Egress shield (optional) | secure-proxy-manager (default-deny + allowlist, fail-closed) |
 | Sovereign origin link | WireGuard mesh (replaces the Cloudflare Tunnel; origin stays inbound-free) |
 | Blocklists | blacklists feeds |
-| Landing zone | bare-metal / Proxmox, or any EU provider — `flareover providers` |
+| Landing zone | one-command `deploy/` docker-compose, bare-metal / Proxmox, or any EU provider — `flareover providers` |
 
 Every target is tagged with its jurisdiction so the migration provably stays EU-scoped. Edge providers
 carry an honest **sovereignty tier**: EU-owned operators (Hetzner, OVH, Contabo, Aruba, Scaleway) are
@@ -181,8 +181,9 @@ Deliberately **out of scope** because no faithful deterministic mapping exists: 
 *steering* (sending users to different origins by region — a paid load-balancing feature, distinct from
 country blocking above) and cache-hit-ratio parity — surfaced honestly, never faked.
 
-See [`docs/deploy-hardened.md`](docs/deploy-hardened.md) for the hardened landing-zone blueprint and
-the gotchas learned the hard way.
+See [`deploy/`](deploy/) for the one-command docker-compose landing zone, and
+[`docs/deploy-hardened.md`](docs/deploy-hardened.md) for the hardened bare-metal
+blueprint and the gotchas learned the hard way.
 
 ## License
 

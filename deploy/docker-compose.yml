@@ -1,0 +1,107 @@
+# flareover — turnkey EU landing zone.
+#
+# Stands up the target stack that `flareover prepare` / `provision` output drops
+# straight into: PowerDNS (authoritative + API), Caddy (caddy-waf + souin, custom
+# build), CertMate (DNS-01 certs), MinIO (object storage), and secure-proxy-manager
+# (egress shield). One command; your own box, your own credentials.
+#
+#   1. flareover prepare snap.json --decisions decisions.lock --edge-ip <ip> --out ./out
+#   2. cp .env.example .env   &&   edit the secrets
+#   3. docker compose up -d --build
+#   4. flareover provision --snapshot snap.json --decisions decisions.lock \
+#        --pdns-url http://localhost:8081 --pdns-key "$PDNS_API_KEY" \
+#        --certmate-url http://localhost:8000 --certmate-token "$CERTMATE_TOKEN"
+#
+# ARTIFACTS defaults to ./out (the prepare --out dir) — override it in .env.
+name: flareover
+
+services:
+  powerdns:
+    image: powerdns/pdns-auth-49:latest
+    restart: unless-stopped
+    environment:
+      PDNS_launch: gsqlite3
+      PDNS_gsqlite3_database: /var/lib/powerdns/pdns.sqlite3
+      PDNS_gsqlite3_dnssec: "yes"
+      PDNS_api: "yes"
+      PDNS_api_key: ${PDNS_API_KEY:?set PDNS_API_KEY in .env}
+      PDNS_webserver: "yes"
+      PDNS_webserver_address: 0.0.0.0
+      PDNS_webserver_port: "8081"
+      PDNS_webserver_allow_from: 0.0.0.0/0
+    volumes:
+      - pdns-data:/var/lib/powerdns
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+      - "127.0.0.1:8081:8081" # API — provision --pdns-url http://localhost:8081
+    networks: [internal]
+
+  caddy:
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
+    restart: unless-stopped
+    depends_on: [certmate]
+    volumes:
+      - ${ARTIFACTS:-./out}/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${ARTIFACTS:-./out}/caddy-waf:/etc/caddy/waf:ro
+      - certs:/etc/caddy/certs # CertMate writes here; Caddy reads
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    networks: [edge, internal]
+
+  certmate:
+    image: ${CERTMATE_IMAGE:-ghcr.io/fabriziosalmi/certmate:latest}
+    restart: unless-stopped
+    environment:
+      # Must be 32–512 chars; a shorter token is rejected.
+      CERTMATE_BEARER_TOKEN: ${CERTMATE_TOKEN:?set CERTMATE_TOKEN in .env}
+    volumes:
+      - certs:/etc/caddy/certs # issues into the shared cert volume Caddy reads
+      - certmate-data:/data
+    ports:
+      - "127.0.0.1:8000:8000" # API — provision --certmate-url http://localhost:8000
+    networks: [internal]
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "127.0.0.1:9000:9000" # S3 API — the generated storage provision.sh targets this
+      - "127.0.0.1:9001:9001" # console
+    networks: [internal]
+
+  # Egress shield — the outbound default-deny proxy that `prepare --egress-deny`
+  # targets. Optional: comment this service out if you don't run one.
+  spm:
+    image: ${SPM_IMAGE:-ghcr.io/fabriziosalmi/secure-proxy-manager:latest}
+    restart: unless-stopped
+    volumes:
+      - spm-data:/data
+    ports:
+      - "127.0.0.1:3128:3128"
+    networks: [internal]
+
+networks:
+  edge: {} # public-facing tier (Caddy only)
+  internal: {} # PowerDNS · CertMate · MinIO · SPM — bound to localhost, not the internet
+
+volumes:
+  pdns-data: {}
+  caddy-data: {}
+  caddy-config: {}
+  certs: {}
+  certmate-data: {}
+  minio-data: {}
+  spm-data: {}

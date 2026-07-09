@@ -28,3 +28,5 @@
 .DS_Store
 
 .claude/
+# deploy/ generated artifacts + secrets
+deploy/out/

@@ -273,6 +273,9 @@ flareover provision --snapshot snap.json --decisions decisions.lock \
   --nameservers ns1.example.eu,ns2.example.eu \
   --certmate-url http://certmate:8000 --certmate-token <span class="fl">$CM</span> --ca actalis
 flareover present --after-addr <span class="fl">$EDGE_IP</span>   <span class="dm"># parity gate before you flip DNS</span></pre></div>
+        <div class="note">No box to run the stack on? <b>deploy/</b> is a one-command
+          <code>docker compose</code> landing zone (PowerDNS · Caddy+caddy-waf+souin · CertMate ·
+          MinIO) that consumes the <code>prepare --out</code> artifacts directly.</div>
       </section>
 
       <section id="cb-managed">
