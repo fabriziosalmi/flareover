@@ -10,7 +10,7 @@ export default defineConfig({
     starlight({
       title: 'flareover',
       description:
-        'Move your site off the orange cloud onto your own EU servers — without changing how it behaves. A deterministic, 0% false-positive migration engine.',
+        'Move your site off the orange cloud onto your own EU servers, without changing how it behaves. A deterministic, 0% false-positive migration engine.',
       logo: { src: './src/assets/logo-mark.svg', alt: 'flareover' },
       favicon: '/favicon.svg',
       customCss: ['./src/styles/theme.css'],

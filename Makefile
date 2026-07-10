@@ -1,4 +1,4 @@
-# flareover — common tasks. `make help` lists them.
+# flareover: common tasks. `make help` lists them.
 BIN := flareover
 
 .PHONY: help build test race vet lint fmt cover run clean

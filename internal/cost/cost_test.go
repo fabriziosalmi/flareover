@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package cost

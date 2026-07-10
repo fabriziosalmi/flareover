@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package parity
@@ -24,7 +25,7 @@ func ep(server *httptest.Server) Endpoint {
 }
 
 // A faithful "Caddy" edge and a noisy "Cloudflare" edge with identical behavior
-// must produce a PASS gate — provider noise (Date/Server/CF-Ray) is ignored.
+// must produce a PASS gate: provider noise (Date/Server/CF-Ray) is ignored.
 func TestParityPassIgnoresNoise(t *testing.T) {
 	cf := edge(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Server", "cloudflare")

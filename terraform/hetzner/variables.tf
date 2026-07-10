@@ -5,7 +5,7 @@ variable "hcloud_token" {
 }
 
 variable "cloud_init_path" {
-  description = "Path to the cloud-init flareover emits (prepare --edge-provider hetzner → <out>/edge/cloud-init.yaml). Carries the mesh private key — keep it secret."
+  description = "Path to the cloud-init flareover emits (prepare --edge-provider hetzner → <out>/edge/cloud-init.yaml). Carries the mesh private key: keep it secret."
   type        = string
 }
 
@@ -33,7 +33,7 @@ variable "image" {
 }
 
 variable "location" {
-  description = "Hetzner location — keep it in the EU for sovereignty (nbg1/fsn1 = Germany, hel1 = Finland)."
+  description = "Hetzner location: keep it in the EU for sovereignty (nbg1/fsn1 = Germany, hel1 = Finland)."
   type        = string
   default     = "fsn1"
 }

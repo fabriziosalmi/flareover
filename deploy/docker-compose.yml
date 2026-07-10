@@ -1,4 +1,4 @@
-# flareover — turnkey EU landing zone.
+# flareover: turnkey EU landing zone.
 #
 # Stands up the target stack that `flareover prepare` / `provision` output drops
 # straight into: PowerDNS (authoritative + API), Caddy (caddy-waf + souin, custom
@@ -12,7 +12,7 @@
 #        --pdns-url http://localhost:8081 --pdns-key "$PDNS_API_KEY" \
 #        --certmate-url http://localhost:8000 --certmate-token "$CERTMATE_TOKEN"
 #
-# ARTIFACTS defaults to ./out (the prepare --out dir) — override it in .env.
+# ARTIFACTS defaults to ./out (the prepare --out dir). Override it in .env.
 name: flareover
 
 services:
@@ -34,7 +34,7 @@ services:
     ports:
       - "53:53/udp"
       - "53:53/tcp"
-      - "127.0.0.1:8081:8081" # API — provision --pdns-url http://localhost:8081
+      - "127.0.0.1:8081:8081" # API: provision --pdns-url http://localhost:8081
     networks: [internal]
 
   caddy:
@@ -65,7 +65,7 @@ services:
       - certs:/etc/caddy/certs # issues into the shared cert volume Caddy reads
       - certmate-data:/data
     ports:
-      - "127.0.0.1:8000:8000" # API — provision --certmate-url http://localhost:8000
+      - "127.0.0.1:8000:8000" # API: provision --certmate-url http://localhost:8000
     networks: [internal]
 
   minio:
@@ -78,11 +78,11 @@ services:
     volumes:
       - minio-data:/data
     ports:
-      - "127.0.0.1:9000:9000" # S3 API — the generated storage provision.sh targets this
+      - "127.0.0.1:9000:9000" # S3 API: the generated storage provision.sh targets this
       - "127.0.0.1:9001:9001" # console
     networks: [internal]
 
-  # Egress shield — the outbound default-deny proxy that `prepare --egress-deny`
+  # Egress shield: the outbound default-deny proxy that `prepare --egress-deny`
   # targets. Optional: comment this service out if you don't run one.
   spm:
     image: ${SPM_IMAGE:-ghcr.io/fabriziosalmi/secure-proxy-manager:latest}
@@ -94,7 +94,7 @@ services:
     networks: [internal]
 
 networks:
-  edge: {} # public-facing tier (Caddy 80/443, and PowerDNS 53 — authoritative DNS must be public)
+  edge: {} # public-facing tier (Caddy 80/443, and PowerDNS 53: authoritative DNS must be public)
   internal: {} # inter-container tier; the admin/API ports (8081, 8000, 9000/9001, 3128) publish only to 127.0.0.1
 
 volumes:

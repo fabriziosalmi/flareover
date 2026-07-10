@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package leasewebdns
@@ -42,7 +43,7 @@ func TestGeneratorOmitsSOAandNS(t *testing.T) {
 		t.Fatalf("artifacts = %+v", arts)
 	}
 	if b := string(arts[0].Content); strings.Contains(b, "\tSOA\t") || strings.Contains(b, "\tNS\t") {
-		t.Error("preview leaked SOA/NS — Leaseweb owns them")
+		t.Error("preview leaked SOA/NS: Leaseweb owns them")
 	}
 }
 
@@ -94,7 +95,7 @@ func TestProvisionDeletesThenCreates(t *testing.T) {
 	}
 
 	// The POST body uses the dotted FQDN name, content via APIValue (MX priority
-	// embedded, TXT raw — not BIND-quoted).
+	// embedded, TXT raw, not BIND-quoted).
 	var www, mx, txt *lswRecordSet
 	for i := range posted {
 		switch posted[i].Type {

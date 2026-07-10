@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package powerdns
@@ -17,10 +18,10 @@ import (
 )
 
 // Provisioner stands the zone up on a live PowerDNS via its Authoritative HTTP
-// API — the step beyond emitting a zone file. It is idempotent: it creates the
+// API: the step beyond emitting a zone file. It is idempotent: it creates the
 // zone if absent, then REPLACEs every rrset, so re-running converges. DNSSEC is
 // opt-in and returns the DS records the operator must publish at the registrar
-// (flareover never touches the registrar — that stays an explicit human step).
+// (flareover never touches the registrar; that stays an explicit human step).
 type Provisioner struct {
 	BaseURL string // e.g. http://127.0.0.1:8081
 	APIKey  string
@@ -92,7 +93,7 @@ func (p *Provisioner) Provision(ctx context.Context, z ir.DNSZone, nameservers [
 	err := p.do(ctx, http.MethodGet, "/api/v1/servers/"+p.Server+"/zones/"+zoneID, nil, nil)
 	if err != nil {
 		// Create it with the full rrset payload. The apex NS records are already
-		// in rrsets (buildRRSets), so the "nameservers" field must be omitted —
+		// in rrsets (buildRRSets), so the "nameservers" field must be omitted:
 		// PowerDNS rejects mixing the two.
 		create := map[string]any{
 			"name":   zoneID,
@@ -167,7 +168,7 @@ func buildRRSets(z ir.DNSZone, nameservers []string) []rrset {
 	}
 
 	// The rrset content is the same BIND rdata the zone file carries (priority
-	// embedded, FQDNs dotted, TXT quoted) — shared with the Generator via zonefile.
+	// embedded, FQDNs dotted, TXT quoted), shared with the Generator via zonefile.
 	for _, r := range z.Records {
 		add(r.Name, r.Type, zonefile.RData(r), zonefile.TTLOrDefault(r.TTL))
 	}

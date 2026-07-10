@@ -1,9 +1,10 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package zonefile is the shared BIND rendering used by every DNS target. The
-// per-record serialization is provider-independent — a de-proxied ir.DNSRecord
+// per-record serialization is provider-independent: a de-proxied ir.DNSRecord
 // becomes the same authoritative-DNS line whether it lands in a PowerDNS zone
-// file or a bunny.net/Scaleway/OVH preview — so it lives here once. The pieces
+// file or a bunny.net/Scaleway/OVH preview, so it lives here once. The pieces
 // that genuinely differ per provider (structured API payloads, the empty-vs-"@"
 // apex name, records-only-vs-full-zone headers) stay in each target package.
 package zonefile
@@ -61,7 +62,7 @@ func SRVTargetFQDN(content string) string {
 // RData renders the BIND rdata for a record: the MX/SRV priority is embedded,
 // FQDN targets are dotted, and TXT is quoted. This is exactly the value a
 // PowerDNS rrset or an OVH record `target` carries (OVH aside for TXT, which it
-// wants unquoted — that stays local).
+// wants unquoted; that stays local).
 func RData(r ir.DNSRecord) string {
 	switch strings.ToUpper(r.Type) {
 	case "MX":
@@ -86,7 +87,7 @@ func RenderRecord(origin string, r ir.DNSRecord) string {
 
 // APIValue renders the rdata the way most managed-DNS REST APIs want it: like
 // RData (MX/SRV priority embedded, CNAME/NS dotted), except TXT and address
-// records are the raw value — these APIs quote TXT themselves. Use this for a
+// records are the raw value: these APIs quote TXT themselves. Use this for a
 // provider whose record `value`/`content` field is not a BIND zone-file line
 // (OVH, Leaseweb); use RData for BIND-quoting providers (PowerDNS, Gandi).
 func APIValue(r ir.DNSRecord) string {
@@ -97,7 +98,7 @@ func APIValue(r ir.DNSRecord) string {
 		return fmt.Sprintf("%d %s", Priority(r), SRVTargetFQDN(r.Content))
 	case "CNAME", "NS":
 		return FQDN(r.Content)
-	default: // A, AAAA, TXT, CAA, ... — the raw value
+	default: // A, AAAA, TXT, CAA, ...: the raw value
 		return r.Content
 	}
 }

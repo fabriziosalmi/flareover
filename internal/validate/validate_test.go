@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package validate
@@ -25,7 +26,7 @@ api	300	IN	CNAME	www.example.com.
 }
 
 func TestZoneCatchesUnterminatedParen(t *testing.T) {
-	// SOA opens '(' but never closes — a real structural break.
+	// SOA opens '(' but never closes: a real structural break.
 	zone := "@\tIN\tSOA\tns1. host. (\n\t\t1\n\t\t3600\n"
 	ok, problems := Zone([]byte(zone))
 	if ok || len(problems) == 0 {
@@ -51,7 +52,7 @@ func TestZoneCatchesStrayCloseParen(t *testing.T) {
 
 func TestCaddyfileNeverFalseFails(t *testing.T) {
 	// Whether or not caddy is installed, a graceful result comes back: either a
-	// skip (caddy absent) or a ran check — never a panic, never a silent pass.
+	// skip (caddy absent) or a ran check, never a panic, never a silent pass.
 	r := Caddyfile([]byte("example.com {\n\treverse_proxy 203.0.113.10:80\n}\n"))
 	if r.Ran == "" && !r.Skipped() {
 		t.Error("a no-run result must report Skipped()")

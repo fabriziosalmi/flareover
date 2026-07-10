@@ -1,4 +1,4 @@
-# The generated Caddyfile assumes a custom Caddy build with caddy-waf + souin —
+# The generated Caddyfile assumes a custom Caddy build with caddy-waf + souin:
 # the same build flareover's edge cloud-init produces. This bakes it into an image.
 FROM caddy:2-builder AS build
 RUN xcaddy build \

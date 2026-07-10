@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package classify
@@ -73,7 +74,7 @@ func TestHeaderTransformScopeSymmetry(t *testing.T) {
 
 // TestURLRewriteSymmetry pins the #6 rewrite half: a static URL rewrite is AUTO
 // (and actually emitted as a Caddy rewrite), while a dynamic, expression-derived
-// target is MANUAL — never a silent AUTO the generator would then drop.
+// target is MANUAL, never a silent AUTO the generator would then drop.
 func TestURLRewriteSymmetry(t *testing.T) {
 	static := map[string]any{"uri": map[string]any{"path": map[string]any{"value": "/modern"}}}
 	dynamic := map[string]any{"uri": map[string]any{"path": map[string]any{"expression": `concat("/x", http.request.uri.path)`}}}
@@ -130,19 +131,19 @@ func TestSymmetryDowngrades(t *testing.T) {
 
 // TestStrictSSLModeIsAsk pins #12: Full (strict) is no longer a silent AUTO
 // (which shipped a Caddyfile whose edge→origin verification breaks against a
-// Cloudflare Origin CA cert). It is an ASK — verify with a replacement cert, or
+// Cloudflare Origin CA cert). It is an ASK: verify with a replacement cert, or
 // an explicit skip-verify downgrade.
 func TestStrictSSLModeIsAsk(t *testing.T) {
 	r := Classify(cf.Snapshot{Settings: cf.ZoneSettings{SSL: "strict"}})
 	f := find(r, "tls", "ssl-mode")
 	if f == nil || f.Verdict != report.Ask || f.Question == nil || f.Question.ID != "origin-verify" {
-		t.Errorf("strict SSL must be an ASK (origin-verify), not a silent AUTO — got %+v", f)
+		t.Errorf("strict SSL must be an ASK (origin-verify), not a silent AUTO, got %+v", f)
 	}
 }
 
 // TestChallengeAskOnlyWhenEmittable: a challenge rule is an honorable ASK
 // ("convert to a hard block?") only when the match is one the plan can emit; a
-// compound match is MANUAL — never an ASK the generator would then ignore.
+// compound match is MANUAL, never an ASK the generator would then ignore.
 func TestChallengeAskOnlyWhenEmittable(t *testing.T) {
 	snap := cf.Snapshot{Rulesets: []cf.Ruleset{{
 		Phase: "http_request_firewall_custom",

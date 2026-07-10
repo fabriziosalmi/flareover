@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package plan_test
@@ -19,7 +20,7 @@ var update = flag.Bool("update", false, "update golden files")
 // TestGoldenConformance is the regression net: the full free-tier conformance
 // zone (a sanitized capture of a real Cloudflare free-tier torture zone) must
 // generate byte-identical artifacts. Any catalog or generator change that alters output
-// fails here — run `go test ./internal/plan -run Golden -update` to review and
+// fails here. Run `go test ./internal/plan -run Golden -update` to review and
 // accept an intended change.
 func TestGoldenConformance(t *testing.T) {
 	snap := readSnapshot(t, "../../testdata/fixtures/conformance.snapshot.json")

@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package gandidns
@@ -42,7 +43,7 @@ func TestGeneratorOmitsSOAandNS(t *testing.T) {
 		t.Fatalf("artifacts = %+v", arts)
 	}
 	if b := string(arts[0].Content); strings.Contains(b, "\tSOA\t") || strings.Contains(b, "\tNS\t") {
-		t.Error("preview leaked SOA/NS — Gandi owns them")
+		t.Error("preview leaked SOA/NS: Gandi owns them")
 	}
 }
 

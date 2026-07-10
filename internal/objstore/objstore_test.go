@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package objstore
@@ -102,8 +103,8 @@ func TestRcloneAndProvisionArtifacts(t *testing.T) {
 
 // TestLifecycleZeroExpiryIsManual pins the audit fix: a lifecycle rule with no
 // positive object-expiry (multipart-abort / noncurrent-version only) has no
-// MinIO ILM equivalent, so classify must mark it MANUAL — it was a false-AUTO
-// before — and Generate must emit no `mc ilm` line for it (classify ⟺ generate).
+// MinIO ILM equivalent, so classify must mark it MANUAL (it was a false-AUTO
+// before) and Generate must emit no `mc ilm` line for it (classify ⟺ generate).
 func TestLifecycleZeroExpiryIsManual(t *testing.T) {
 	snap := Snapshot{Source: "s3", Buckets: []Bucket{{
 		Name: "b", Lifecycle: []LifecycleRule{

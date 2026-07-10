@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package hetznerdns
@@ -27,8 +28,8 @@ func samplePlan() ir.Plan {
 
 var _ target.Generator = Generator{}
 
-// TestGeneratorTierIsSovereign: Hetzner is EU-owned, so — unlike the US-operated
-// bridges — its note must claim the sovereign tier, never "US-operated".
+// TestGeneratorTierIsSovereign: Hetzner is EU-owned, so (unlike the US-operated
+// bridges) its note must claim the sovereign tier, never "US-operated".
 func TestGeneratorTierIsSovereign(t *testing.T) {
 	arts, err := Generator{}.Generate(samplePlan())
 	if err != nil {

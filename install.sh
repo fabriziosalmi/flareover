@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# flareover installer — downloads the latest release for your OS/arch, verifies
+# flareover installer: downloads the latest release for your OS/arch, verifies
 # its sha256 against the signed checksums file, and installs the binary.
 #
 #   curl -fsSL https://raw.githubusercontent.com/fabriziosalmi/flareover/main/install.sh | sh
@@ -43,7 +43,7 @@ esac
 if [ "$VERSION" = "latest" ]; then
   tag="$(fetch "https://api.github.com/repos/$REPO/releases/latest" /dev/stdout 2>/dev/null \
     | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
-  [ -n "$tag" ] || die "could not resolve the latest version — set VERSION=vX.Y.Z"
+  [ -n "$tag" ] || die "could not resolve the latest version. Set VERSION=vX.Y.Z"
 else
   tag="$VERSION"
 fi
@@ -55,7 +55,7 @@ trap 'rm -rf "$tmp"' EXIT
 archive="flareover_${ver}_${os}_${arch}.tar.gz"
 base="https://github.com/$REPO/releases/download/$tag"
 say "downloading $archive ($tag)"
-fetch "$base/$archive" "$tmp/$archive" || die "download failed — check the version/platform exists"
+fetch "$base/$archive" "$tmp/$archive" || die "download failed. Check the version/platform exists"
 fetch "$base/checksums.txt" "$tmp/checksums.txt" || die "could not fetch checksums.txt"
 
 # Verify sha256 (fail closed if no checksum tool is available).
@@ -67,9 +67,9 @@ if command -v sha256sum >/dev/null 2>&1; then
 elif command -v shasum >/dev/null 2>&1; then
   actual="$(shasum -a 256 "$tmp/$archive" | awk '{print $1}')"
 else
-  die "no sha256 tool (sha256sum/shasum) — refusing to install unverified"
+  die "no sha256 tool (sha256sum/shasum): refusing to install unverified"
 fi
-[ "$expected" = "$actual" ] || die "checksum MISMATCH — expected $expected got $actual"
+[ "$expected" = "$actual" ] || die "checksum MISMATCH: expected $expected got $actual"
 
 tar -xzf "$tmp/$archive" -C "$tmp"
 [ -f "$tmp/flareover" ] || die "archive did not contain the flareover binary"

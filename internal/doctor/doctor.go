@@ -1,6 +1,7 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Package doctor is the pre-flight: before you provision, it checks — read-only —
+// Package doctor is the pre-flight: before you provision, it checks (read-only)
 // that every target service is reachable, authorized, and configured the way the
 // provisioning step will need it. It writes nothing and changes nothing, so it
 // cannot affect the 0% FP contract; it only turns the failures we learned the
@@ -144,7 +145,7 @@ func checkCertMate(ctx context.Context, o Options) Check {
 	}
 	healthy := strings.Contains(string(body), "healthy") || strings.Contains(string(body), "\"ok\"")
 
-	// If a token is supplied, confirm a DNS provider is actually configured —
+	// If a token is supplied, confirm a DNS provider is actually configured:
 	// issuance fails silently later otherwise.
 	if o.CertMateToken != "" {
 		sc, sbody, serr := o.get(ctx, strings.TrimRight(o.CertMateURL, "/")+"/api/settings",
@@ -196,7 +197,7 @@ func checkSPM(ctx context.Context, o Options) Check {
 }
 
 func checkReachable(ctx context.Context, o Options, name, endpoint string) Check {
-	// An unauthenticated GET to an S3 endpoint returns 400/403 — which still
+	// An unauthenticated GET to an S3 endpoint returns 400/403, which still
 	// proves the service is up and speaking HTTP. Only a transport error is a fail.
 	code, _, err := o.get(ctx, endpoint, nil)
 	if err != nil {
@@ -207,14 +208,14 @@ func checkReachable(ctx context.Context, o Options, name, endpoint string) Check
 
 func checkTokenStrength(name, token string) Check {
 	if n := len(token); n < 32 {
-		return Check{name, Fail, fmt.Sprintf("%d chars — must be 32-512 (CertMate rejects shorter and falls back to UNAUTHENTICATED admin)", n)}
+		return Check{name, Fail, fmt.Sprintf("%d chars: must be 32-512 (CertMate rejects shorter and falls back to UNAUTHENTICATED admin)", n)}
 	} else if n > 512 {
-		return Check{name, Fail, fmt.Sprintf("%d chars — exceeds the 512 limit", n)}
+		return Check{name, Fail, fmt.Sprintf("%d chars: exceeds the 512 limit", n)}
 	}
 	low := strings.ToLower(token)
 	for _, w := range weakTokenPatterns {
 		if strings.Contains(low, w) {
-			return Check{name, Fail, fmt.Sprintf("contains weak pattern %q — CertMate rejects it on save", w)}
+			return Check{name, Fail, fmt.Sprintf("contains weak pattern %q: CertMate rejects it on save", w)}
 		}
 	}
 	return Check{name, OK, "length and content acceptable"}
@@ -223,9 +224,9 @@ func checkTokenStrength(name, token string) Check {
 func checkCaddyBuild() Check {
 	caddy, err := exec.LookPath("caddy")
 	if err != nil {
-		return Check{"Caddy build", Warn, "caddy not on PATH — needed on the edge host"}
+		return Check{"Caddy build", Warn, "caddy not on PATH: needed on the edge host"}
 	}
-	out, err := exec.Command(caddy, "list-modules").CombinedOutput() // #nosec G204 — resolved via LookPath
+	out, err := exec.Command(caddy, "list-modules").CombinedOutput() // #nosec G204: resolved via LookPath
 	if err != nil {
 		return Check{"Caddy build", Warn, "caddy present but `list-modules` failed"}
 	}
@@ -238,6 +239,6 @@ func checkCaddyBuild() Check {
 	case waf || cache:
 		return Check{"Caddy build", Warn, "custom build missing one module (need both caddy-waf and souin)"}
 	default:
-		return Check{"Caddy build", Warn, "stock caddy — rebuild with caddy-waf + souin via xcaddy"}
+		return Check{"Caddy build", Warn, "stock caddy: rebuild with caddy-waf + souin via xcaddy"}
 	}
 }

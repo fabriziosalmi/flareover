@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package main
@@ -10,7 +11,7 @@ import (
 )
 
 // cliReferencePath is the hand-written (rich, with examples) CLI reference in the
-// Starlight docs. It stays hand-written on purpose — but must not silently omit a
+// Starlight docs. It stays hand-written on purpose, but must not silently omit a
 // command or flag the binary ships.
 const cliReferencePath = "../../website/src/content/docs/cli-reference.md"
 
@@ -24,7 +25,7 @@ func TestCLIReferenceComplete(t *testing.T) {
 		t.Fatalf("read CLI reference: %v", err)
 	}
 	if gaps := docsgen.CLIRefGaps(usage, string(md)); len(gaps) > 0 {
-		t.Errorf("cli-reference.md is missing %d item(s) from the binary's usage — document them in %s:\n  %v",
+		t.Errorf("cli-reference.md is missing %d item(s) from the binary's usage. Document them in %s:\n  %v",
 			len(gaps), cliReferencePath, gaps)
 	}
 }

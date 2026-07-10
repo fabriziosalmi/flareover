@@ -5,7 +5,7 @@ description: "flareover handles credentials for your DNS, certificates, storage,
 
 flareover handles credentials for your DNS, certificates, storage, and edge. Its security posture is deliberately conservative.
 
-## Auth from the environment only — never on argv
+## Auth from the environment only, never on argv
 
 **Every** credential is read from an environment variable. flareover never accepts a secret as a command-line flag, because anything on the command line leaks via `ps auxww`, `/proc/<pid>/cmdline`, shell history, and CI job logs.
 
@@ -15,7 +15,7 @@ export CERTMATE_TOKEN=…
 flareover provision --pdns-url http://pdns:8081 --certmate-url http://certmate:8000 …
 ```
 
-Passing `--pdns-key` or `--certmate-token` is refused with a pointer to the env var — the invariant is enforced, not just documented.
+Passing `--pdns-key` or `--certmate-token` is refused with a pointer to the env var: the invariant is enforced, not just documented.
 
 ### Environment variables by purpose
 
@@ -35,17 +35,17 @@ Passing `--pdns-key` or `--certmate-token` is refused with a pointer to the env 
 | Contabo / Aruba S3 | `CONTABO_S3_*` / `ARUBA_S3_*` |
 | bunny.net | `BUNNYNET_API_KEY` |
 
-Use a **read-only** source token — flareover never writes to the source.
+Use a **read-only** source token: flareover never writes to the source.
 
 ## Least privilege at the edges
 
 - **The engine never touches your source provider or your registrar.** The DS publish and the final NS move are explicit human steps.
 - **The origin stays inbound-free.** The recommended shape puts a WireGuard mesh between the edge and the origin, so the origin has zero public inbound; the edge dials nothing the origin didn't initiate.
-- **Egress shield (optional).** `secure-proxy-manager` enforces default-deny outbound with an allowlist, fail-closed — so a compromised edge can't phone home to arbitrary hosts.
+- **Egress shield (optional).** `secure-proxy-manager` enforces default-deny outbound with an allowlist, fail-closed, so a compromised edge can't phone home to arbitrary hosts.
 
 ## Supply chain
 
-- **Zero external Go dependencies** — standard library only. A small, auditable surface with no third-party module tree to vet.
+- **Zero external Go dependencies**: standard library only. A small, auditable surface with no third-party module tree to vet.
 - **Signed releases.** Every release ships an **SBOM** and a `checksums.txt` **signed keyless via Sigstore/cosign**. Verify before you run (see [Installation](/docs/installation/)).
 - **AGPL-3.0-only.** Network use counts as distribution, so any derivative service must offer its source under the same terms.
 

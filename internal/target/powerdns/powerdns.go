@@ -1,9 +1,10 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package powerdns renders the authoritative zone from the plan's DNS intent.
 // It emits a BIND-style zone file (which PowerDNS loads directly, or which maps
 // 1:1 onto the PowerDNS HTTP API) plus a short provisioning note. Proxied
-// Cloudflare records have already been de-proxied by the plan builder — this
+// Cloudflare records have already been de-proxied by the plan builder. This
 // package only serializes the resulting zone.
 package powerdns
 
@@ -47,7 +48,7 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 		b.WriteString(zonefile.RenderRecord(origin, r))
 	}
 
-	note := "SOA/NS are placeholders — set ns1/ns2 to the target PowerDNS servers before load."
+	note := "SOA/NS are placeholders: set ns1/ns2 to the target PowerDNS servers before load."
 	if z.DNSSEC {
 		note += " DNSSEC requested: run `pdnsutil secure-zone " + z.Name +
 			"` after load and publish the new DS at the registrar during cutover."

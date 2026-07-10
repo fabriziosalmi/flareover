@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package report
@@ -39,7 +40,7 @@ func TestHTMLEscapesUserData(t *testing.T) {
 	}}
 	out := r.HTML()
 	if strings.Contains(out, "<script>alert(1)</script>") {
-		t.Error("finding name was not HTML-escaped — injection risk")
+		t.Error("finding name was not HTML-escaped: injection risk")
 	}
 	if !strings.Contains(out, "&lt;script&gt;") {
 		t.Error("expected escaped finding name")

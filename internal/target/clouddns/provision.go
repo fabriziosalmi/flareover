@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package clouddns
@@ -278,7 +279,7 @@ func (p *Provisioner) Provision(ctx context.Context, z ir.DNSZone) error {
 	return nil
 }
 
-// Nameservers returns the managed zone's delegation set — the NS to publish at
+// Nameservers returns the managed zone's delegation set: the NS to publish at
 // the registrar.
 func (p *Provisioner) Nameservers(ctx context.Context, zone string) ([]string, error) {
 	_, ns, err := p.managedZone(ctx, zone)

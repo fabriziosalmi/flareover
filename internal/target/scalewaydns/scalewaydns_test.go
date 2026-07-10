@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package scalewaydns
@@ -52,7 +53,7 @@ func TestGeneratorOmitsSOAandNS(t *testing.T) {
 	}
 	body := string(a.Content)
 	if strings.Contains(body, "\tSOA\t") || strings.Contains(body, "\tNS\t") {
-		t.Error("preview leaked SOA/NS — Scaleway owns them")
+		t.Error("preview leaked SOA/NS: Scaleway owns them")
 	}
 	for _, w := range []string{"$ORIGIN example.com.", "@\t300\tIN\tMX\t10 mail.example.com.", "www\t300\tIN\tA\t198.51.100.10"} {
 		if !strings.Contains(body, w) {
@@ -148,7 +149,7 @@ func TestProvisionCreatesZoneAndSetsRecords(t *testing.T) {
 	}
 }
 
-// TestProvisionIdempotentOnExistingZone: a 409 on create must not abort — the
+// TestProvisionIdempotentOnExistingZone: a 409 on create must not abort; the
 // record set still runs, so re-applying an already-migrated zone converges.
 func TestProvisionIdempotentOnExistingZone(t *testing.T) {
 	var sawPatch bool

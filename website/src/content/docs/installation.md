@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/fabriziosalmi/flareover/main/instal
 go install github.com/fabriziosalmi/flareover/cmd/flareover@latest
 ```
 
-Building from source requires **Go 1.25+**. The engine is pure Go, standard library only — no `go.sum` full of third-party modules to vet.
+Building from source requires **Go 1.25+**. The engine is pure Go, standard library only: no `go.sum` full of third-party modules to vet.
 
 ## Release binaries
 
@@ -55,7 +55,7 @@ sha256sum -c checksums.txt --ignore-missing
 
 ## Credentials come from the environment
 
-flareover **never** takes secrets on the command line — every token is read from an environment variable, so nothing leaks via `ps`, `/proc`, or shell history. You'll set these as you go (see [Security](/docs/security/) for the full list); the first one you need is the read-only zone token:
+flareover **never** takes secrets on the command line: every token is read from an environment variable, so nothing leaks via `ps`, `/proc`, or shell history. You'll set these as you go (see [Security](/docs/security/) for the full list); the first one you need is the read-only zone token:
 
 ```bash
 export CLOUDFLARE_API_TOKEN=…   # read-only, for `extract`

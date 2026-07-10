@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package cloudflare
@@ -27,7 +28,7 @@ type resp struct {
 }
 
 // mockCF serves the routed paths; any unrouted path returns result:null, which
-// decodes cleanly into an empty slice or a zero struct — so optional surfaces
+// decodes cleanly into an empty slice or a zero struct, so optional surfaces
 // simply come back empty (no warning), and each test routes only what it cares
 // about.
 func mockCF(t *testing.T, routes map[string]resp) (*Client, func()) {
@@ -99,7 +100,7 @@ func TestExtractHappyPath(t *testing.T) {
 	if len(s.PageRules) != 1 {
 		t.Errorf("page rules = %d, want 1", len(s.PageRules))
 	}
-	// Only the R2/Access skip (no AccountID) should warn — nothing silently lost.
+	// Only the R2/Access skip (no AccountID) should warn: nothing silently lost.
 	for _, w := range c.Warnings {
 		if !strings.Contains(w, "R2") && !strings.Contains(w, "Access") {
 			t.Errorf("unexpected warning: %q", w)

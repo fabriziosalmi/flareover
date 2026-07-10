@@ -1,8 +1,9 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package parity is the Failguards muscle: it proves the new edge behaves like
 // Cloudflare before any cutover is allowed. It probes both edges with the same
-// requests and diffs the responses — but only on what represents *behavior*
+// requests and diffs the responses, but only on what represents *behavior*
 // (status code, redirect target, a small set of significant headers, body),
 // deliberately ignoring provider-specific noise (Date, Server, CF-Ray, …). The
 // gate passes only when every probe matches on the HARD signals (status +
@@ -95,7 +96,7 @@ func (r Report) Text() string {
 			}
 		}
 	}
-	fmt.Fprintf(&b, "flareover parity — %s  vs  %s\n", r.Before, r.After)
+	fmt.Fprintf(&b, "flareover parity: %s  vs  %s\n", r.Before, r.After)
 	fmt.Fprintf(&b, "%d probes: %d match, %d hard divergence(s), %d soft\n\n", len(r.Results), matched, hard, soft)
 	for _, res := range r.Results {
 		if res.Match() {
@@ -116,9 +117,9 @@ func (r Report) Text() string {
 		}
 	}
 	if r.Gate() {
-		b.WriteString("\nGATE: PASS — no behavior-changing divergence. Cutover permitted.\n")
+		b.WriteString("\nGATE: PASS. No behavior-changing divergence. Cutover permitted.\n")
 	} else {
-		b.WriteString("\nGATE: FAIL — hard divergence(s) present. Cutover blocked.\n")
+		b.WriteString("\nGATE: FAIL. Hard divergence(s) present. Cutover blocked.\n")
 	}
 	return b.String()
 }
@@ -131,7 +132,7 @@ var significantHeaders = []string{
 
 // Endpoint describes one side of the comparison. The probe's Host always drives
 // the URL, Host header, and TLS SNI (so the edge routes correctly); DialOverride
-// forces the actual TCP connection to a fixed address — the way to compare a
+// forces the actual TCP connection to a fixed address: the way to compare a
 // live domain (real DNS) against a staged edge reached by IP, with SNI intact
 // (like `curl --resolve`).
 type Endpoint struct {
@@ -288,7 +289,7 @@ func ProbesFromPlan(p ir.Plan) []Probe {
 		}
 	}
 	for _, s := range p.Sites {
-		// A wildcard site (*.host) can't be probed with a literal "*" Host —
+		// A wildcard site (*.host) can't be probed with a literal "*" Host:
 		// concretizeHost substitutes a concrete label so the request is meaningful.
 		host := concretizeHost(s.Host)
 		add(Probe{Name: "root " + s.Host, Host: host, Path: "/"})

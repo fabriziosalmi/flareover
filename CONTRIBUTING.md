@@ -8,13 +8,13 @@ exist to protect it.
 flareover must **never emit configuration that silently changes behaviour**. Every source element gets
 exactly one verdict:
 
-- **AUTO** — a provably-equivalent mapping exists → config is generated.
-- **ASK** — a faithful mapping exists but one detail is ambiguous → a single bounded yes/no.
-- **MANUAL** — no faithful deterministic mapping → surfaced, never guessed.
+- **AUTO**: a provably-equivalent mapping exists → config is generated.
+- **ASK**: a faithful mapping exists but one detail is ambiguous → a single bounded yes/no.
+- **MANUAL**: no faithful deterministic mapping → surfaced, never guessed.
 
 If you add a mapping, it may only be **AUTO** when the target genuinely reproduces the source
 behaviour. When in doubt, it is ASK or MANUAL. A plausible-but-approximate mapping presented as AUTO is
-the one kind of change that will always be rejected — "honest and incomplete" beats "complete and
+the one kind of change that will always be rejected: "honest and incomplete" beats "complete and
 wrong".
 
 ## Ground rules
@@ -46,9 +46,9 @@ go build ./cmd/flareover
 go test ./...
 ```
 
-Test fixtures under `testdata/fixtures/` are sanitized captures — safe to read, never real data. Real
+Test fixtures under `testdata/fixtures/` are sanitized captures, safe to read, never real data. Real
 per-migration snapshots and any infrastructure notes stay out of the repo (see `.gitignore`).
 
 ## Security
 
-Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
+Please report vulnerabilities privately (see [SECURITY.md](SECURITY.md)).

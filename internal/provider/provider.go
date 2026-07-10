@@ -1,10 +1,11 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package provider is the honest catalogue of places to put an edge node. Its
 // whole reason to exist is a single distinction the sovereignty pitch must never
 // blur: an EU *region* is not EU *sovereignty*. A US-operated cloud in Milan
 // gives European data residency but remains reachable under the US CLOUD Act /
-// FISA — so this package tags every provider with its Operator and Exposure and
+// FISA, so this package tags every provider with its Operator and Exposure and
 // refuses to call a hyperscaler "sovereign". flareover offers the pragmatic
 // option and states the trade-off; it never markets it away.
 //
@@ -14,7 +15,7 @@ package provider
 
 import "strings"
 
-// Operator is who ultimately controls the infrastructure — the fact that decides
+// Operator is who ultimately controls the infrastructure: the fact that decides
 // which jurisdiction can compel access.
 type Operator string
 
@@ -35,7 +36,7 @@ type Provider struct {
 }
 
 // Sovereign reports whether the operator is EU-owned (no foreign-jurisdiction
-// compulsion path) — the only providers flareover will call "sovereign".
+// compulsion path): the only providers flareover will call "sovereign".
 func (p Provider) Sovereign() bool { return p.Operator == EUOwned }
 
 // Registry is the built-in catalogue. Order: EU-sovereign first, then the

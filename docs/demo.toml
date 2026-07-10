@@ -1,4 +1,4 @@
-# flareover — README hero storyboard (rendered by firstframe → docs/demo.svg,
+# flareover: README hero storyboard (rendered by firstframe → docs/demo.svg,
 # which GitHub animates). Every number is verbatim from a real run against the
 # sanitized conformance fixture: 43 elements · 31 AUTO · 11 ASK · 1 MANUAL · 72%.
 #
@@ -7,7 +7,7 @@
 
 [meta]
 name        = "flareover"
-tagline     = "flareover — deterministic edge migration to EU-sovereign infrastructure"
+tagline     = "flareover: deterministic edge migration to EU-sovereign infrastructure"
 theme       = "mocha"
 width       = 880
 height      = 630
@@ -21,7 +21,7 @@ duration_ms = 700
 
 [[beat]]
 kind  = "output"
-lines = [ { text = "# assess your edge zone — what maps, what to decide, what won't", accent = "dim" } ]
+lines = [ { text = "# assess your edge zone: what maps, what to decide, what won't", accent = "dim" } ]
 
 [[beat]]
 kind = "prompt"
@@ -73,7 +73,7 @@ kind       = "output"
 stagger_ms = 110
 lines = [
   { text = "  the orange cloud: free   ·   your EU stack: 8.49 EUR/mo", accent = "green" },
-  { text = "  the case for leaving is sovereignty & resilience — not the bill", accent = "dim" },
+  { text = "  the case for leaving is sovereignty & resilience, not the bill", accent = "dim" },
 ]
 
 # ── providers ──
@@ -83,7 +83,7 @@ duration_ms = 900
 
 [[beat]]
 kind  = "output"
-lines = [ { text = "# pick where the edge lands — honest sovereignty tiers", accent = "dim" } ]
+lines = [ { text = "# pick where the edge lands: honest sovereignty tiers", accent = "dim" } ]
 
 [[beat]]
 kind = "prompt"
@@ -104,7 +104,7 @@ kind       = "output"
 stagger_ms = 110
 lines = [
   { text = "  ✅ EU-sovereign   Hetzner · OVH · Contabo · Aruba · Scaleway", accent = "green" },
-  { text = "  ⚠️ EU residency   AWS · GCP · Azure (Milan) — US CLOUD Act reach", accent = "yellow" },
+  { text = "  ⚠️ EU residency   AWS · GCP · Azure (Milan): US CLOUD Act reach", accent = "yellow" },
 ]
 
 # ── prepare ──
@@ -135,5 +135,5 @@ kind       = "output"
 stagger_ms = 110
 lines = [
   { text = "  ✓ Caddyfile · caddy-waf · PowerDNS zone · WireGuard mesh", accent = "green" },
-  { text = "  ✓ MIGRATION.md — every element, and exactly what it became", accent = "green" },
+  { text = "  ✓ MIGRATION.md: every element, and exactly what it became", accent = "green" },
 ]

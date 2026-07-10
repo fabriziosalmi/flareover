@@ -1,8 +1,9 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package guard is the Failguards muscle as a running loop. After a cutover it
 // watches the migrated edge's health; when it degrades past a threshold it fires
-// a trigger — a rollback (back to the source) or, in failover framing, a flip to
+// a trigger: a rollback (back to the source) or, in failover framing, a flip to
 // a warm standby. The same watch is the failover primitive: monitor the primary,
 // act on catastrophe. The trigger is a caller-supplied hook, so the dangerous
 // outward action (a DNS write) stays explicit and testable in isolation.
@@ -96,7 +97,7 @@ func Watch(ctx context.Context, check Check, o Options) (triggered bool, err err
 }
 
 // HTTPCheck builds a health check that fetches url and verifies the status code
-// (and, over HTTPS, a valid certificate — no InsecureSkipVerify). A non-match or
+// (and, over HTTPS, a valid certificate: no InsecureSkipVerify). A non-match or
 // a transport/TLS error is unhealthy.
 func HTTPCheck(url string, expectStatus int) Check {
 	client := &http.Client{

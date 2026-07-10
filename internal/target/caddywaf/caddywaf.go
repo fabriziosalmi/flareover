@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package caddywaf renders the caddy-waf rule corpus (rules.json) from the
@@ -64,7 +65,7 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 
 	note := ""
 	if p.WAF.ManagedOWASP {
-		note = "OWASP CRS not included here — generate it into the same rules.json with caddy-waf's" +
+		note = "OWASP CRS not included here. Generate it into the same rules.json with caddy-waf's" +
 			" get_owasp_rules.py, then merge. CRS is comparable to, not identical to, Cloudflare's managed set."
 	}
 	arts := []target.Artifact{{

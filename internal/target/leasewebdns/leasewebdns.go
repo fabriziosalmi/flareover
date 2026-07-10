@@ -1,10 +1,11 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package leasewebdns renders and provisions the authoritative zone on Leaseweb
 // DNS (EU-owned, Netherlands). Like every DNS target it splits into a pure
 // Generator (an offline review artifact) and a live Provisioner:
 //
-//	leaseweb-dns/<zone>.zone   records only (no SOA/NS — Leaseweb owns them), a
+//	leaseweb-dns/<zone>.zone   records only (no SOA/NS: Leaseweb owns them), a
 //	                           preview of what the apply will set
 //
 // The live apply (provision.go) uses the Leaseweb Domains API
@@ -35,7 +36,7 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 	origin := zonefile.FQDN(z.Name)
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "; flareover-generated records for %s — preview of the Leaseweb DNS apply.\n", z.Name)
+	fmt.Fprintf(&b, "; flareover-generated records for %s: preview of the Leaseweb DNS apply.\n", z.Name)
 	b.WriteString("; Leaseweb owns SOA and NS for the zone; they are intentionally omitted.\n")
 	b.WriteString("; Apply live with: flareover provision --dns leaseweb (LEASEWEB_API_KEY).\n")
 	fmt.Fprintf(&b, "$ORIGIN %s\n", origin)
@@ -44,7 +45,7 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 		b.WriteString(zonefile.RenderRecord(origin, r))
 	}
 
-	note := "Preview only — the live apply reconciles each rrset via the Leaseweb Domains API " +
+	note := "Preview only: the live apply reconciles each rrset via the Leaseweb Domains API " +
 		"(provision --dns leaseweb). The Leaseweb DNS domain must already exist. Leaseweb owns SOA/NS; " +
 		"the registrar NS cutover stays a human step."
 	if z.DNSSEC {

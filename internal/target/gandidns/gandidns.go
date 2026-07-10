@@ -1,10 +1,11 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package gandidns renders and provisions the authoritative zone on Gandi
 // LiveDNS (EU-owned, France). Like every DNS target it splits into a pure
 // Generator (an offline review artifact) and a live Provisioner:
 //
-//	gandi-dns/<zone>.zone   records only (no SOA/NS — Gandi owns them), a preview
+//	gandi-dns/<zone>.zone   records only (no SOA/NS: Gandi owns them), a preview
 //	                        of what the apply will set
 //
 // The live apply (provision.go) uses Gandi LiveDNS: it PUTs each (name,type)
@@ -34,7 +35,7 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 	origin := zonefile.FQDN(z.Name)
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "; flareover-generated records for %s — preview of the Gandi LiveDNS apply.\n", z.Name)
+	fmt.Fprintf(&b, "; flareover-generated records for %s: preview of the Gandi LiveDNS apply.\n", z.Name)
 	b.WriteString("; Gandi owns SOA and NS for the zone; they are intentionally omitted.\n")
 	b.WriteString("; Apply live with: flareover provision --dns gandi (GANDI_PAT).\n")
 	fmt.Fprintf(&b, "$ORIGIN %s\n", origin)
@@ -43,7 +44,7 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 		b.WriteString(zonefile.RenderRecord(origin, r))
 	}
 
-	note := "Preview only — the live apply PUTs each rrset via Gandi LiveDNS (provision --dns gandi). " +
+	note := "Preview only: the live apply PUTs each rrset via Gandi LiveDNS (provision --dns gandi). " +
 		"The domain must be attached to LiveDNS. Gandi owns SOA/NS; the registrar NS cutover stays a human step."
 	if z.DNSSEC {
 		note += " DNSSEC requested: manage it in the Gandi control panel (not yet automated)."

@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package plan
@@ -12,7 +13,7 @@ import (
 
 // TestChallengeConvertedToBlockOnYes pins the waf-challenge round-trip: the
 // answer key classify mints (via cf.Rule.Name) must route back here so that
-// opting in actually emits a hard block — and opting out emits nothing.
+// opting in actually emits a hard block, and opting out emits nothing.
 func TestChallengeConvertedToBlockOnYes(t *testing.T) {
 	snap := cf.Snapshot{Rulesets: []cf.Ruleset{{
 		Phase: "http_request_firewall_custom",
@@ -192,7 +193,7 @@ func TestStrictOriginVerify(t *testing.T) {
 
 // TestChallengeAsBlockHonored pins the audit fix: the UA and IP-access
 // challenge-as-block ASKs must actually emit a block when answered yes (they were
-// false-ASKs before — buildWAF never read s.UARules and ignored ip-access
+// false-ASKs before: buildWAF never read s.UARules and ignored ip-access
 // challenges), and must emit nothing when unanswered.
 func TestChallengeAsBlockHonored(t *testing.T) {
 	snap := cf.Snapshot{

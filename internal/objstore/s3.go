@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package objstore
@@ -118,7 +119,7 @@ func ExtractS3(ctx context.Context, cfg S3Config) (Snapshot, error) {
 			}
 		}
 
-		// Policy presence (JSON, not XML) — record it so it surfaces as MANUAL.
+		// Policy presence (JSON, not XML): record it so it surfaces as MANUAL.
 		if body, err := cfg.get(ctx, "/"+b.Name+"?policy"); err == nil && len(strings.TrimSpace(string(body))) > 0 {
 			bucket.PolicyJSON = string(body)
 		}

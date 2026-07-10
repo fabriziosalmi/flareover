@@ -1,13 +1,13 @@
 ---
 title: Overview
-description: "Move your site off the orange cloud onto your own EU servers — without changing how it behaves. A deterministic, 0% false-positive migration engine."
+description: "Move your site off the orange cloud onto your own EU servers, without changing how it behaves. A deterministic, 0% false-positive migration engine."
 ---
 
-**Move your site off the orange cloud onto your own EU servers — without changing how it behaves.**
+**Move your site off the orange cloud onto your own EU servers, without changing how it behaves.**
 
 `flareover` is an [AGPL-3.0](https://github.com/fabriziosalmi/flareover/blob/main/LICENSE), single-binary Go engine that reads a live managed-edge zone and rebuilds the equivalent configuration for an open-source, self-hosted stack (Caddy, PowerDNS, CertMate, …) on EU-sovereign infrastructure.
 
-Its one rule — the whole reason the project exists — is a **0% false-positive contract**: it never emits configuration that silently changes behavior.
+Its one rule (the whole reason the project exists) is a **0% false-positive contract**: it never emits configuration that silently changes behavior.
 
 - Where it can **prove** an exact equivalent, it applies it (**AUTO**).
 - Where a choice is genuinely ambiguous, it asks you one yes/no (**ASK**).
@@ -19,7 +19,7 @@ That is the difference between a migration you can trust and a migration you hav
 
 ## Why this exists
 
-Leaving a big managed edge means rebuilding, by hand, everything the dashboard quietly did for you — DNS, TLS certificates, redirects, firewall/WAF rules, caching — and hoping you didn't miss something that silently breaks the site. flareover does that rebuild deterministically and tells you, honestly, exactly what it could and could not carry over.
+Leaving a big managed edge means rebuilding, by hand, everything the dashboard quietly did for you (DNS, TLS certificates, redirects, firewall/WAF rules, caching) and hoping you didn't miss something that silently breaks the site. flareover does that rebuild deterministically and tells you, honestly, exactly what it could and could not carry over.
 
 ## The 30-second tour
 
@@ -37,12 +37,12 @@ Everything up to the DNS flip is a review artifact you can read in `git` before 
 
 | Concern | Tool |
 |---------|------|
-| Authoritative DNS | Self-hosted **PowerDNS**, or a managed target via `--dns` — see **[DNS Targets](/docs/dns-targets/)** |
+| Authoritative DNS | Self-hosted **PowerDNS**, or a managed target via `--dns` (see **[DNS Targets](/docs/dns-targets/)**) |
 | Reverse proxy / CDN / TLS | **Caddy** (native ACME, HTTP/3) |
 | WAF | **caddy-waf** (OWASP, rate-limit, IP/ASN/country, blocklists) |
 | Edge cache | **souin** (Caddy module) |
-| Certificates | **CertMate** — DNS-01, wildcard, Let's Encrypt or **Actalis** (EU CA) |
-| Object storage | Self-hosted **MinIO**, or managed EU S3 — see **[Object Storage](/docs/object-storage/)** |
+| Certificates | **CertMate**: DNS-01, wildcard, Let's Encrypt or **Actalis** (EU CA) |
+| Object storage | Self-hosted **MinIO**, or managed EU S3 (see **[Object Storage](/docs/object-storage/)**) |
 | Sovereign origin link | **WireGuard** mesh (replaces the managed tunnel; origin stays inbound-free) |
 | Egress shield (optional) | **secure-proxy-manager** (default-deny + allowlist, fail-closed) |
 
@@ -56,4 +56,4 @@ Everything up to the DNS flip is a review artifact you can read in `git` before 
 
 ---
 
-> **Status.** All five phases are implemented; the five core adapters (PowerDNS, CertMate, MinIO, WireGuard mesh, secure-proxy-manager) are proven live against real services. The managed DNS/storage backends and the Terraform edge module are verified against each vendor's documented API and test harness (Tier B) and promoted to live-proven after a real run. Nothing claims a proof it hasn't earned — see [Coverage Matrix](/docs/coverage-matrix/).
+> **Status.** All five phases are implemented; the five core adapters (PowerDNS, CertMate, MinIO, WireGuard mesh, secure-proxy-manager) are proven live against real services. The managed DNS/storage backends and the Terraform edge module are verified against each vendor's documented API and test harness (Tier B) and promoted to live-proven after a real run. Nothing claims a proof it hasn't earned. See [Coverage Matrix](/docs/coverage-matrix/).

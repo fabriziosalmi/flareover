@@ -1,12 +1,12 @@
 # Scenario: keep your origin, re-tunnel it off Cloudflare
 
-The lowest-risk way to leave Cloudflare — and the one most self-hosters actually need.
+The lowest-risk way to leave Cloudflare, and the one most self-hosters actually need.
 
 ## When this is you
 
 You run **Cloudflare in front of an origin you reach with a Cloudflare Tunnel** (`cloudflared`):
 a homelab box, an on-prem server, a VM that has no public inbound. You want off Cloudflare, but
-the origin **can't or shouldn't move** — it's where your app lives.
+the origin **can't or shouldn't move**: it's where your app lives.
 
 You don't migrate the origin. You **swap the edge and the tunnel**, and leave the origin where it is.
 
@@ -31,10 +31,10 @@ You don't migrate the origin. You **swap the edge and the tunnel**, and leave th
 
 ## Why it's the safest migration
 
-The origin — the app, the risky part — **is not touched**. The only behavioural surface that
+The origin (the app, the risky part) **is not touched**. The only behavioural surface that
 changes is the edge, which flareover rebuilds deterministically from your zone, and the tunnel,
 which becomes WireGuard. Nothing about how your app runs changes. Honest scope: the app is
-identical; the *tunnel agent* on the origin swaps from `cloudflared` to WireGuard — one service
+identical; the *tunnel agent* on the origin swaps from `cloudflared` to WireGuard: one service
 in, one service out.
 
 ## Steps
@@ -46,7 +46,7 @@ in, one service out.
      --mesh-edge <edge-public-ip>:51820 --out ./out
    ```
 
-   HA — several edges, one per public entry point (name them for readable configs):
+   HA: several edges, one per public entry point (name them for readable configs):
 
    ```bash
    flareover prepare zone.snapshot.json \
@@ -54,7 +54,7 @@ in, one service out.
      --mesh-edge aws-milano=18.2.3.4:51820 --out ./out
    ```
 
-2. **Deploy each edge** on an EU node. Pick a provider with eyes open — `flareover providers` lists
+2. **Deploy each edge** on an EU node. Pick a provider with eyes open: `flareover providers` lists
    them by honest sovereignty tier (EU-owned vs a hyperscaler's EU region under US jurisdiction).
    Add `--edge-provider <key>` to step 1 and flareover emits a ready-to-paste **cloud-init** per edge
    (`edge/cloud-init[-<name>].yaml`) that installs the Caddy build, writes the generated Caddyfile +
@@ -79,7 +79,7 @@ in, one service out.
    wg-quick up wg0                          # dials every edge, keepalive holds it
    ```
 
-   The origin now answers the edge(s) at its mesh IP (`10.99.0.254:80`) — outbound-only, zero
+   The origin now answers the edge(s) at its mesh IP (`10.99.0.254:80`), outbound-only, zero
    inbound, exactly as under Cloudflare Tunnel.
 
 4. **Parity-gate, then cut over.** `flareover present --after-addr <edge-ip>:443` proves the new
@@ -93,5 +93,5 @@ in, one service out.
 
 Multiple edges make the **edge** highly available: several public front doors, all meshed to the
 same origin, distributed by DNS and health-gated by `guard`. The **origin's** own redundancy is
-yours to provide — if it's a single box, it's a single point of failure, and flareover says so
+yours to provide: if it's a single box, it's a single point of failure, and flareover says so
 rather than inventing redundancy that isn't there.

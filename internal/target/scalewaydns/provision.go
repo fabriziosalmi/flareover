@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package scalewaydns
@@ -21,12 +22,12 @@ const defaultBaseURL = "https://api.scaleway.com"
 // Provisioner stands the zone up on Scaleway's managed DNS via the Domains API
 // (v2beta1). It is idempotent: it creates the zone if absent (an already-existing
 // zone is not an error), then issues one `set` change per (name,type), which
-// REPLACEs that rrset — so re-running converges, with no duplicate records.
+// REPLACEs that rrset, so re-running converges, with no duplicate records.
 // Scaleway owns SOA/NS; the registrar NS cutover stays an explicit human step
 // (Nameservers returns the delegation targets to publish).
 type Provisioner struct {
 	BaseURL   string // default https://api.scaleway.com
-	SecretKey string // X-Auth-Token — SCW_SECRET_KEY
+	SecretKey string // X-Auth-Token: SCW_SECRET_KEY
 	ProjectID string // SCW_DEFAULT_PROJECT_ID (needed to create the zone)
 	HTTP      *http.Client
 }
@@ -75,7 +76,7 @@ func (p *Provisioner) do(ctx context.Context, method, path string, body, out any
 
 // Provision creates (if needed) and fully reconciles the zone.
 func (p *Provisioner) Provision(ctx context.Context, z ir.DNSZone) error {
-	// 1) Create the zone. An already-existing zone is not an error — Scaleway
+	// 1) Create the zone. An already-existing zone is not an error. Scaleway
 	// signals that with 409, and some paths word it in the body, so tolerate both.
 	create := map[string]any{"domain": z.Name, "subdomain": "", "project_id": p.ProjectID}
 	if status, err := p.do(ctx, http.MethodPost, "/domain/v2beta1/dns-zones", create, nil); err != nil {
@@ -181,7 +182,7 @@ func scwData(r ir.DNSRecord) string {
 	case "CNAME", "MX", "NS":
 		return zonefile.FQDN(r.Content)
 	case "SRV":
-		return zonefile.SRVTargetFQDN(r.Content) // "weight port target." — priority is a separate field
+		return zonefile.SRVTargetFQDN(r.Content) // "weight port target." (priority is a separate field)
 	default: // A, AAAA, TXT, CAA, ... take the raw value
 		return r.Content
 	}

@@ -1,4 +1,4 @@
-# flareover — Hetzner Cloud edge node.
+# flareover: Hetzner Cloud edge node.
 #
 # Boots a Caddy + WireGuard edge from the cloud-init flareover generates with
 #   flareover prepare … --edge-provider hetzner --mesh-edge <ip>:<port>
@@ -6,7 +6,7 @@
 # WireGuard and drops the generated config in place; this module just stands up
 # the server, firewall and SSH key to run it on Hetzner (EU-owned, sovereign).
 #
-# The cloud-init carries the mesh WireGuard private key, so it is a SECRET —
+# The cloud-init carries the mesh WireGuard private key, so it is a SECRET:
 # keep <out>/ out of version control.
 
 terraform {
@@ -31,7 +31,7 @@ resource "hcloud_ssh_key" "edge" {
 
 # The edge serves HTTP/HTTPS (+ HTTP/3 over UDP 443) and terminates the
 # WireGuard mesh. Origin traffic rides the tunnel, so no origin ports are
-# exposed. SSH is closed by default — set ssh_source_ips to your admin CIDRs.
+# exposed. SSH is closed by default. Set ssh_source_ips to your admin CIDRs.
 resource "hcloud_firewall" "edge" {
   name = "${var.name}-fw"
 

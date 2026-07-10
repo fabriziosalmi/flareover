@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package azuredns
@@ -143,7 +144,7 @@ func (p *Provisioner) zoneBase() string {
 }
 
 // recordProps builds the Azure type-specific recordset properties for one
-// (name,type) group. Unknown types are rejected rather than silently dropped —
+// (name,type) group. Unknown types are rejected rather than silently dropped:
 // a record we cannot map faithfully must surface, never vanish.
 func recordProps(typ string, ttl int, recs []ir.DNSRecord) (map[string]any, error) {
 	props := map[string]any{"TTL": ttl}
@@ -213,7 +214,7 @@ func recordProps(typ string, ttl int, recs []ir.DNSRecord) (map[string]any, erro
 		}
 		props["caaRecords"] = arr
 	default:
-		return nil, fmt.Errorf("azuredns: unsupported record type %q for %d record(s) — map it by hand in the Azure portal", typ, len(recs))
+		return nil, fmt.Errorf("azuredns: unsupported record type %q for %d record(s): map it by hand in the Azure portal", typ, len(recs))
 	}
 	return props, nil
 }
@@ -256,7 +257,7 @@ func (p *Provisioner) Provision(ctx context.Context, z ir.DNSZone) error {
 	return nil
 }
 
-// Nameservers returns the zone's delegation set — the NS to publish at the registrar.
+// Nameservers returns the zone's delegation set: the NS to publish at the registrar.
 func (p *Provisioner) Nameservers(ctx context.Context, zone string) ([]string, error) {
 	status, raw, err := p.do(ctx, http.MethodGet, p.zoneBase()+zone, nil)
 	if err != nil {

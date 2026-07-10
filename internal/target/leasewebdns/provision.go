@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package leasewebdns
@@ -26,7 +27,7 @@ const defaultBaseURL = "https://api.leaseweb.com/hosting/v2/domains"
 // step.
 type Provisioner struct {
 	BaseURL string
-	APIKey  string // LEASEWEB_API_KEY — sent as the "X-Lsw-Auth" header
+	APIKey  string // LEASEWEB_API_KEY: sent as the "X-Lsw-Auth" header
 	HTTP    *http.Client
 }
 

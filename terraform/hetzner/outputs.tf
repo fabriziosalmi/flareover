@@ -1,5 +1,5 @@
 output "edge_ipv4" {
-  description = "Public IPv4 of the edge — pass it to `flareover prepare --edge-ip <this>` and use it as the WireGuard endpoint."
+  description = "Public IPv4 of the edge: pass it to `flareover prepare --edge-ip <this>` and use it as the WireGuard endpoint."
   value       = hcloud_server.edge.ipv4_address
 }
 

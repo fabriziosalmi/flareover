@@ -1,9 +1,10 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package cloudflare defines the canonical, read-only snapshot of a Cloudflare
 // zone. A Snapshot is produced by the extractor (or hand-authored as a test
 // fixture) and is the single input to classification and generation. It is a
-// faithful transcription of Cloudflare's configuration surface — no
+// faithful transcription of Cloudflare's configuration surface. No
 // interpretation happens here; that is the classifier's job.
 package cloudflare
 
@@ -91,7 +92,7 @@ type ZoneSettings struct {
 	IPGeolocation   *OnOff `json:"ip_geolocation,omitempty"`
 	WebSockets      *OnOff `json:"websockets,omitempty"`
 	DNSSEC          string `json:"dnssec,omitempty"` // "active" | "disabled" | "pending"
-	// Scrape Shield / bot — provider-only edge features (no supported equivalent yet).
+	// Scrape Shield / bot: provider-only edge features (no supported equivalent yet).
 	EmailObfuscation  *OnOff `json:"email_obfuscation,omitempty"`
 	ServerSideExclude *OnOff `json:"server_side_exclude,omitempty"`
 	HotlinkProtection *OnOff `json:"hotlink_protection,omitempty"`
@@ -107,7 +108,7 @@ type HSTS struct {
 	NoSniff           bool `json:"nosniff"`
 }
 
-// DNSRecord is a single record. Proxied=true is the "orange cloud" — the record
+// DNSRecord is a single record. Proxied=true is the "orange cloud": the record
 // resolves to Cloudflare, hiding the true origin.
 type DNSRecord struct {
 	Type     string `json:"type"` // A, AAAA, CNAME, MX, TXT, ...
@@ -122,7 +123,7 @@ type DNSRecord struct {
 // ProxiedHTTPHosts returns the set of hostnames served by a proxied,
 // HTTP-frontable record (A/AAAA/CNAME). These are exactly the hosts that become
 // a Caddy site, so both the classifier and the plan builder use it to decide
-// whether a host-scoped rule has a site to attach to — the classify ⟺ generate
+// whether a host-scoped rule has a site to attach to: the classify ⟺ generate
 // symmetry the 0% false-positive contract requires.
 func (s Snapshot) ProxiedHTTPHosts() map[string]bool {
 	hosts := map[string]bool{}

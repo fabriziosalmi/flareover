@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package route53
@@ -203,7 +204,7 @@ func (p *Provisioner) Provision(ctx context.Context, z ir.DNSZone) error {
 	return nil
 }
 
-// Nameservers returns the zone's delegation set — the NS to publish at the registrar.
+// Nameservers returns the zone's delegation set: the NS to publish at the registrar.
 func (p *Provisioner) Nameservers(ctx context.Context, zone string) ([]string, error) {
 	id, err := p.hostedZoneID(ctx, zone)
 	if err != nil {

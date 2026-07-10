@@ -1,9 +1,10 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package report holds the verdict vocabulary and the honest coverage report
 // that the Assessment phase produces. A Finding is the atomic unit: one
 // Cloudflare element, one verdict, one rationale. The report is the contract
-// with the user — behavior-changing config is only ever generated for AUTO and
+// with the user: behavior-changing config is only ever generated for AUTO and
 // answered-ASK findings; MANUAL findings are surfaced, never guessed.
 package report
 
@@ -110,13 +111,13 @@ func (r Report) Sorted() []Finding {
 func (r Report) Text() string {
 	var b strings.Builder
 	c := r.Counts()
-	fmt.Fprintf(&b, "flareover assessment — %s\n", r.Zone)
+	fmt.Fprintf(&b, "flareover assessment: %s\n", r.Zone)
 	fmt.Fprintf(&b, "%d elements: %d AUTO, %d ASK, %d MANUAL\n\n",
 		len(r.Findings), c[Auto], c[Ask], c[Manual])
 	for _, f := range r.Sorted() {
 		tgt := f.Target
 		if tgt == "" {
-			tgt = "—"
+			tgt = "-"
 		}
 		fmt.Fprintf(&b, "  [%-6s] %-13s %s  → %s\n", f.Verdict, f.Kind, f.Name, tgt)
 		fmt.Fprintf(&b, "            %s\n", f.Rationale)
@@ -135,19 +136,19 @@ func (r Report) Text() string {
 func (r Report) Markdown() string {
 	var b strings.Builder
 	c := r.Counts()
-	fmt.Fprintf(&b, "# flareover assessment — `%s`\n\n", r.Zone)
-	fmt.Fprintf(&b, "**%d** elements — %d AUTO · %d ASK · %d MANUAL\n\n",
+	fmt.Fprintf(&b, "# flareover assessment: `%s`\n\n", r.Zone)
+	fmt.Fprintf(&b, "**%d** elements: %d AUTO · %d ASK · %d MANUAL\n\n",
 		len(r.Findings), c[Auto], c[Ask], c[Manual])
 	b.WriteString("| Verdict | Kind | Element | Target | Rationale |\n")
 	b.WriteString("|---|---|---|---|---|\n")
 	for _, f := range r.Sorted() {
 		tgt := f.Target
 		if tgt == "" {
-			tgt = "—"
+			tgt = "-"
 		}
 		rat := f.Rationale
 		if f.Question != nil {
-			rat += fmt.Sprintf(" _(ASK: %s — default %s)_", f.Question.Prompt, f.Question.Default)
+			rat += fmt.Sprintf(" _(ASK: %s; default %s)_", f.Question.Prompt, f.Question.Default)
 		}
 		fmt.Fprintf(&b, "| %s | %s | `%s` | %s | %s |\n",
 			f.Verdict, f.Kind, f.Name, tgt, escapePipes(rat))

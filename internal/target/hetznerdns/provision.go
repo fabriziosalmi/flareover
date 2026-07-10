@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package hetznerdns
@@ -27,7 +28,7 @@ const defaultBaseURL = "https://dns.hetzner.com/api/v1"
 // exist. Hetzner owns SOA/NS; the registrar NS cutover stays a human step.
 type Provisioner struct {
 	BaseURL string
-	Token   string // HETZNER_DNS_TOKEN — sent as "Auth-API-Token: <token>"
+	Token   string // HETZNER_DNS_TOKEN, sent as "Auth-API-Token: <token>"
 	HTTP    *http.Client
 }
 

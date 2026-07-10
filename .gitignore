@@ -6,7 +6,7 @@
 # Per-migration working state (generated; keep out of the public repo)
 /decisions.lock
 /out/
-# Real per-migration snapshots stay out — but the SANITIZED test fixtures are
+# Real per-migration snapshots stay out, but the SANITIZED test fixtures are
 # tracked, so a fresh clone can run `go test` (the suite reads them).
 *.snapshot.json
 !testdata/fixtures/*.snapshot.json
@@ -18,10 +18,10 @@
 # Go
 /vendor/
 
-# Infrastructure notes, recon, deploy artifacts, secrets — NEVER tracked
+# Infrastructure notes, recon, deploy artifacts, secrets: NEVER tracked
 /infra/
 
-# Private roadmap scratch — never tracked
+# Private roadmap scratch: never tracked
 /PLAN.md
 
 # macOS
@@ -31,7 +31,7 @@
 # deploy/ generated artifacts + secrets
 deploy/out/
 
-# Terraform — plugins/state/secrets never tracked; the lock file IS (pinned
+# Terraform: plugins/state/secrets never tracked; the lock file IS (pinned
 # provider versions), and *.tfvars.example is the sanitized template.
 **/.terraform/*
 *.tfstate

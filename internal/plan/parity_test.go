@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package plan_test
@@ -141,7 +142,7 @@ func TestWAFPolicyValues(t *testing.T) {
 }
 
 // TestGeneratedArtifactsForIPLists proves the generators emit the list files and
-// the Caddy snippet references them — the config is real, not just intent.
+// the Caddy snippet references them: the config is real, not just intent.
 func TestGeneratedArtifactsForIPLists(t *testing.T) {
 	p, err := plan.Build(load(t), buildPlan(t, load(t)))
 	if err != nil {

@@ -1,7 +1,8 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package render turns the engine's reports into terminal output that reads at
-// a glance — colored verdict badges, boxed summaries, aligned columns. It is
+// a glance: colored verdict badges, boxed summaries, aligned columns. It is
 // pure presentation over the same data the plain Text() renderers use, and it
 // degrades to no-color automatically when stdout is not a terminal or NO_COLOR
 // is set, so pipes, CI, and --json stay clean.
@@ -107,9 +108,9 @@ func Doctor(checks []doctor.Check, color bool) string {
 		lines = append(lines, fmt.Sprintf("%s%-5s%s %-22s %s%s%s",
 			statusColor(c.Status), c.Status, p.reset, c.Name, p.dim, c.Detail, p.reset))
 	}
-	verdict := p.green + "GO — target ready to provision" + p.reset
+	verdict := p.green + "GO: target ready to provision" + p.reset
 	if !go_ {
-		verdict = p.red + "NO-GO — resolve the FAIL items before provisioning" + p.reset
+		verdict = p.red + "NO-GO: resolve the FAIL items before provisioning" + p.reset
 	}
 	if len(checks) == 0 {
 		verdict = p.dim + "no checks configured (pass --pdns-url / --certmate-url / --spm-url / --minio-endpoint / --check-caddy)" + p.reset
@@ -136,9 +137,9 @@ func Assess(r report.Report, color bool) string {
 		v     report.Verdict
 		label string
 	}{
-		{report.Manual, "MANUAL — surfaced, never guessed"},
-		{report.Ask, "ASK — one yes/no each"},
-		{report.Auto, "AUTO — generated"},
+		{report.Manual, "MANUAL: surfaced, never guessed"},
+		{report.Ask, "ASK: one yes/no each"},
+		{report.Auto, "AUTO: generated"},
 	}
 	sorted := r.Sorted()
 	for _, g := range groups {
@@ -156,7 +157,7 @@ func Assess(r report.Report, color bool) string {
 		for _, f := range items {
 			tgt := f.Target
 			if tgt == "" {
-				tgt = "—"
+				tgt = "-"
 			}
 			fmt.Fprintf(&b, "  %s %s%-13s%s %s %s→%s %s%s%s\n",
 				p.dot(f.Verdict), p.bold, f.Kind, p.reset, f.Name, p.gray, p.reset, p.cyan, tgt, p.reset)
@@ -206,7 +207,7 @@ func Cost(r cost.Report, color bool) string {
 		fmt.Fprintf(&b, "%s%s→ saving %.2f %s/mo  (%.0f %s/yr)%s\n",
 			p.bold, p.green, r.SavingsMonthly, r.Currency, r.SavingsMonthly*12, r.Currency, p.reset)
 	} else {
-		fmt.Fprintf(&b, "%s%s→ flat sovereign cost %.2f %s/mo — no egress fees, no lock-in%s\n",
+		fmt.Fprintf(&b, "%s%s→ flat sovereign cost %.2f %s/mo: no egress fees, no lock-in%s\n",
 			p.bold, p.green, r.EUStackMonthly, r.Currency, p.reset)
 	}
 	for _, n := range r.Notes {
@@ -260,9 +261,9 @@ func Parity(r parity.Report, color bool) string {
 		greenBg, redBg = "\033[42;30m", "\033[41;30m"
 	}
 	if r.Gate() {
-		fmt.Fprintf(&b, "%s  GATE: PASS  %s  no behavior-changing divergence — cutover permitted\n", greenBg, p.reset)
+		fmt.Fprintf(&b, "%s  GATE: PASS  %s  no behavior-changing divergence: cutover permitted\n", greenBg, p.reset)
 	} else {
-		fmt.Fprintf(&b, "%s  GATE: FAIL  %s  hard divergence — cutover blocked\n", redBg, p.reset)
+		fmt.Fprintf(&b, "%s  GATE: FAIL  %s  hard divergence: cutover blocked\n", redBg, p.reset)
 	}
 	return b.String()
 }

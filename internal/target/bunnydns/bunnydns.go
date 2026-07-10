@@ -1,7 +1,8 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package bunnydns renders the authoritative zone for bunny.net's managed EU
-// DNS — the alternative to self-hosting PowerDNS. Where the powerdns target
+// DNS: the alternative to self-hosting PowerDNS. Where the powerdns target
 // emits a full BIND zone (SOA/NS included) to load onto your own nameservers,
 // bunny.net owns the SOA and NS itself, so this target emits two artifacts:
 //
@@ -38,11 +39,11 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 	origin := zonefile.FQDN(z.Name)
 
 	// 1) A records-only BIND zone. bunny.net is authoritative, so it manages the
-	// SOA and NS — emitting placeholders here would import bogus apex NS and
+	// SOA and NS. Emitting placeholders here would import bogus apex NS and
 	// break delegation. The importer adds these records into the zone created by
 	// `dns zones add`.
 	var b strings.Builder
-	fmt.Fprintf(&b, "; flareover-generated records for %s — import into bunny.net DNS.\n", z.Name)
+	fmt.Fprintf(&b, "; flareover-generated records for %s: import into bunny.net DNS.\n", z.Name)
 	b.WriteString("; bunny.net owns SOA and NS for the zone; they are intentionally omitted.\n")
 	fmt.Fprintf(&b, "$ORIGIN %s\n", origin)
 	b.WriteString("$TTL 300\n\n")
@@ -54,7 +55,7 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 		Path:    "bunny-dns/" + zoneFile,
 		Content: []byte(b.String()),
 		Mode:    0o644,
-		Note:    "Records only — bunny.net owns SOA/NS. Applied by apply.sh via `bunny dns records import`.",
+		Note:    "Records only: bunny.net owns SOA/NS. Applied by apply.sh via `bunny dns records import`.",
 	}
 
 	// 2) The apply script: deterministic, idempotent on the zone, honest about
@@ -64,7 +65,7 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 		Content: []byte(renderApply(z, zoneFile)),
 		Mode:    0o755,
 		Note: "Auth: export BUNNYNET_API_KEY (or run `bunny login`). Re-running the import may " +
-			"duplicate records — apply to a freshly created zone. The registrar NS cutover stays a human step.",
+			"duplicate records. Apply to a freshly created zone. The registrar NS cutover stays a human step.",
 	}
 
 	return []target.Artifact{zoneArt, applyArt}, nil
@@ -74,7 +75,7 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 func renderApply(z ir.DNSZone, zoneFile string) string {
 	var b strings.Builder
 	b.WriteString("#!/usr/bin/env sh\n")
-	b.WriteString("# flareover — apply the authoritative zone to bunny.net managed DNS.\n")
+	b.WriteString("# flareover: apply the authoritative zone to bunny.net managed DNS.\n")
 	b.WriteString("# Deterministically generated from the migration plan; review before running.\n")
 	b.WriteString("# Verified against the bunny.net CLI v0.9 (https://github.com/BunnyWay/cli).\n")
 	b.WriteString("set -eu\n\n")
@@ -85,12 +86,12 @@ func renderApply(z ir.DNSZone, zoneFile string) string {
 	b.WriteString("# Auth is non-interactive via BUNNYNET_API_KEY; `bunny login` is the interactive\n")
 	b.WriteString("# alternative. The key is read from the environment, never passed on argv.\n")
 	b.WriteString("if [ -z \"${BUNNYNET_API_KEY:-}\" ]; then\n")
-	b.WriteString("  echo \"note: BUNNYNET_API_KEY not set — relying on an existing 'bunny login' profile.\" >&2\n")
+	b.WriteString("  echo \"note: BUNNYNET_API_KEY not set: relying on an existing 'bunny login' profile.\" >&2\n")
 	b.WriteString("fi\n\n")
 
 	b.WriteString("# Preflight: the CLI must be installed.\n")
 	b.WriteString("if ! command -v bunny >/dev/null 2>&1; then\n")
-	b.WriteString("  echo \"error: bunny CLI not found — install: curl -fsSL https://cli.bunny.net/install.sh | sh\" >&2\n")
+	b.WriteString("  echo \"error: bunny CLI not found. Install: curl -fsSL https://cli.bunny.net/install.sh | sh\" >&2\n")
 	b.WriteString("  exit 127\n")
 	b.WriteString("fi\n\n")
 

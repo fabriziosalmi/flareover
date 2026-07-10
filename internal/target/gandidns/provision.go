@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package gandidns
@@ -25,7 +26,7 @@ const defaultBaseURL = "https://api.gandi.net/v5/livedns"
 // registrar NS cutover stays a human step.
 type Provisioner struct {
 	BaseURL string
-	PAT     string // GANDI_PAT — sent as "Authorization: Bearer <pat>"
+	PAT     string // GANDI_PAT, sent as "Authorization: Bearer <pat>"
 	HTTP    *http.Client
 }
 

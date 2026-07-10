@@ -1,4 +1,4 @@
-# Astro / Starlight build + tooling — source is tracked, build artifacts are not.
+# Astro / Starlight build + tooling: source is tracked, build artifacts are not.
 node_modules/
 dist/
 .astro/

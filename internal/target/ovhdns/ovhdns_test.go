@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package ovhdns
@@ -48,7 +49,7 @@ func TestGeneratorOmitsSOAandNS(t *testing.T) {
 	}
 	body := string(arts[0].Content)
 	if strings.Contains(body, "\tSOA\t") || strings.Contains(body, "\tNS\t") {
-		t.Error("preview leaked SOA/NS — OVH owns them")
+		t.Error("preview leaked SOA/NS: OVH owns them")
 	}
 	if !strings.Contains(body, "@\t300\tIN\tMX\t10 mail.example.com.") {
 		t.Error("MX preview must embed the priority (BIND rdata)")

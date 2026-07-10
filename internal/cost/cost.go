@@ -1,9 +1,10 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package cost estimates the monetary picture of a migration: which Cloudflare
 // paid tiers/add-ons the captured configuration implies, versus a flat EU-stack
-// cost. It is deliberately honest — it reports a *floor* with ranges and notes,
-// never a fake-precise number — because the strongest argument for leaving is
+// cost. It is deliberately honest (it reports a *floor* with ranges and notes,
+// never a fake-precise number) because the strongest argument for leaving is
 // usually not "you pay X today" but "you're one price/policy change away from
 // lock-in, and the sovereign stack is a flat low cost with no traffic/egress
 // fees." Estimates are surfaced, assumptions are named.
@@ -104,11 +105,11 @@ func Estimate(s cf.Snapshot, opts Options) Report {
 	}
 	// R2 object storage: variable by volume; noted rather than priced.
 	if len(s.R2Buckets) > 0 {
-		add("r2-storage", fmt.Sprintf("%d R2 bucket(s) — volume-priced; migrates to MinIO (no egress fee)", len(s.R2Buckets)), "usage", 0)
+		add("r2-storage", fmt.Sprintf("%d R2 bucket(s): volume-priced; migrates to MinIO (no egress fee)", len(s.R2Buckets)), "usage", 0)
 	}
 	// Access / Zero Trust beyond the free seat tier.
 	if len(s.AccessApps) > 0 {
-		add("zero-trust", fmt.Sprintf("%d Access app(s) — free up to 50 users, then per-seat", len(s.AccessApps)), "usage", 0)
+		add("zero-trust", fmt.Sprintf("%d Access app(s): free up to 50 users, then per-seat", len(s.AccessApps)), "usage", 0)
 	}
 
 	// --- infer the Cloudflare plan floor -----------------------------------
@@ -134,7 +135,7 @@ func Estimate(s cf.Snapshot, opts Options) Report {
 
 	if r.CloudflareMonthlyMin == 0 {
 		r.Notes = append(r.Notes,
-			"On paper this zone fits Cloudflare's Free plan today — the case for leaving is sovereignty and resilience, not this month's bill.",
+			"On paper this zone fits Cloudflare's Free plan today. The case for leaving is sovereignty and resilience, not this month's bill.",
 			"The real long-term win is no traffic/egress fees and no exposure to a future price or policy change: a flat, self-owned cost.")
 	} else {
 		r.Notes = append(r.Notes,
@@ -195,7 +196,7 @@ func planMonthly(tier string) float64 {
 // Text renders the cost report for the terminal.
 func (r Report) Text() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "flareover cost — %s\n\n", r.Zone)
+	fmt.Fprintf(&b, "flareover cost: %s\n\n", r.Zone)
 	if len(r.Drivers) > 0 {
 		b.WriteString("Cost drivers detected:\n")
 		for _, d := range r.Drivers {
@@ -215,7 +216,7 @@ func (r Report) Text() string {
 	if r.SavingsMonthly > 0 {
 		fmt.Fprintf(&b, "\n→ Estimated saving: %.2f %s/mo (%.0f %s/yr)\n", r.SavingsMonthly, r.Currency, r.SavingsMonthly*12, r.Currency)
 	} else {
-		fmt.Fprintf(&b, "\n→ Flat sovereign cost: %.2f %s/mo — no traffic/egress fees, no lock-in.\n", r.EUStackMonthly, r.Currency)
+		fmt.Fprintf(&b, "\n→ Flat sovereign cost: %.2f %s/mo, no traffic/egress fees, no lock-in.\n", r.EUStackMonthly, r.Currency)
 	}
 	for _, n := range r.Notes {
 		fmt.Fprintf(&b, "  note: %s\n", n)

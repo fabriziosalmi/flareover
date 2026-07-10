@@ -1,11 +1,12 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package cloudflare's extractor turns a live zone into a Snapshot by calling
 // the Cloudflare REST API v4 read-only. It depends on nothing but an API token
-// (scoped Zone:Read, DNS:Read, and — for firewall/rules — Zone WAF:Read), so
+// (scoped Zone:Read, DNS:Read, and, for firewall/rules, Zone WAF:Read), so
 // flareover is a standalone tool: no dashboard, no MCP, no write access. Every
 // call here is a GET. Failures on optional surfaces (workers, LBs, email) are
-// tolerated and noted, never fatal — extraction should degrade, not abort.
+// tolerated and noted, never fatal: extraction should degrade, not abort.
 package cloudflare
 
 import (
@@ -41,7 +42,7 @@ func NewClient(token string) *Client {
 	return &Client{Token: token, HTTP: &http.Client{Timeout: 30 * time.Second}}
 }
 
-// base is the API root — the mock override, or the real Cloudflare endpoint.
+// base is the API root: the mock override, or the real Cloudflare endpoint.
 func (c *Client) base() string {
 	if c.BaseURL != "" {
 		return strings.TrimRight(c.BaseURL, "/")

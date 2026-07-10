@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package docsgen
@@ -46,7 +47,7 @@ func TestCoverageMatrixInSync(t *testing.T) {
 }
 
 // TestSovereigntyInSync keeps the sovereignty-tiers catalogue generated from the
-// same provider.Registry the CLI uses — a hyperscaler can't be silently retiered.
+// same provider.Registry the CLI uses: a hyperscaler can't be silently retiered.
 func TestSovereigntyInSync(t *testing.T) {
 	syncCheck(t, sovereigntyMD, Sovereignty(), "sovereignty-tiers.md", "provider.Registry")
 }
@@ -67,8 +68,8 @@ func syncCheck(t *testing.T, path, got, name, source string) {
 		t.Fatalf("read generated docs (run `go test ./internal/docsgen -update`): %v", err)
 	}
 	if string(want) != got {
-		t.Errorf("%s is out of sync with %s — run:\n"+
+		t.Errorf("%s is out of sync with %s. Run:\n"+
 			"  go test ./internal/docsgen -update\n"+
-			"(The docs are generated from the code and must not drift — the 0%%FP guarantee applied to the docs themselves.)", name, source)
+			"(The docs are generated from the code and must not drift: the 0%%FP guarantee applied to the docs themselves.)", name, source)
 	}
 }

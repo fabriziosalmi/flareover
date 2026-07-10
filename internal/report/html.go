@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package report
@@ -8,7 +9,7 @@ import (
 	"strings"
 )
 
-// HTML renders the coverage report as a single self-contained HTML document —
+// HTML renders the coverage report as a single self-contained HTML document:
 // the "Presentation that leaves no doubt", shareable with a stakeholder. It is
 // pure rendering of already-decided verdicts: it invents nothing, so it cannot
 // affect the 0% FP contract. No external assets (CSP-safe), theme-aware.
@@ -20,11 +21,11 @@ func (r Report) HTML() string {
 	for _, f := range r.Sorted() {
 		tgt := f.Target
 		if tgt == "" {
-			tgt = "—"
+			tgt = "-"
 		}
 		rat := html.EscapeString(f.Rationale)
 		if f.Question != nil {
-			rat += fmt.Sprintf(` <span class="ask">ASK: %s — options %s, default <b>%s</b></span>`,
+			rat += fmt.Sprintf(` <span class="ask">ASK: %s (options %s, default <b>%s</b>)</span>`,
 				html.EscapeString(f.Question.Prompt),
 				html.EscapeString(strings.Join(f.Question.Options, "/")),
 				html.EscapeString(f.Question.Default))
@@ -37,7 +38,7 @@ func (r Report) HTML() string {
 
 	banner := ""
 	if deterministic {
-		banner = `<p class="det">✓ Fully deterministic — every element maps AUTO. No decisions required.</p>`
+		banner = `<p class="det">✓ Fully deterministic: every element maps AUTO. No decisions required.</p>`
 	} else {
 		banner = fmt.Sprintf(`<p class="att">%d item(s) need attention: answer the ASK questions, handle the MANUAL items. Nothing is guessed.</p>`,
 			c[Ask]+c[Manual])
@@ -46,7 +47,7 @@ func (r Report) HTML() string {
 	return fmt.Sprintf(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>flareover assessment — %s</title>
+<title>flareover assessment: %s</title>
 <style>
  :root{--bg:#fff;--fg:#1a1d24;--mut:#5b6470;--line:#e4e7ec;--card:#f7f8fa;
    --auto:#12805c;--ask:#a8700a;--manual:#c0392b;--code:#f0f2f5}
@@ -80,7 +81,7 @@ func (r Report) HTML() string {
  .ask{color:var(--ask);font-style:italic}
  .foot{color:var(--mut);font-size:.82rem;margin-top:1.6rem;border-top:1px solid var(--line);padding-top:1rem}
 </style></head><body><div class="wrap">
-<h1><span class="flare">flare</span>over — assessment</h1>
+<h1><span class="flare">flare</span>over: assessment</h1>
 <div class="zone">%s</div>
 <div class="pills">
  <span class="pill">%d elements</span>
@@ -95,7 +96,7 @@ func (r Report) HTML() string {
 %s</tbody></table></div>
 <p class="foot">0%% false-positive contract: behavior-changing config is generated only for AUTO and
 answered-ASK items. MANUAL items are surfaced, never guessed. Classification is a pure function of
-the snapshot and decisions — re-running yields identical output.</p>
+the snapshot and decisions: re-running yields identical output.</p>
 </div></body></html>
 `, html.EscapeString(r.Zone), html.EscapeString(r.Zone),
 		len(r.Findings), c[Auto], c[Ask], c[Manual], banner, rows.String())

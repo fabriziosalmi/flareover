@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package spm
@@ -16,7 +17,7 @@ func TestDefaultDenyAndAllowlist(t *testing.T) {
 		DefaultDeny: true,
 		Allow:       []string{"api.stripe.com", "10.0.0.0/8", "192.0.2.1"},
 	})
-	// /api/settings is a flat bulk map — NOT {"name":...,"value":...}, which SPM
+	// /api/settings is a flat bulk map, NOT {"name":...,"value":...}, which SPM
 	// silently drops (leaving egress open). This asserts the real API shape.
 	if !strings.Contains(out, `{"egress_default_deny":"true"}`) {
 		t.Error("default-deny must be a flat {key:value} settings update")

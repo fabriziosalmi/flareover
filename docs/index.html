@@ -3,20 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>flareover — deterministic edge migration to EU-sovereign infrastructure</title>
-<meta name="description" content="A deterministic, 0% false-positive engine that rebuilds your proxied CDN/WAF edge on EU-sovereign self-hosted infrastructure — Caddy, PowerDNS, CertMate, MinIO. AGPL.">
+<title>flareover: deterministic edge migration to EU-sovereign infrastructure</title>
+<meta name="description" content="A deterministic, 0% false-positive engine that rebuilds your proxied CDN/WAF edge on EU-sovereign self-hosted infrastructure: Caddy, PowerDNS, CertMate, MinIO. AGPL.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="canonical" href="https://www.flareover.com/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.flareover.com/">
-<meta property="og:title" content="flareover — leave the orange cloud, without breaking your site">
+<meta property="og:title" content="flareover: leave the orange cloud, without breaking your site">
 <meta property="og:description" content="A deterministic, 0% false-positive engine that rebuilds your CDN/WAF edge on EU-sovereign self-hosted infrastructure. It never emits config that silently changes behavior.">
 <meta property="og:image" content="https://www.flareover.com/og-image.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="flareover — leave the orange cloud, without breaking your site">
+<meta name="twitter:title" content="flareover: leave the orange cloud, without breaking your site">
 <meta name="twitter:description" content="Deterministic migration to EU-sovereign self-hosted infrastructure. 0% false-positive.">
 <meta name="twitter:image" content="https://www.flareover.com/og-image.png">
 <meta name="color-scheme" content="light dark">
@@ -40,7 +40,7 @@
     --flare:#e2650f; --flare2:#c2560a; --eu:#0e9c62; --ask:#b7860a; --manual:#d64545;
     --blue:#2f6fe0; --glow:rgba(226,101,15,.05);
   }
-  /* the terminal is a screenshot — always dark, in either theme */
+  /* the terminal is a screenshot: always dark, in either theme */
   .term{--panel:#0d1119;--line:#1e2636;--ink:#e6ebf2;--dim:#8a94a6;--eu:#5fd39a;--ask:#f5c451;--manual:#ff6b6b;--blue:#8ab4ff}
 
   *{box-sizing:border-box}
@@ -56,7 +56,7 @@
   .tag{display:inline-block;padding:.28rem .7rem;border-radius:999px;font-size:.78rem;letter-spacing:.04em;
        border:1px solid var(--line);color:var(--eu);background:color-mix(in srgb,var(--eu) 9%,transparent)}
 
-  /* theme toggle — sun in dark, moon in light */
+  /* theme toggle: sun in dark, moon in light */
   .themetoggle{position:fixed;top:16px;right:16px;z-index:20;width:40px;height:40px;display:grid;place-items:center;
        border-radius:10px;border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 82%,transparent);
        color:var(--ink);cursor:pointer;backdrop-filter:blur(6px);transition:border-color .2s,background-color .2s,transform .12s}
@@ -121,7 +121,7 @@
   .term{background:#0a0d14;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
   .term .bar{display:flex;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:#0d1119}
   .term .bar i{width:12px;height:12px;border-radius:50%;display:inline-block}
-  /* force the terminal's base text to its own light ink in BOTH themes — the
+  /* force the terminal's base text to its own light ink in BOTH themes: the
      body `color` is resolved on <body>, so a child would otherwise inherit the
      dark light-mode ink and vanish on the always-dark terminal background */
   .term pre{margin:0;padding:18px 20px;overflow:auto;font-family:var(--mono);font-size:13px;line-height:1.6;color:var(--ink)}
@@ -156,10 +156,10 @@
   <header>
     <div class="logo"><img src="logo-mark.svg" alt="" width="34" height="34"><span><span class="fl">flare</span><span class="ov">over</span></span></div>
     <h1>Leave the <span class="flare">orange cloud</span>.<br>Without breaking your site.</h1>
-    <p class="sub"><b>flareover</b> reads your existing edge setup — DNS, TLS certificates, redirects,
-      WAF rules, caching — and rebuilds it faithfully on your own EU servers (open-source,
+    <p class="sub"><b>flareover</b> reads your existing edge setup (DNS, TLS certificates, redirects,
+      WAF rules, caching) and rebuilds it faithfully on your own EU servers (open-source,
       self-hosted). It never emits config that silently changes how your site behaves: what it can't
-      map exactly, it asks about or flags — <b>it never guesses</b>.</p>
+      map exactly, it asks about or flags: <b>it never guesses</b>.</p>
     <div class="cta">
       <a class="btn p" href="#contract">How it stays faithful</a>
       <a class="btn g" href="#proof">See the validation</a>
@@ -176,14 +176,14 @@
       <div class="card"><h3><span class="badge auto"></span> AUTO</h3>
         <p>A provably-equivalent target mapping exists. Config is generated.</p></div>
       <div class="card"><h3><span class="badge ask"></span> ASK</h3>
-        <p>A faithful mapping exists with one enumerable ambiguity. A single yes/no resolves it — cached, reviewable.</p></div>
+        <p>A faithful mapping exists with one enumerable ambiguity. A single yes/no resolves it: cached, reviewable.</p></div>
       <div class="card"><h3><span class="badge manual"></span> MANUAL</h3>
         <p>No faithful mapping (arbitrary edge code, ML bot-scoring). Surfaced with a reason, <b>never guessed</b>.</p></div>
     </div>
   </section>
 
   <section>
-    <h2>How it works — five phases</h2>
+    <h2>How it works: five phases</h2>
     <p class="lead">Read-only extraction to a gated, reversible cutover. Every step is deterministic;
       the parity gate blocks the flip unless the new edge behaves identically.</p>
     <div class="pipe">
@@ -199,7 +199,7 @@
   <section>
     <h2>An honest report, at a glance</h2>
     <p class="lead">The engine tells you exactly what carries, what needs a decision, and what it won't
-      touch — before anything changes.</p>
+      touch, before anything changes.</p>
     <div class="term">
       <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
       <pre><span class="dm">$</span> flareover assess zone.snapshot.json
@@ -209,7 +209,7 @@
 <span class="cy">╰────────────────────────────────────────────────────╯</span>
 
 <span class="rd bd"> MANUAL </span> <span class="dm">(1)</span>
-  <span class="rd">●</span> <span class="bd">config-rule</span>  tweak features on /api  <span class="dm">→ —</span>
+  <span class="rd">●</span> <span class="bd">config-rule</span>  tweak features on /api  <span class="dm">→ -</span>
      <span class="dm">Provider-only edge feature (email obfuscation): no Caddy equivalent.</span>
 
 <span class="yl bd"> ASK </span> <span class="dm">(11)</span>
@@ -227,7 +227,7 @@
     <h2>Validated end-to-end on a real zone</h2>
     <p class="lead">A real zone was migrated and cut over off its old managed edge, then verified
       end-to-end. The parity gate <b>first blocked</b> a divergence, and only passed once the new edge
-      behaved identically — these are the checks it ran:</p>
+      behaved identically. These are the checks it ran:</p>
     <div class="proof">
       <div class="pill"><span>Certificate</span><b>Let's Encrypt ✓</b></div>
       <div class="pill"><span>Server header</span><b>own edge · no CDN ✓</b></div>
@@ -239,11 +239,11 @@
       <div class="pill"><span>Rollback</span><b>1 command ✓</b></div>
     </div>
     <p style="margin-top:1.2rem;color:var(--dim)"><span class="gate">&nbsp;GATE: PASS&nbsp;</span>
-      &nbsp;no behavior-changing divergence — cutover permitted.</p>
+      &nbsp;no behavior-changing divergence: cutover permitted.</p>
   </section>
 
   <section>
-    <h2>Your new edge — EU-sovereign, flat cost</h2>
+    <h2>Your new edge: EU-sovereign, flat cost</h2>
     <p class="lead">No traffic or egress fees. No exposure to a future price or policy change. Every target
       is tagged with its jurisdiction, so the migration provably stays EU-scoped.</p>
     <table>
@@ -261,7 +261,7 @@
   <section>
     <h2>Leave the storage too</h2>
     <p class="lead">The same 0% FP discipline migrates S3-compatible object storage (R2, S3, …) onto
-      sovereign MinIO — or managed EU S3 (Scaleway, OVH). The engine maps the configuration; rclone copies the data — into the EU, with no egress fee.
+      sovereign MinIO, or managed EU S3 (Scaleway, OVH). The engine maps the configuration; rclone copies the data into the EU, with no egress fee.
       A public bucket is never made public without your explicit yes; an IAM policy is flagged, never guessed.</p>
   </section>
 

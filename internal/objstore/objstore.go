@@ -1,9 +1,10 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package objstore migrates object storage off a hyperscaler (Cloudflare R2 or
 // AWS S3) onto EU-sovereign MinIO. It applies the same 0% false-positive
 // discipline as the edge migration: it maps bucket *configuration* faithfully
-// (versioning, CORS, lifecycle) and refuses to guess the dangerous parts —
+// (versioning, CORS, lifecycle) and refuses to guess the dangerous parts:
 // public access is an explicit ASK, an IAM/bucket policy is MANUAL, never
 // silently reproduced or dropped. The actual object copy is left to rclone
 // (the engine emits the plan, it does not move terabytes itself).
@@ -79,9 +80,9 @@ func Classify(s Snapshot) report.Report {
 			switch {
 			case lc.Transition:
 				add(report.Finding{Kind: "lifecycle", Name: b.Name + "/" + lc.ID, Verdict: report.Manual,
-					Rationale: "Lifecycle rule uses storage-class transitions (tiering) with no MinIO target — recreate manually if needed."})
+					Rationale: "Lifecycle rule uses storage-class transitions (tiering) with no MinIO target: recreate manually if needed."})
 			case lc.ExpireDays > 0:
-				// AUTO only when there is a positive expiry to emit — Generate skips
+				// AUTO only when there is a positive expiry to emit. Generate skips
 				// any rule with ExpireDays <= 0, so classify must too (classify ⟺
 				// generate). A multipart-abort-only / noncurrent-version-only rule
 				// (ExpireDays == 0) has no MinIO ILM equivalent here.
@@ -89,21 +90,21 @@ func Classify(s Snapshot) report.Report {
 					Rationale: fmt.Sprintf("Expiry lifecycle (%dd) → MinIO ILM (mc ilm rule add).", lc.ExpireDays)})
 			default:
 				add(report.Finding{Kind: "lifecycle", Name: b.Name + "/" + lc.ID, Verdict: report.Manual,
-					Rationale: "Lifecycle rule has no reproducible object-expiry (e.g. multipart-abort / noncurrent-version only) — recreate manually if needed."})
+					Rationale: "Lifecycle rule has no reproducible object-expiry (e.g. multipart-abort / noncurrent-version only): recreate manually if needed."})
 			}
 		}
 		if b.PublicRead {
 			// Never make a bucket public without an explicit yes.
 			add(report.Finding{Kind: "public-access", Name: b.Name, Verdict: report.Ask, Target: "minio",
-				Rationale: "Bucket is publicly readable. Reproducing public access is a security decision — MinIO can do it (mc anonymous set download) but only on your explicit confirmation.",
+				Rationale: "Bucket is publicly readable. Reproducing public access is a security decision. MinIO can do it (mc anonymous set download) but only on your explicit confirmation.",
 				Question: &report.Question{ID: "public-read:" + b.Name,
 					Prompt:  fmt.Sprintf("Reproduce public read access on MinIO bucket %q?", b.Name),
 					Options: []string{"yes", "no"}, Default: "no"}})
 		}
 		if strings.TrimSpace(b.PolicyJSON) != "" {
-			// IAM/bucket policies don't map 1:1 to MinIO policies — never guessed.
+			// IAM/bucket policies don't map 1:1 to MinIO policies, never guessed.
 			add(report.Finding{Kind: "policy", Name: b.Name, Verdict: report.Manual,
-				Rationale: "A bucket/IAM policy is attached. S3 IAM policy semantics differ from MinIO's; translate it by hand into a MinIO policy — do not assume equivalence."})
+				Rationale: "A bucket/IAM policy is attached. S3 IAM policy semantics differ from MinIO's; translate it by hand into a MinIO policy: do not assume equivalence."})
 		}
 	}
 	return r
@@ -115,7 +116,7 @@ type GenOptions struct {
 	MinIOEndpoint string // e.g. https://s3.contabo.example
 	Decisions     map[string]string
 	// Dest selects the destination preset: "" / "minio" (self-hosted, default),
-	// or a managed EU S3 — "scaleway" / "ovh" / "contabo" (fixed region hosts) or
+	// or a managed EU S3: "scaleway" / "ovh" / "contabo" (fixed region hosts) or
 	// "aruba" (endpoint operator-supplied via MinIOEndpoint, account-specific).
 	Dest string
 	// Region is the provider region (Scaleway/OVH/Contabo) when set; Aruba takes
@@ -236,7 +237,7 @@ func resolveDest(opts GenOptions) destination {
 			alias = "aruba"
 		}
 		// Aruba's S3 endpoint is account-specific (the "Service Point URL" from the
-		// Object Storage account page), not a fixed public region host — so it is
+		// Object Storage account page), not a fixed public region host, so it is
 		// operator-supplied (--minio-endpoint), never guessed. The CLI enforces it.
 		return destination{
 			dir:       "aruba-object-storage",
@@ -273,7 +274,7 @@ type Artifact struct {
 }
 
 // Generate emits the MinIO provisioning script, the rclone data-copy plan, and a
-// runbook — for the AUTO plus answered-ASK surface only.
+// runbook, for the AUTO plus answered-ASK surface only.
 func Generate(s Snapshot, opts GenOptions) []Artifact {
 	d := resolveDest(opts)
 	alias := d.alias
@@ -305,7 +306,7 @@ func Generate(s Snapshot, opts GenOptions) []Artifact {
 		if b.PublicRead && answered(opts.Decisions, "public-read:"+b.Name, "yes") {
 			fmt.Fprintf(&prov, "mc anonymous set download %s/%s   # confirmed public read\n", alias, b.Name)
 		} else if b.PublicRead {
-			fmt.Fprintf(&prov, "# public read NOT reproduced (unanswered/declined) — bucket stays private\n")
+			fmt.Fprintf(&prov, "# public read NOT reproduced (unanswered/declined): bucket stays private\n")
 		}
 		prov.WriteString("\n")
 	}

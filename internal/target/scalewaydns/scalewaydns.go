@@ -1,16 +1,17 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package scalewaydns renders and provisions the authoritative zone on
-// Scaleway's managed DNS (Domains and DNS, EU / France) — an EU-owned
+// Scaleway's managed DNS (Domains and DNS, EU / France): an EU-owned
 // alternative to self-hosting PowerDNS. Like every DNS target it splits into a
 // pure Generator (an offline review artifact) and a live Provisioner:
 //
-//	scaleway-dns/<zone>.zone   records only (no SOA/NS — Scaleway owns them),
+//	scaleway-dns/<zone>.zone   records only (no SOA/NS: Scaleway owns them),
 //	                           a human-readable preview of what will be applied
 //
 // The live apply (provision.go) uses the Domains API's idempotent record-set
 // change (`PATCH …/records` with a per-(name,type) `set`), so re-running
-// converges — no BIND round-trip, no duplicate records. Proxied Cloudflare
+// converges: no BIND round-trip, no duplicate records. Proxied Cloudflare
 // records have already been de-proxied by the plan builder.
 package scalewaydns
 
@@ -37,7 +38,7 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 	origin := zonefile.FQDN(z.Name)
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "; flareover-generated records for %s — preview of the Scaleway DNS apply.\n", z.Name)
+	fmt.Fprintf(&b, "; flareover-generated records for %s: preview of the Scaleway DNS apply.\n", z.Name)
 	b.WriteString("; Scaleway owns SOA and NS for the zone; they are intentionally omitted.\n")
 	b.WriteString("; Apply live with: flareover provision --dns scaleway (SCW_SECRET_KEY + SCW_DEFAULT_PROJECT_ID).\n")
 	fmt.Fprintf(&b, "$ORIGIN %s\n", origin)
@@ -46,7 +47,7 @@ func (Generator) Generate(p ir.Plan) ([]target.Artifact, error) {
 		b.WriteString(zonefile.RenderRecord(origin, r))
 	}
 
-	note := "Preview only — the live apply sets records idempotently via the Scaleway Domains API " +
+	note := "Preview only: the live apply sets records idempotently via the Scaleway Domains API " +
 		"(provision --dns scaleway). Scaleway owns SOA/NS; the registrar NS cutover stays a human step."
 	if z.DNSSEC {
 		note += " DNSSEC requested: enable it for the zone in the Scaleway console (not yet automated)."

@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Command flareover is the CLI for the deterministic Cloudflare → EU-self-hosted
@@ -58,7 +59,7 @@ import (
 	"github.com/fabriziosalmi/flareover/internal/validate"
 )
 
-const usage = `flareover — escape Cloudflare, deterministically, toward EU-sovereign infrastructure.
+const usage = `flareover: escape Cloudflare, deterministically, toward EU-sovereign infrastructure.
 
 USAGE
   flareover <phase> [args]
@@ -120,8 +121,8 @@ PREPARE FLAGS
   --stack <id>         target stack profile (default: caddy)
   --dns <id>           authoritative DNS target: powerdns (default, self-hosted),
                        bunny, or managed scaleway / ovh / gandi / leaseweb / hetzner
-                       (EU-owned) · route53 / clouddns / azure (AWS/Google/Microsoft
-                       — US-operated, NOT sovereign). Apply live: "provision --dns
+                       (EU-owned) · route53 / clouddns / azure (AWS/Google/Microsoft,
+                       US-operated, NOT sovereign). Apply live: "provision --dns
                        <id>", creds in env.
   --out <dir>          write artifacts under <dir> (default: stdout preview)
   --validate           prove the generated Caddyfile + zone parse (caddy validate)
@@ -406,7 +407,7 @@ func cmdExtract(args []string) int {
 	for _, w := range client.Warnings {
 		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 	}
-	fmt.Fprintf(os.Stderr, "flareover extract — %s: %d DNS, %d rulesets, %d managed, %d page rules, %d workers\n",
+	fmt.Fprintf(os.Stderr, "flareover extract (%s): %d DNS, %d rulesets, %d managed, %d page rules, %d workers\n",
 		snap.Zone.Name, len(snap.DNSRecords), len(snap.Rulesets), len(snap.ManagedRules), len(snap.PageRules), len(snap.Workers))
 
 	if outPath == "" || outPath == "-" {
@@ -557,7 +558,7 @@ func cmdStorage(args []string) int {
 			return 2
 		}
 		if dest == "aruba" && endpoint == "" {
-			fmt.Fprintln(os.Stderr, "flareover storage: --dest aruba needs --minio-endpoint <your Aruba Service Point URL> (Aruba's S3 endpoint is account-specific — copy it from the Object Storage account page; it is never guessed)")
+			fmt.Fprintln(os.Stderr, "flareover storage: --dest aruba needs --minio-endpoint <your Aruba Service Point URL> (Aruba's S3 endpoint is account-specific: copy it from the Object Storage account page; it is never guessed)")
 			return 2
 		}
 		if dest == "scaleway" && region != "" && !objstore.ValidScalewayRegion(region) {
@@ -586,7 +587,7 @@ func cmdStorage(args []string) int {
 				return 1
 			}
 			if a.Note != "" {
-				fmt.Fprintf(os.Stderr, "  %s — %s\n", a.Path, a.Note)
+				fmt.Fprintf(os.Stderr, "  %s: %s\n", a.Path, a.Note)
 			} else {
 				fmt.Fprintf(os.Stderr, "  %s\n", a.Path)
 			}
@@ -604,7 +605,7 @@ func cmdStorage(args []string) int {
 
 // cmdExecute orchestrates the migration phases with a live progress display,
 // up to and including the parity gate. The DNS flip itself is intentionally NOT
-// performed here — it is your explicit, outward action — so execute runs the
+// performed here (it is your explicit, outward action) so execute runs the
 // deterministic, safe phases live, proves the gate, and hands you the go/no-go.
 func cmdExecute(args []string) int {
 	var snapPath, decisionsPath, afterAddr string
@@ -689,7 +690,7 @@ func cmdExecute(args []string) int {
 		return 1
 	}
 	if !prep.Gate() {
-		pr.Fail(2, fmt.Sprintf("%d probes · GATE FAIL — cutover blocked", len(prep.Results)))
+		pr.Fail(2, fmt.Sprintf("%d probes · GATE FAIL: cutover blocked", len(prep.Results)))
 		pr.PrintLine("")
 		fmt.Print(render.Parity(prep, color))
 		return 12
@@ -697,10 +698,10 @@ func cmdExecute(args []string) int {
 	pr.Done(2, fmt.Sprintf("%d probes · GATE PASS", len(prep.Results)))
 
 	pr.Start(3)
-	pr.Done(3, "authorized — flip DNS to the EU edge (your explicit step)")
+	pr.Done(3, "authorized: flip DNS to the EU edge (your explicit step)")
 
 	pr.Start(4)
-	pr.Done(4, "rollback armed — one command back to the source")
+	pr.Done(4, "rollback armed: one command back to the source")
 
 	pr.PrintLine("")
 	pr.PrintLine("  Cutover is authorized by the gate. Flip DNS with your write-token script,")
@@ -780,8 +781,8 @@ func cmdPresent(args []string) int {
 	return 0
 }
 
-// cmdProvision stands up the target infrastructure the plan describes — the
-// PowerDNS zone and the CertMate certificates — via their APIs, with a live
+// cmdProvision stands up the target infrastructure the plan describes (the
+// PowerDNS zone and the CertMate certificates) via their APIs, with a live
 // progress display. It writes only to your own target services (with your
 // target credentials); it never touches the source or the registrar. This is
 // the auto-provision step that closes the gap between "generate" and "done".
@@ -791,7 +792,7 @@ func cmdProvision(args []string) int {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if a == "--pdns-key" || a == "--certmate-token" {
-			fmt.Fprintf(os.Stderr, "flareover provision: %s is no longer accepted (it would expose the secret on argv) — set PDNS_API_KEY / CERTMATE_TOKEN in the environment instead\n", a)
+			fmt.Fprintf(os.Stderr, "flareover provision: %s is no longer accepted (it would expose the secret on argv). Set PDNS_API_KEY / CERTMATE_TOKEN in the environment instead\n", a)
 			return 2
 		}
 		next := func() string { i++; return args[i] }
@@ -827,7 +828,7 @@ func cmdProvision(args []string) int {
 			return 2
 		}
 	}
-	// PowerDNS/CertMate secrets come from the environment only, never argv — like
+	// PowerDNS/CertMate secrets come from the environment only, never argv, like
 	// every other backend, so they never leak via ps / /proc / shell history.
 	pdnsKey = os.Getenv("PDNS_API_KEY")
 	cmToken = os.Getenv("CERTMATE_TOKEN")
@@ -925,7 +926,7 @@ func cmdProvision(args []string) int {
 	}
 	if useRoute53 || useCloudDNS || useAzure {
 		// Honest tier: never let a US-operated target pass as sovereign.
-		fmt.Fprintln(os.Stderr, "flareover provision: NOTE — Route 53 / Cloud DNS / Azure DNS are US-operated (AWS/Google/Microsoft), NOT sovereign (US CLOUD Act reach). For EU sovereignty: --dns scaleway|ovh|gandi|leaseweb|hetzner (or bunny via `prepare --dns bunny` + apply.sh).")
+		fmt.Fprintln(os.Stderr, "flareover provision: NOTE: Route 53 / Cloud DNS / Azure DNS are US-operated (AWS/Google/Microsoft), NOT sovereign (US CLOUD Act reach). For EU sovereignty: --dns scaleway|ovh|gandi|leaseweb|hetzner (or bunny via `prepare --dns bunny` + apply.sh).")
 	}
 	if ca == "" {
 		ca = "letsencrypt"
@@ -951,7 +952,7 @@ func cmdProvision(args []string) int {
 	ctx := context.Background()
 	var dsRecords []string
 
-	// DNS zone — Scaleway managed DNS, self-hosted PowerDNS, or skipped.
+	// DNS zone: Scaleway managed DNS, self-hosted PowerDNS, or skipped.
 	pr.Start(0)
 	switch {
 	case useScaleway:
@@ -1148,7 +1149,7 @@ func cmdProvision(args []string) int {
 }
 
 // cmdGuard is the Failguards watchdog: it health-checks the migrated edge on an
-// interval and, past a failure threshold, runs a trigger — typically the
+// interval and, past a failure threshold, runs a trigger: typically the
 // rollback (back to the source), or a flip to a warm standby (failover). The
 // trigger is a shell command you supply, so the outward DNS write stays your
 // explicit hook.
@@ -1205,7 +1206,7 @@ func cmdGuard(args []string) int {
 		}
 	}
 	onFail := func(reason string) error {
-		fmt.Printf("  %s⚠ threshold reached — %s%s\n", red, reason, reset)
+		fmt.Printf("  %s⚠ threshold reached: %s%s\n", red, reason, reset)
 		if onUnhealthy == "" {
 			fmt.Println("  (no --on-unhealthy set; alerting only)")
 			return nil
@@ -1224,7 +1225,7 @@ func cmdGuard(args []string) int {
 		return 1
 	}
 	if triggered {
-		fmt.Printf("  %sguard fired — rollback/failover triggered.%s\n", red, reset)
+		fmt.Printf("  %sguard fired: rollback/failover triggered.%s\n", red, reset)
 		return 20
 	}
 	return 0
@@ -1400,7 +1401,7 @@ func cmdPrepare(args []string) int {
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "flareover prepare — %s [%s]: %d records, %d sites, %d WAF rules → %d artifacts\n",
+	fmt.Fprintf(os.Stderr, "flareover prepare (%s [%s]): %d records, %d sites, %d WAF rules → %d artifacts\n",
 		built.Zone, profile.ID, len(built.DNS.Records), len(built.Sites), len(built.WAF.CustomRules), len(arts))
 
 	if outDir == "" {
@@ -1429,7 +1430,7 @@ func cmdPrepare(args []string) int {
 			return 1
 		}
 		if a.Note != "" {
-			fmt.Fprintf(os.Stderr, "  %s — %s\n", a.Path, a.Note)
+			fmt.Fprintf(os.Stderr, "  %s: %s\n", a.Path, a.Note)
 		} else {
 			fmt.Fprintf(os.Stderr, "  %s\n", a.Path)
 		}
@@ -1444,7 +1445,7 @@ func cmdPrepare(args []string) int {
 		fmt.Fprintf(os.Stderr, "flareover prepare: %v\n", err)
 		return 1
 	}
-	fmt.Fprintln(os.Stderr, "  MIGRATION.md — runbook + manual/ask items + cutover steps")
+	fmt.Fprintln(os.Stderr, "  MIGRATION.md: runbook + manual/ask items + cutover steps")
 	return 0
 }
 
@@ -1484,10 +1485,10 @@ func edgeCloudInits(arts []target.Artifact, fallback provider.Provider) ([]targe
 			Path:    dst,
 			Content: provider.EdgeCloudInit(prov, caddyfile, a.Content),
 			Mode:    0o600,
-			Note:    fmt.Sprintf("cloud-init for edge %q on %s (%s) — paste as instance user-data", name, prov.Name, prov.Exposure),
+			Note:    fmt.Sprintf("cloud-init for edge %q on %s (%s): paste as instance user-data", name, prov.Name, prov.Exposure),
 		})
 		// API-driven providers also get a create script that boots the edge from
-		// that cloud-init (the operator runs it — a paid server is never spun up
+		// that cloud-init (the operator runs it: a paid server is never spun up
 		// silently).
 		ciBase := strings.TrimPrefix(dst, "edge/")
 		emitCreate := func(suffix string, content []byte, where string) {
@@ -1499,7 +1500,7 @@ func edgeCloudInits(arts []target.Artifact, fallback provider.Provider) ([]targe
 				Path:    script,
 				Content: content,
 				Mode:    0o755,
-				Note:    fmt.Sprintf("create edge %q on %s from its cloud-init (paid server — review first)", name, where),
+				Note:    fmt.Sprintf("create edge %q on %s from its cloud-init (paid server: review first)", name, where),
 			})
 		}
 		switch prov.Key {
@@ -1523,18 +1524,18 @@ func validateArtifacts(arts []target.Artifact) int {
 			r := validate.Caddyfile(a.Content)
 			switch {
 			case r.Skipped():
-				fmt.Fprintf(os.Stderr, "  validate %s — skipped: %s\n", a.Path, r.Detail)
+				fmt.Fprintf(os.Stderr, "  validate %s: skipped: %s\n", a.Path, r.Detail)
 			case r.OK:
-				fmt.Fprintf(os.Stderr, "  validate %s — OK (%s): %s\n", a.Path, r.Ran, r.Detail)
+				fmt.Fprintf(os.Stderr, "  validate %s: OK (%s): %s\n", a.Path, r.Ran, r.Detail)
 			default:
-				fmt.Fprintf(os.Stderr, "  validate %s — FAILED (%s):\n%s\n", a.Path, r.Ran, r.Detail)
+				fmt.Fprintf(os.Stderr, "  validate %s: FAILED (%s):\n%s\n", a.Path, r.Ran, r.Detail)
 				failed = true
 			}
 		case strings.HasSuffix(a.Path, ".zone"):
 			if ok, problems := validate.Zone(a.Content); ok {
-				fmt.Fprintf(os.Stderr, "  validate %s — OK (zone structure)\n", a.Path)
+				fmt.Fprintf(os.Stderr, "  validate %s: OK (zone structure)\n", a.Path)
 			} else {
-				fmt.Fprintf(os.Stderr, "  validate %s — FAILED (zone structure):\n", a.Path)
+				fmt.Fprintf(os.Stderr, "  validate %s: FAILED (zone structure):\n", a.Path)
 				for _, p := range problems {
 					fmt.Fprintf(os.Stderr, "      %s\n", p)
 				}
@@ -1560,7 +1561,7 @@ func cmdDoctor(args []string) int {
 			continue
 		}
 		if a == "--pdns-key" || a == "--certmate-token" {
-			fmt.Fprintf(os.Stderr, "flareover doctor: %s is no longer accepted (it exposes the secret on argv) — set PDNS_API_KEY / CERTMATE_TOKEN in the environment instead\n", a)
+			fmt.Fprintf(os.Stderr, "flareover doctor: %s is no longer accepted (it exposes the secret on argv). Set PDNS_API_KEY / CERTMATE_TOKEN in the environment instead\n", a)
 			return 2
 		}
 		if i+1 >= len(args) {
@@ -1610,16 +1611,16 @@ func cmdProviders(args []string) int {
 		fmt.Printf("  %-14s %-38s %s%s%s\n", p.Key, p.Name, dim, p.Residency, reset)
 		fmt.Printf("  %-14s %s%s%s\n", "", dim, p.Exposure, reset)
 	}
-	fmt.Printf("%sEU-sovereign — EU-owned operator, EU jurisdiction only:%s\n", green, reset)
+	fmt.Printf("%sEU-sovereign (EU-owned operator, EU jurisdiction only):%s\n", green, reset)
 	for _, p := range provider.Sovereign() {
 		row(p)
 	}
-	fmt.Printf("\n%sEU residency, US operator — pragmatic, but NOT sovereign (US CLOUD Act reach):%s\n", yellow, reset)
+	fmt.Printf("\n%sEU residency, US operator: pragmatic, but NOT sovereign (US CLOUD Act reach):%s\n", yellow, reset)
 	for _, p := range provider.ResidencyOnly() {
 		row(p)
 	}
 	fmt.Printf("\n%sUse a key with `flareover prepare --edge-provider <key>` to emit its edge cloud-init.%s\n", dim, reset)
-	fmt.Printf("%sCorporate-jurisdiction info to inform a choice — not legal advice.%s\n", dim, reset)
+	fmt.Printf("%sCorporate-jurisdiction info to inform a choice, not legal advice.%s\n", dim, reset)
 	return 0
 }
 

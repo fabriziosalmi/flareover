@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package mesh
@@ -52,7 +53,7 @@ func TestGenerateWireGuardStructure(t *testing.T) {
 	if edgePriv == originPriv {
 		t.Error("edge and origin share a private key")
 	}
-	// The edge's peer key is the origin's key, and vice versa — derive pub from priv.
+	// The edge's peer key is the origin's key, and vice versa: derive pub from priv.
 	if pub := pubOf(t, edgePriv); pub == originPeerPub {
 		// origin's [Peer] PublicKey should equal the edge's public key
 	} else {

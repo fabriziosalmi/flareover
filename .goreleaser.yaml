@@ -1,4 +1,4 @@
-# goreleaser configuration for flareover — reproducible, signed, SBOM'd release
+# goreleaser configuration for flareover: reproducible, signed, SBOM'd release
 # artifacts. Docs: https://goreleaser.com. Validate with `goreleaser check`.
 version: 2
 
@@ -6,7 +6,7 @@ project_name: flareover
 
 before:
   hooks:
-    # No `go mod tidy` — the project is stdlib-only, so it is a no-op that could
+    # No `go mod tidy`: the project is stdlib-only, so it is a no-op that could
     # only dirty the tree and fail the release. vet + test gate the release.
     - go vet ./...
     - go test ./...
@@ -46,7 +46,7 @@ sboms:
   - id: archive
     artifacts: archive
 
-# Keyless (Sigstore/OIDC) signature over the checksums file — verifying the
+# Keyless (Sigstore/OIDC) signature over the checksums file: verifying the
 # checksums transitively verifies every artifact. Requires cosign + an OIDC
 # token (GitHub Actions provides one with `id-token: write`).
 signs:
@@ -66,7 +66,7 @@ signs:
 source:
   enabled: true
 
-# Homebrew tap — auto-published on every release to the per-project tap repo
+# Homebrew tap: auto-published on every release to the per-project tap repo
 # (matches homebrew-proxxx / homebrew-proxymate). A formula, so it works on Linux
 # brew too. One-time setup: create github.com/fabriziosalmi/homebrew-flareover and
 # add a repo-scoped PAT as the HOMEBREW_TAP_TOKEN secret. Until that secret

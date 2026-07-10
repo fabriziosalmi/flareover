@@ -1,10 +1,11 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package ir defines the provider-agnostic Intermediate Representation of a
 // migration. Extraction produces a cloudflare.Snapshot; classification turns
 // the AUTO (and answered-ASK) parts of that snapshot into this IR, which
-// describes *intent* — "this host proxies to this origin with these headers,
-// this path 301s there, this rule blocks these requests" — independent of any
+// describes *intent* ("this host proxies to this origin with these headers,
+// this path 301s there, this rule blocks these requests"), independent of any
 // target. Target adapters (Caddy, PowerDNS, CertMate, ...) consume the IR and
 // emit concrete configuration. Adding a new backend is adding a new generator,
 // never touching extraction or classification.
@@ -72,7 +73,7 @@ type Origin struct {
 	HostHeader string `json:"host_header,omitempty"`
 	SNI        string `json:"sni,omitempty"`
 	// TrustedCA, when set with VerifyTLS, is a PEM path Caddy trusts when
-	// verifying the origin (→ transport tls_trusted_ca_certs) — for a replacement
+	// verifying the origin (→ transport tls_trusted_ca_certs): for a replacement
 	// origin cert signed by a private CA. Empty + VerifyTLS means the origin cert
 	// is expected to be publicly trusted; VerifyTLS=false means verification is
 	// skipped (tls_insecure_skip_verify).

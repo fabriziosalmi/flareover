@@ -57,7 +57,7 @@ Generate the target-stack artifacts (Caddyfile, caddy-waf rules, PowerDNS zone, 
 | `--ca <name>` | Default cert CA: `letsencrypt` (default) \| `actalis` (EU CA) |
 | `--origin-ca <path>` | PEM CA that Caddy trusts to verify the origin when SSL was **Full (strict)** and you answered `origin-verify=verify` with a private replacement origin cert (→ `tls_trusted_ca_certs`). Omit if the replacement origin cert is publicly trusted. |
 | `--stack <id>` | Target stack profile (default: `caddy`) |
-| `--dns <id>` | Authoritative DNS target — see [DNS Targets](/docs/dns-targets/) |
+| `--dns <id>` | Authoritative DNS target: see [DNS Targets](/docs/dns-targets/) |
 | `--out <dir>` | Write artifacts under `<dir>` (default: stdout preview) |
 | `--validate` | Prove the generated Caddyfile + zone parse (`caddy validate`) |
 | `--mesh-edge [name=]<host:port>` | WireGuard tunnel to keep an existing origin unchanged; repeat for an HA edge front |
@@ -71,7 +71,7 @@ Stand the target up via APIs (DNS zone + DNSSEC, CertMate DNS-01 certs).
 | `--snapshot <file>` / `--decisions <file>` | Inputs |
 | `--edge-ip <ip>` | The edge IP proxied records point at |
 | `--pdns-url <url>` | Self-hosted PowerDNS API (auth: `PDNS_API_KEY` env) |
-| `--dns <id>` | Managed DNS target instead of PowerDNS — see [DNS Targets](/docs/dns-targets/) |
+| `--dns <id>` | Managed DNS target instead of PowerDNS: see [DNS Targets](/docs/dns-targets/) |
 | `--nameservers a,b` | Delegation NS to record for the registrar step |
 | `--certmate-url <url>` | CertMate API (auth: `CERTMATE_TOKEN` env) |
 | `--certmate-dns <provider>` | DNS provider CertMate solves DNS-01 against (pre-cutover, use the source) |
@@ -94,7 +94,7 @@ Migrate object storage (R2/S3) → self-hosted MinIO (default) or managed EU S3.
 | `--extract-r2` / `--extract-s3` | Extract buckets from R2 / S3 first |
 
 ### `doctor …`
-Read-only pre-flight — is every target reachable, authorized, and configured? GO/NO-GO before you provision (exit `0` only when ready).
+Read-only pre-flight: is every target reachable, authorized, and configured? GO/NO-GO before you provision (exit `0` only when ready).
 
 | Flag | Effect |
 |------|--------|

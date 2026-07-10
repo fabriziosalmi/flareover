@@ -1,9 +1,10 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package plan builds the provider-agnostic ir.Plan from a Cloudflare snapshot
 // plus the answers to any ASK questions. It emits IR only for what can be
-// faithfully translated — the same judgement the classifier makes, via the
-// shared cfexpr package — so the generated stack is exactly the AUTO plus
+// faithfully translated (the same judgement the classifier makes, via the
+// shared cfexpr package) so the generated stack is exactly the AUTO plus
 // answered-ASK surface, never more. Anything needing an unanswered decision is
 // left out (and shows up in the assessment report as ASK), never guessed.
 package plan
@@ -144,7 +145,7 @@ func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 		if !rec.Proxied || !isHTTPFrontable(rec.Type) {
 			continue
 		}
-		// One host may have several proxied records (A + AAAA, etc.) — it is a
+		// One host may have several proxied records (A + AAAA, etc.): it is a
 		// single virtual host, not several. Emit it once.
 		if seen[rec.Name] {
 			continue
@@ -155,7 +156,7 @@ func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 		}
 		seen[rec.Name] = true
 		// An origin answer may carry an explicit scheme ("http://host:port"),
-		// which overrides the SSL-mode-derived scheme — the operator knows what
+		// which overrides the SSL-mode-derived scheme: the operator knows what
 		// the backend actually speaks. Without a scheme, the SSL mode decides.
 		upstream, oScheme, oVerify := resolveOrigin(origin, scheme, verify)
 		// A verified HTTPS origin trusts a private replacement-cert CA when the
@@ -186,7 +187,7 @@ func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 			Cache:     cacheForZone(s),
 		}
 		// Apply a host-scoped Origin Rule (host_header / origin / sni), if the
-		// classifier judged it faithfully mappable — same predicate, so what is
+		// classifier judged it faithfully mappable: same predicate, so what is
 		// reported AUTO is exactly what gets emitted here.
 		if ov, ok := originOverrideForHost(s, rec.Name); ok {
 			if ov.Upstream != "" {
@@ -227,7 +228,7 @@ func originOverrideForHost(s cf.Snapshot, host string) (cfexpr.Override, bool) {
 // pathScopedProxies collects path-scoped Origin Rules (a path matcher + an
 // origin) as matcher-guarded reverse_proxies. They apply zone-wide; the scoped
 // origin inherits the site's default scheme/verify. Host-scoped and unmappable
-// rules are handled elsewhere / left MANUAL — the same OriginOverride predicate.
+// rules are handled elsewhere / left MANUAL: the same OriginOverride predicate.
 func pathScopedProxies(s cf.Snapshot, scheme string, verify bool) []ir.ScopedProxy {
 	var out []ir.ScopedProxy
 	for _, rs := range s.Rulesets {
@@ -275,7 +276,7 @@ func originScheme(s cf.Snapshot, opts Options) (scheme string, verify bool) {
 	switch strings.ToLower(s.Settings.SSL) {
 	case "strict":
 		// Verified by default; "skip" is an explicit, answered downgrade (the
-		// origin's Cloudflare Origin CA cert can't be verified by Caddy — see the
+		// origin's Cloudflare Origin CA cert can't be verified by Caddy; see the
 		// origin-verify ASK). classify surfaces this, so it is never a silent break.
 		if a, ok := opts.answer("origin-verify"); ok && a == "skip" {
 			return "https", false
@@ -308,7 +309,7 @@ func buildHSTS(s cf.Snapshot) *ir.HSTS {
 // every site. A global rule (expression == "true") is unscoped; a path-scoped
 // rule whose expression maps to a Caddy matcher (cfexpr.CaddyMatcher) carries
 // that matcher on the op. Host-scoped or compound expressions have no faithful
-// matcher — they are skipped here and classified MANUAL, never a silent AUTO
+// matcher: they are skipped here and classified MANUAL, never a silent AUTO
 // (classify ⟺ generate, via the same CaddyMatcher predicate).
 func buildHeaders(s cf.Snapshot) []ir.HeaderOp {
 	var ops []ir.HeaderOp
@@ -365,7 +366,7 @@ func buildHeaders(s cf.Snapshot) []ir.HeaderOp {
 // headersForSite selects the header ops that apply to one host. Global ops and
 // zone-wide path-scoped ops apply to every site as-is; a host-scoped op applies
 // only to its own host, where it is emitted unmatched (the whole block is that
-// host) — so its Host hint is cleared. The result is re-sorted for a stable,
+// host), so its Host hint is cleared. The result is re-sorted for a stable,
 // matcher-grouped rendering.
 func headersForSite(all []ir.HeaderOp, host string) []ir.HeaderOp {
 	var out []ir.HeaderOp
@@ -392,7 +393,7 @@ func headersForSite(all []ir.HeaderOp, host string) []ir.HeaderOp {
 }
 
 // buildRewrites translates static URL-rewrite transform rules (request phase
-// only — a response transform cannot rewrite the URL) into internal rewrites,
+// only: a response transform cannot rewrite the URL) into internal rewrites,
 // using the same cfexpr.TransformScope + cfexpr.RewriteTarget predicates the
 // classifier decides AUTO from (classify ⟺ generate). A dynamic (expression-
 // derived) or unmappable rule is skipped here and left MANUAL by the classifier.
@@ -506,7 +507,7 @@ func redirectsForHost(s cf.Snapshot, host string) []ir.Redirect {
 
 func cacheForZone(s cf.Snapshot) *ir.CachePolicy {
 	// Any cache signal (aggressive cache level, a cache Page Rule, or a cache
-	// ruleset) enables an approximate cache. Parity is not exact — the generator
+	// ruleset) enables an approximate cache. Parity is not exact: the generator
 	// annotates this.
 	if s.Settings.CacheLevel == "aggressive" {
 		return &ir.CachePolicy{Enabled: true, TTL: s.Settings.BrowserCacheTTL}
@@ -549,7 +550,7 @@ func buildWAF(s cf.Snapshot, opts Options) ir.WAFPolicy {
 				}
 				// block/log emit directly. A Cloudflare challenge emits only when
 				// the operator opted to harden it into a block (the waf-challenge
-				// ASK); otherwise it is skipped and classify surfaces it — never a
+				// ASK); otherwise it is skipped and classify surfaces it, never a
 				// silent drop. wafRuleFromMatch renders any non-log action as block.
 				allow := rule.Action == "block" || rule.Action == "log"
 				if !allow && isChallengeAction(rule.Action) {
@@ -599,7 +600,7 @@ func buildWAF(s cf.Snapshot, opts Options) ir.WAFPolicy {
 	// Zone IP Access Rules become deny/allow lists and country/ASN blocks. A
 	// challenge mode emits only when the operator hardened it into a block (the
 	// classifier's challenge-as-block ASK); otherwise classify surfaces it and
-	// nothing is emitted — never a silent drop, and never an answered ASK that
+	// nothing is emitted, never a silent drop, and never an answered ASK that
 	// changes nothing.
 	for _, r := range s.IPAccessRules {
 		asBlock := r.Mode == "block"
@@ -629,7 +630,7 @@ func buildWAF(s cf.Snapshot, opts Options) ir.WAFPolicy {
 	// Zone User-Agent Blocking rules → caddy-waf rules matching HEADERS:User-Agent
 	// (the same shape wafRuleFromMatch produces for an http.user_agent firewall
 	// rule). A block emits directly; a challenge emits only when hardened into a
-	// block (the ua-challenge-as-block ASK) — same predicate the classifier uses.
+	// block (the ua-challenge-as-block ASK): same predicate the classifier uses.
 	for _, r := range s.UARules {
 		name := r.UserAgent
 		if r.Description != "" {
@@ -654,7 +655,7 @@ func buildWAF(s cf.Snapshot, opts Options) ir.WAFPolicy {
 		})
 	}
 	// Country/ASN blocks can arrive from both IP Access Rules and firewall custom
-	// rules (a zone may express the same block twice) — dedup so the directive is
+	// rules (a zone may express the same block twice): dedup so the directive is
 	// emitted once.
 	w.BlockCountries = dedupStrings(w.BlockCountries)
 	w.BlockASNs = dedupInts(w.BlockASNs)
@@ -705,7 +706,7 @@ func parseASN(s string) (int, bool) {
 // caddy-waf rule. The match came from cfexpr.SimpleWAFMatch (the shared
 // predicate), so this only ever runs for shapes the classifier reported AUTO.
 // isChallengeAction reports whether a Cloudflare firewall action is a challenge
-// (CAPTCHA/JS) — the actions the operator may opt to harden into a hard block.
+// (CAPTCHA/JS): the actions the operator may opt to harden into a hard block.
 func isChallengeAction(a string) bool {
 	return a == "managed_challenge" || a == "challenge" || a == "js_challenge"
 }

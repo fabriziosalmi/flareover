@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package ovhdns
@@ -19,7 +20,7 @@ import (
 	"github.com/fabriziosalmi/flareover/internal/target/zonefile"
 )
 
-// defaultBaseURL is OVH's EU API endpoint — the sovereign choice (ca/us endpoints
+// defaultBaseURL is OVH's EU API endpoint: the sovereign choice (ca/us endpoints
 // would put the control plane under a non-EU jurisdiction).
 const defaultBaseURL = "https://eu.api.ovh.com/1.0"
 

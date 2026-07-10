@@ -26,10 +26,10 @@ flowchart LR
 to your source or your registrar. Only `provision` (your own target, your own credentials) and the
 final DNS flip in `execute` change anything, and the flip is gated on the parity result.
 
-## The verdict — how the 0% FP contract is enforced
+## The verdict: how the 0% FP contract is enforced
 
 Every element takes exactly one path. `classify` decides the verdict; `plan` emits config for the same
-surface — via the **shared `cfexpr` predicate**, so the two can never drift (a rule is only AUTO when
+surface, via the **shared `cfexpr` predicate**, so the two can never drift (a rule is only AUTO when
 the generator actually produces config for it).
 
 ```mermaid
@@ -49,14 +49,14 @@ byte-identical config (golden-tested). The report is reviewable in git before an
 
 ## Runtime topology it stands up
 
-The lowest-risk shape keeps your origin exactly where it is and re-tunnels it — the origin only swaps
+The lowest-risk shape keeps your origin exactly where it is and re-tunnels it: the origin only swaps
 `cloudflared` for WireGuard. More than one edge gives an HA front (round-robin DNS + `guard`).
 
 ```mermaid
 flowchart TB
   V["visitors"] -->|"DNS A/AAAA"| E1["Edge node 1<br/>Caddy · caddy-waf · souin"]
   V -->|"round-robin (HA)"| E2["Edge node 2<br/>(optional)"]
-  E1 -->|"WireGuard mesh"| O[("origin — unchanged<br/>zero inbound")]
+  E1 -->|"WireGuard mesh"| O[("origin: unchanged<br/>zero inbound")]
   E2 -->|"WireGuard mesh"| O
 ```
 
@@ -71,11 +71,11 @@ adapter against the real provider before you trust it.
 |---|---|
 | `internal/cloudflare` | Read-only Cloudflare REST v4 extractor → `Snapshot` |
 | `internal/ir` | CF-IR: the provider-agnostic intent model everything downstream speaks |
-| `internal/cfexpr` | The **single** interpreter for CF expressions/params — shared by classify + plan so they cannot disagree |
+| `internal/cfexpr` | The **single** interpreter for CF expressions/params, shared by classify + plan so they cannot disagree |
 | `internal/classify` | The verdict engine (AUTO/ASK/MANUAL) → `report.Report` |
 | `internal/report` | Verdict vocabulary + the coverage report (text / Markdown / JSON / HTML) |
-| `internal/plan` | Builds the deployable `ir.Plan` from snapshot + decisions — only the faithful surface |
-| `internal/target/*` | Render/provision adapters: `caddy`, `caddywaf`, `certmate`, `mesh`, `spm`; DNS via `powerdns` (self-hosted) or a managed provider — EU-owned `bunnydns`, `scalewaydns`, `ovhdns`, `gandidns`, `leasewebdns`, `hetznerdns`, or the honestly-tiered US-operated `route53`, `clouddns`, `azuredns` — all sharing the BIND renderer in `zonefile` |
+| `internal/plan` | Builds the deployable `ir.Plan` from snapshot + decisions: only the faithful surface |
+| `internal/target/*` | Render/provision adapters: `caddy`, `caddywaf`, `certmate`, `mesh`, `spm`; DNS via `powerdns` (self-hosted) or a managed provider: EU-owned `bunnydns`, `scalewaydns`, `ovhdns`, `gandidns`, `leasewebdns`, `hetznerdns`, or the honestly-tiered US-operated `route53`, `clouddns`, `azuredns`, all sharing the BIND renderer in `zonefile` |
 | `internal/objstore` | R2/S3 → self-hosted MinIO **or** managed EU S3 (Scaleway/OVH/Contabo/Aruba); hand-rolled SigV4 extraction, `mc`/rclone generation |
 | `internal/provider` | EU edge-provider catalogue + honest sovereignty tiering + edge cloud-init (and Scaleway/OVH instance create scripts) |
 | `internal/parity` | The parity prober: live edge vs staged edge, HARD/SOFT divergence |
@@ -93,5 +93,5 @@ adapter against the real provider before you trust it.
 - **Determinism.** No wall-clock, no randomness, no network in classify/generate. Re-runs are
   byte-identical.
 - **Standard library only.** The engine has zero external Go dependencies.
-- **Honesty over coverage.** When equivalence can't be proven, the verdict degrades to ASK or MANUAL —
+- **Honesty over coverage.** When equivalence can't be proven, the verdict degrades to ASK or MANUAL,
   never a hopeful AUTO.

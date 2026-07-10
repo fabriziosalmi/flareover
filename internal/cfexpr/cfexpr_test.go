@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package cfexpr
@@ -6,7 +7,7 @@ import "testing"
 
 // TestSimpleWAFMatchAllowlist is the 0% FP guard for custom firewall rules: only
 // the exact shapes the plan can emit may be reported AUTO. The regression it
-// locks in — classify once marked ip.src/ip.geoip/`ne` rules AUTO while the plan
+// locks in: classify once marked ip.src/ip.geoip/`ne` rules AUTO while the plan
 // emitted nothing.
 func TestSimpleWAFMatchAllowlist(t *testing.T) {
 	cases := []struct {
@@ -41,8 +42,8 @@ func TestSimpleWAFMatchAllowlist(t *testing.T) {
 
 func TestIsSimple(t *testing.T) {
 	// IsSimple catches boolean composition / functions (used for transform
-	// AUTO-vs-PARTIAL). WAF-emittability is a stricter, separate check —
-	// SimpleWAFMatch — which is what rejects `ne`, non-http fields, etc.
+	// AUTO-vs-PARTIAL). WAF-emittability is a stricter, separate check
+	// (SimpleWAFMatch) which is what rejects `ne`, non-http fields, etc.
 	simple := []string{`http.host eq "x"`, `http.request.uri.path contains "/a"`}
 	compound := []string{`a and b`, `a or b`, `not a`, `x matches "y"`, `len(http.host) != 0`}
 	for _, e := range simple {

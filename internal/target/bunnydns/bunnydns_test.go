@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package bunnydns
@@ -64,10 +65,10 @@ func TestZoneOmitsSOAandNS(t *testing.T) {
 	// Anchor on the tab-delimited rdata type so the header comment (which names
 	// SOA/NS to explain their absence) is not mistaken for a record.
 	if strings.Contains(body, "\tSOA\t") {
-		t.Error("import zone leaked an SOA record — bunny.net owns the SOA")
+		t.Error("import zone leaked an SOA record: bunny.net owns the SOA")
 	}
 	if strings.Contains(body, "\tNS\t") || strings.Contains(body, "NAMESERVER_PLACEHOLDER") {
-		t.Error("import zone leaked apex NS records — bunny.net owns delegation")
+		t.Error("import zone leaked apex NS records: bunny.net owns delegation")
 	}
 	if !strings.Contains(body, "$ORIGIN example.com.") {
 		t.Error("zone missing $ORIGIN")

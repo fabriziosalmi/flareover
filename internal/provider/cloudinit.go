@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 package provider
@@ -12,7 +13,7 @@ import (
 // edge's WireGuard config, builds the custom Caddy (caddy-waf + souin) the config
 // assumes, opens the firewall, and starts the services. cloud-init is understood
 // identically by Hetzner, OVH, Contabo, Aruba, AWS, GCP and Azure, so one file
-// works everywhere — the provider only decides *where* (and the sovereignty tier
+// works everywhere: the provider only decides *where* (and the sovereignty tier
 // stamped in the header).
 //
 // The WireGuard config carries a private key; cloud-init user_data is the
@@ -20,12 +21,12 @@ import (
 func EdgeCloudInit(p Provider, caddyfile, wgConf []byte) []byte {
 	var b strings.Builder
 	b.WriteString("#cloud-config\n")
-	fmt.Fprintf(&b, "# flareover edge node — %s\n", p.Name)
+	fmt.Fprintf(&b, "# flareover edge node: %s\n", p.Name)
 	fmt.Fprintf(&b, "# residency: %s | operator: %s | exposure: %s\n", p.Residency, p.Operator, p.Exposure)
 	if !p.Sovereign() {
-		b.WriteString("# NOTE: EU data residency, but a US operator — NOT sovereign (US CLOUD Act reach).\n")
+		b.WriteString("# NOTE: EU data residency, but a US operator: NOT sovereign (US CLOUD Act reach).\n")
 	}
-	b.WriteString("# Contains a WireGuard private key — treat this user-data as a secret.\n\n")
+	b.WriteString("# Contains a WireGuard private key: treat this user-data as a secret.\n\n")
 
 	b.WriteString("package_update: true\n")
 	b.WriteString("packages:\n")

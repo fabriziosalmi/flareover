@@ -3,7 +3,7 @@ title: "DNS Targets"
 description: "Authoritative DNS is the one swappable part of the target stack: self-host it, or point --dns at a managed provider. The de-proxied records map"
 ---
 
-Authoritative DNS is the one swappable part of the target stack: self-host it, or point `--dns` at a managed provider. The de-proxied records map deterministically either way (a shared BIND renderer serializes them), and every provisioner is **idempotent** — re-running converges with no duplicate records.
+Authoritative DNS is the one swappable part of the target stack: self-host it, or point `--dns` at a managed provider. The de-proxied records map deterministically either way (a shared BIND renderer serializes them), and every provisioner is **idempotent**: re-running converges with no duplicate records.
 
 All credentials come from the **environment**, never the command line.
 
@@ -13,7 +13,7 @@ All credentials come from the **environment**, never the command line.
 |--------|---------|-----|-----|
 | **PowerDNS** | `powerdns` (default) | Full BIND zone + live REST provisioning, DNSSEC automated | `PDNS_API_KEY` (+ `--pdns-url`) |
 
-## Managed — EU-owned (sovereign)
+## Managed: EU-owned (sovereign)
 
 | Target | `--dns` | How | Env |
 |--------|---------|-----|-----|
@@ -24,9 +24,9 @@ All credentials come from the **environment**, never the command line.
 | **Leaseweb** | `leaseweb` | Delete-then-create REPLACE | `LEASEWEB_API_KEY` |
 | **Hetzner** | `hetzner` | Create-if-absent per record | `HETZNER_DNS_TOKEN` |
 
-## Managed — US-operated (honestly tiered, **not** sovereign)
+## Managed: US-operated (honestly tiered, **not** sovereign)
 
-These live under US CLOUD Act / FISA reach. flareover offers them as the pragmatic "keep your existing account" bridge and says so every time — it will never label them sovereign, and prints a nudge back to the EU-owned options. See [Sovereignty Tiers](/docs/sovereignty-tiers/).
+These live under US CLOUD Act / FISA reach. flareover offers them as the pragmatic "keep your existing account" bridge and says so every time. It will never label them sovereign, and prints a nudge back to the EU-owned options. See [Sovereignty Tiers](/docs/sovereignty-tiers/).
 
 | Target | `--dns` | How | Env |
 |--------|---------|-----|-----|
@@ -52,7 +52,7 @@ Re-running `provision` is the idempotency check: a correct adapter converges wit
 
 - **The zone must already exist** with the provider. flareover manages *records*; it never auto-creates the zone (that stays an explicit operator step).
 - **Record encoding** is shared across the BIND-style providers: `TXT` values are quoted, `MX`/`SRV` priority is embedded, `CNAME`/`NS` targets are dotted. This is proven against each provider's documented API.
-- **DNSSEC** is automated only on PowerDNS today. On a managed provider the DNSSEC request is surfaced with instructions (enable it in the provider console, publish the DS at the registrar) — never silently assumed.
+- **DNSSEC** is automated only on PowerDNS today. On a managed provider the DNSSEC request is surfaced with instructions (enable it in the provider console, publish the DS at the registrar), never silently assumed.
 - **The registrar NS cutover is always a human step.** flareover prints the delegation set; you make the move.
 
 ## Verification tier

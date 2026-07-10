@@ -1,8 +1,9 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package certmate is the certificate adapter: it drives a CertMate instance to
 // issue certs via DNS-01, which is what unlocks the two things Caddy's built-in
-// HTTP-01 cannot do — wildcard certificates and an EU certificate authority
+// HTTP-01 cannot do: wildcard certificates and an EU certificate authority
 // (Actalis). flareover asks CertMate to issue through PowerDNS DNS-01, then
 // pulls the material for the edge to consume. This closes the wildcard gap the
 // real cutover exposed.
@@ -43,7 +44,7 @@ type Client struct {
 
 // NewClient builds a CertMate client. The HTTP timeout is deliberately generous
 // (5 min): CertMate runs certbot DNS-01 issuance SYNCHRONOUSLY inside the
-// create request — the POST does not return until the challenge has propagated
+// create request: the POST does not return until the challenge has propagated
 // and Let's Encrypt has validated and signed, which routinely exceeds 30s. A
 // tight timeout makes flareover report failure on a cert that in fact issues.
 // Download/health calls return in milliseconds, so the high ceiling never
@@ -99,7 +100,7 @@ type Material struct {
 // Issue requests a certificate via DNS-01, which makes wildcard and EU-CA
 // issuance possible. It is idempotent: CertMate's create endpoint rejects an
 // existing domain with 409 CERTIFICATE_ALREADY_EXISTS rather than renewing, so
-// a re-run on an already-issued cert is the desired state already met — treated
+// a re-run on an already-issued cert is the desired state already met, treated
 // here as success. (To force a refresh, use the renew/reissue endpoints.)
 func (c *Client) Issue(ctx context.Context, r IssueRequest) error {
 	if r.DNSProvider == "" {
@@ -135,7 +136,7 @@ func (c *Client) Download(ctx context.Context, domain string) (Material, error) 
 }
 
 // EnsureReady polls until the domain's material is downloadable or the deadline
-// passes — DNS-01 issuance is asynchronous (the challenge must propagate).
+// passes: DNS-01 issuance is asynchronous (the challenge must propagate).
 func (c *Client) EnsureReady(ctx context.Context, domain string, timeout time.Duration) (Material, error) {
 	deadline := time.Now().Add(timeout)
 	var last error
@@ -159,11 +160,11 @@ func (c *Client) EnsureReady(ctx context.Context, domain string, timeout time.Du
 // PlanCerts decides which certificates to request for a migration plan. It
 // prefers ONE wildcard cert per apex when the plan needs it (covering all
 // subdomains via DNS-01), plus the apex; otherwise a cert per site host. This is
-// exactly the split HTTP-01 gets wrong — wildcards must go through DNS-01.
+// exactly the split HTTP-01 gets wrong: wildcards must go through DNS-01.
 //
 // dnsProvider selects which authoritative DNS the DNS-01 challenge is written
-// to. It defaults to "powerdns" (the target), but during migration — before the
-// NS have been cut over — the zone still resolves at the SOURCE, so the
+// to. It defaults to "powerdns" (the target), but during migration (before the
+// NS have been cut over) the zone still resolves at the SOURCE, so the
 // bootstrap cert must be issued through the source's DNS provider (e.g.
 // "cloudflare"). After the NS move to PowerDNS, re-issue with "powerdns".
 func PlanCerts(p ir.Plan, ca, accountID, dnsProvider string) []IssueRequest {

@@ -1,7 +1,8 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Package spm generates the egress-shield configuration for secure-proxy-manager
-// — the outbound counterpart almost no migration touches. It turns the egress
+// Package spm generates the egress-shield configuration for secure-proxy-manager:
+// the outbound counterpart almost no migration touches. It turns the egress
 // intent (default-deny, an allowlist of legitimate destinations, threat feeds,
 // optional TLS inspection) into an API setup script. The 0% FP discipline holds
 // on the way out too: SSL-bump installs a MITM CA on clients, so it is only
@@ -35,7 +36,7 @@ func Generate(e ir.EgressPolicy) []target.Artifact {
 	}
 
 	if len(e.Allow) > 0 {
-		b.WriteString("# Allowlist — the destinations the app legitimately calls out to.\n")
+		b.WriteString("# Allowlist: the destinations the app legitimately calls out to.\n")
 		// SPM's allowlist item is {entry[, description]}; it auto-classifies the
 		// entry as CIDR vs domain server-side. An "entry" that is empty (or the
 		// wrong field name) is rejected 400, so send exactly {"entry":...}.
@@ -54,11 +55,11 @@ func Generate(e ir.EgressPolicy) []target.Artifact {
 
 	note := "run with SPM_URL + SPM_TOKEN set; enables fail-closed egress + allowlist"
 	if e.SSLBump {
-		b.WriteString("# TLS inspection (SSL-Bump) — CONFIRMED. Installs a MITM CA on clients; a legal/privacy decision.\n")
+		b.WriteString("# TLS inspection (SSL-Bump): CONFIRMED. Installs a MITM CA on clients; a legal/privacy decision.\n")
 		b.WriteString(`api /api/settings -X POST --data '{"ssl_bump_enabled":"true"}'` + "\n")
 		note += "; SSL-bump ENABLED (MITM CA)"
 	} else {
-		b.WriteString("# SSL-Bump NOT enabled (it MITMs client TLS — enable only with explicit consent).\n")
+		b.WriteString("# SSL-Bump NOT enabled (it MITMs client TLS; enable only with explicit consent).\n")
 	}
 
 	return []target.Artifact{{

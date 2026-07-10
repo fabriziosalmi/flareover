@@ -1,3 +1,4 @@
+// SPDX-FileCopyrightText: © 2026 Fabrizio Salmi
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Package caddy renders an ir.Plan into a Caddyfile for the default flareover
@@ -76,7 +77,7 @@ func renderSite(s ir.Site, waf ir.WAFPolicy) string {
 		fmt.Fprintf(&b, "\theader Strict-Transport-Security \"%s\"\n", hstsValue(h))
 	}
 
-	// Header transforms — unscoped ops first (sorted so Match "" leads), then each
+	// Header transforms: unscoped ops first (sorted so Match "" leads), then each
 	// path-scoped group under its own named matcher.
 	mi, lastMatch, mname := 0, "", ""
 	for i, op := range s.Headers {
@@ -93,7 +94,7 @@ func renderSite(s ir.Site, waf ir.WAFPolicy) string {
 		}
 	}
 
-	// URL rewrites — global/host-scoped emit bare; a path-scoped one goes under its
+	// URL rewrites: global/host-scoped emit bare; a path-scoped one goes under its
 	// own named matcher. Caddy runs `rewrite` before `reverse_proxy` regardless of
 	// file order, so placement here is purely for readability.
 	ri := 0
