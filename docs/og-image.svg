@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-label="flareover — leave the orange cloud, without breaking your site">
+  <title>flareover</title>
+  <defs>
+    <polygon id="s" points="0,-10 2.35,-3.24 9.51,-3.09 3.8,1.24 5.88,8.09 0,4 -5.88,8.09 -3.8,1.24 -9.51,-3.09 -2.35,-3.24"/>
+    <g id="mark">
+      <circle cx="0" cy="0" r="58" fill="#123c9c"/>
+      <use href="#s" transform="translate(0,-44) scale(0.52)" fill="#f6c821"/>
+      <use href="#s" transform="translate(22,-38.1) scale(0.52)" fill="#f6c821"/>
+      <use href="#s" transform="translate(38.1,-22) scale(0.52)" fill="#f6c821"/>
+      <use href="#s" transform="translate(44,0) scale(0.52)" fill="#f6c821"/>
+      <use href="#s" transform="translate(38.1,22) scale(0.52)" fill="#f6c821"/>
+      <use href="#s" transform="translate(22,38.1) scale(0.52)" fill="#f6c821"/>
+      <use href="#s" transform="translate(0,44) scale(0.52)" fill="#f6c821"/>
+      <use href="#s" transform="translate(-22,38.1) scale(0.52)" fill="#f6c821"/>
+      <use href="#s" transform="translate(-38.1,22) scale(0.52)" fill="#f6c821"/>
+      <use href="#s" transform="translate(-44,0) scale(0.52)" fill="#f6c821"/>
+      <use href="#s" transform="translate(-38.1,-22) scale(0.52)" fill="#f6c821"/>
+      <use href="#s" transform="translate(-22,-38.1) scale(0.52)" fill="#f6c821"/>
+      <path d="M-18 -3 L-2 13 L20 -17" fill="none" stroke="#ff9128" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </defs>
+  <rect width="1200" height="630" fill="#0b0b0f"/>
+  <use href="#mark" transform="translate(600,170) scale(1.45)"/>
+  <text x="600" y="345" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="92" font-weight="600"><tspan fill="#ff9128">flare</tspan><tspan fill="#eef0f4">over</tspan></text>
+  <text x="600" y="430" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="40" font-weight="400" fill="#d6d6de">Leave the <tspan fill="#ff9128" font-weight="600">orange cloud</tspan>. Without breaking your site.</text>
+  <text x="600" y="486" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="27" font-weight="400" fill="#8a8a99">Deterministic migration to EU-sovereign self-hosted infrastructure</text>
+  <rect x="440" y="540" width="320" height="2" fill="#26262e"/>
+  <text x="600" y="586" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="24" font-weight="400" fill="#7bd88f">AGPL-3.0 · self-hostable · EU-sovereign · 0% false-positive</text>
+</svg>

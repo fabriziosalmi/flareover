@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 120" width="470" height="120" role="img" aria-label="flareover">
+  <title>flareover</title>
+  <defs><polygon id="s" points="0,-10 2.35,-3.24 9.51,-3.09 3.8,1.24 5.88,8.09 0,4 -5.88,8.09 -3.8,1.24 -9.51,-3.09 -2.35,-3.24"/></defs>
+  <circle cx="60" cy="60" r="58" fill="#123c9c"/>
+  <use href="#s" transform="translate(60,16) scale(0.52)" fill="#f6c821"/>
+  <use href="#s" transform="translate(82,21.9) scale(0.52)" fill="#f6c821"/>
+  <use href="#s" transform="translate(98.1,38) scale(0.52)" fill="#f6c821"/>
+  <use href="#s" transform="translate(104,60) scale(0.52)" fill="#f6c821"/>
+  <use href="#s" transform="translate(98.1,82) scale(0.52)" fill="#f6c821"/>
+  <use href="#s" transform="translate(82,98.1) scale(0.52)" fill="#f6c821"/>
+  <use href="#s" transform="translate(60,104) scale(0.52)" fill="#f6c821"/>
+  <use href="#s" transform="translate(38,98.1) scale(0.52)" fill="#f6c821"/>
+  <use href="#s" transform="translate(21.9,82) scale(0.52)" fill="#f6c821"/>
+  <use href="#s" transform="translate(16,60) scale(0.52)" fill="#f6c821"/>
+  <use href="#s" transform="translate(21.9,38) scale(0.52)" fill="#f6c821"/>
+  <use href="#s" transform="translate(38,21.9) scale(0.52)" fill="#f6c821"/>
+  <path d="M42 57 L58 73 L80 43" fill="none" stroke="#ff9128" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="140" y="78" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="56" font-weight="600"><tspan fill="#ff9128">flare</tspan><tspan fill="#eef0f4">over</tspan></text>
+</svg>

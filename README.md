@@ -1,4 +1,6 @@
-# flareover
+<p align="center"><img src="docs/logo-mark.svg" alt="flareover" width="92" height="92"></p>
+
+<h1 align="center">flareover</h1>
 
 **Move your site off the orange cloud onto your own EU servers — without changing how it behaves.**
 

@@ -5,6 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>flareover — deterministic edge migration to EU-sovereign infrastructure</title>
 <meta name="description" content="A deterministic, 0% false-positive engine that rebuilds your proxied CDN/WAF edge on EU-sovereign self-hosted infrastructure — Caddy, PowerDNS, CertMate, MinIO. AGPL.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://www.flareover.com/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://www.flareover.com/">
+<meta property="og:title" content="flareover — leave the orange cloud, without breaking your site">
+<meta property="og:description" content="A deterministic, 0% false-positive engine that rebuilds your CDN/WAF edge on EU-sovereign self-hosted infrastructure. It never emits config that silently changes behavior.">
+<meta property="og:image" content="https://www.flareover.com/og-image.svg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="flareover — leave the orange cloud, without breaking your site">
+<meta name="twitter:description" content="Deterministic migration to EU-sovereign self-hosted infrastructure. 0% false-positive.">
+<meta name="twitter:image" content="https://www.flareover.com/og-image.svg">
 <style>
   :root{
     --bg:#0b0e14; --panel:#111621; --line:#1e2636; --ink:#e6ebf2; --dim:#8a94a6;
@@ -24,8 +35,10 @@
 
   /* hero */
   header{padding:96px 0 64px;text-align:center}
-  .logo{font-family:var(--mono);font-weight:700;font-size:1rem;letter-spacing:.2em;color:var(--dim)}
-  .logo b{color:var(--flare)}
+  .logo{display:inline-flex;align-items:center;gap:.5rem;font-weight:700;font-size:1.4rem;letter-spacing:-.01em}
+  .logo img{width:34px;height:34px;display:block}
+  .logo .fl{color:var(--flare)}
+  .logo .ov{color:var(--ink)}
   h1{font-size:clamp(2.4rem,6vw,4rem);line-height:1.05;margin:.5rem 0 .3rem;font-weight:800;letter-spacing:-.02em}
   h1 .flare{background:linear-gradient(90deg,var(--flare),var(--flare2));-webkit-background-clip:text;background-clip:text;color:transparent}
   .sub{font-size:clamp(1.05rem,2.5vw,1.35rem);color:var(--dim);max-width:640px;margin:1rem auto 2rem}
@@ -93,7 +106,7 @@
 <div class="wrap">
 
   <header>
-    <div class="logo"><b>▲</b> <span class="flare">FLARE</span>·OVER</div>
+    <div class="logo"><img src="logo-mark.svg" alt="" width="34" height="34"><span><span class="fl">flare</span><span class="ov">over</span></span></div>
     <h1>Leave the <span class="flare">orange cloud</span>.<br>Without breaking your site.</h1>
     <p class="sub"><b>flareover</b> reads your existing edge setup — DNS, TLS certificates, redirects,
       WAF rules, caching — and rebuilds it faithfully on your own EU servers (open-source,

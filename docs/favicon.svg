@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="flareover">
+  <title>flareover</title>
+  <defs><polygon id="s" points="0,-10 2.35,-3.24 9.51,-3.09 3.8,1.24 5.88,8.09 0,4 -5.88,8.09 -3.8,1.24 -9.51,-3.09 -2.35,-3.24"/></defs>
+  <circle cx="60" cy="60" r="60" fill="#123c9c"/>
+  <use href="#s" transform="translate(60,17) scale(0.56)" fill="#f6c821"/>
+  <use href="#s" transform="translate(82.2,22.8) scale(0.56)" fill="#f6c821"/>
+  <use href="#s" transform="translate(98.2,38.8) scale(0.56)" fill="#f6c821"/>
+  <use href="#s" transform="translate(104,60) scale(0.56)" fill="#f6c821"/>
+  <use href="#s" transform="translate(98.2,81.2) scale(0.56)" fill="#f6c821"/>
+  <use href="#s" transform="translate(82.2,97.2) scale(0.56)" fill="#f6c821"/>
+  <use href="#s" transform="translate(60,103) scale(0.56)" fill="#f6c821"/>
+  <use href="#s" transform="translate(37.8,97.2) scale(0.56)" fill="#f6c821"/>
+  <use href="#s" transform="translate(21.8,81.2) scale(0.56)" fill="#f6c821"/>
+  <use href="#s" transform="translate(16,60) scale(0.56)" fill="#f6c821"/>
+  <use href="#s" transform="translate(21.8,38.8) scale(0.56)" fill="#f6c821"/>
+  <use href="#s" transform="translate(37.8,22.8) scale(0.56)" fill="#f6c821"/>
+  <path d="M41 57 L58 74 L81 42" fill="none" stroke="#ff9128" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>flareover — documentation</title>
 <meta name="description" content="flareover documentation: getting started, the 0% false-positive contract, the CLI reference, target adapters, and a migration cookbook.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://www.flareover.com/docs.html">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://www.flareover.com/docs.html">
+<meta property="og:title" content="flareover — documentation">
+<meta property="og:description" content="The 0% false-positive contract, the CLI reference, target adapters, and a migration cookbook.">
+<meta property="og:image" content="https://www.flareover.com/og-image.svg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://www.flareover.com/og-image.svg">
 <style>
   :root{
     --bg:#0b0e14; --panel:#111621; --line:#1e2636; --ink:#e6ebf2; --dim:#8a94a6;
@@ -25,8 +34,9 @@
   /* top bar */
   .topbar{display:flex;align-items:center;gap:16px;padding:18px 0;border-bottom:1px solid var(--line);position:sticky;top:0;
           background:rgba(11,14,20,.86);backdrop-filter:blur(8px);z-index:10}
-  .logo{font-family:var(--mono);font-weight:700;font-size:.92rem;letter-spacing:.2em;color:var(--dim)}
-  .logo b{color:var(--flare)}
+  .logo{display:inline-flex;align-items:center;gap:.4rem;font-weight:700;font-size:1.05rem;letter-spacing:-.01em;color:var(--ink)}
+  .logo img{width:24px;height:24px;display:block}
+  .logo .fl{color:var(--flare)}
   .crumb{color:var(--dim);font-size:.85rem} .crumb b{color:var(--ink)}
   .topbar .sp{flex:1}
   .topbar a.lnk{color:var(--dim);font-size:.9rem}
@@ -82,7 +92,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <a class="logo" href="index.html"><b>▲</b> FLARE·OVER</a>
+    <a class="logo" href="index.html"><img src="logo-mark.svg" alt="" width="24" height="24"><span><span class="fl">flare</span>over</span></a>
     <span class="crumb"><b>docs</b></span>
     <span class="sp"></span>
     <a class="lnk" href="index.html">Home</a>
