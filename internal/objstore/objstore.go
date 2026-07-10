@@ -76,12 +76,20 @@ func Classify(s Snapshot) report.Report {
 				Rationale: "CORS rule → MinIO bucket CORS (mc cors set)."})
 		}
 		for _, lc := range b.Lifecycle {
-			if lc.Transition {
+			switch {
+			case lc.Transition:
 				add(report.Finding{Kind: "lifecycle", Name: b.Name + "/" + lc.ID, Verdict: report.Manual,
 					Rationale: "Lifecycle rule uses storage-class transitions (tiering) with no MinIO target — recreate manually if needed."})
-			} else {
+			case lc.ExpireDays > 0:
+				// AUTO only when there is a positive expiry to emit — Generate skips
+				// any rule with ExpireDays <= 0, so classify must too (classify ⟺
+				// generate). A multipart-abort-only / noncurrent-version-only rule
+				// (ExpireDays == 0) has no MinIO ILM equivalent here.
 				add(report.Finding{Kind: "lifecycle", Name: b.Name + "/" + lc.ID, Verdict: report.Auto, Target: "minio",
 					Rationale: fmt.Sprintf("Expiry lifecycle (%dd) → MinIO ILM (mc ilm rule add).", lc.ExpireDays)})
+			default:
+				add(report.Finding{Kind: "lifecycle", Name: b.Name + "/" + lc.ID, Verdict: report.Manual,
+					Rationale: "Lifecycle rule has no reproducible object-expiry (e.g. multipart-abort / noncurrent-version only) — recreate manually if needed."})
 			}
 		}
 		if b.PublicRead {

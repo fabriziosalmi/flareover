@@ -577,12 +577,20 @@ func buildWAF(s cf.Snapshot, opts Options) ir.WAFPolicy {
 			w.ManagedOWASP = true
 		}
 	}
-	// Zone IP Access Rules become deny/allow lists and country/ASN blocks. Only
-	// the faithfully-mappable modes are folded in here; challenge modes are left
-	// to the classifier's ASK and never silently downgraded to a block.
+	// Zone IP Access Rules become deny/allow lists and country/ASN blocks. A
+	// challenge mode emits only when the operator hardened it into a block (the
+	// classifier's challenge-as-block ASK); otherwise classify surfaces it and
+	// nothing is emitted — never a silent drop, and never an answered ASK that
+	// changes nothing.
 	for _, r := range s.IPAccessRules {
-		switch r.Mode {
-		case "block":
+		asBlock := r.Mode == "block"
+		if !asBlock && isChallengeAction(r.Mode) {
+			name := r.Mode + " " + r.Target + "=" + r.Value // matches classifyIPAccessRules' name
+			if a, ok := opts.answer("challenge-as-block:" + name); ok && a == "yes" {
+				asBlock = true
+			}
+		}
+		if asBlock {
 			switch r.Target {
 			case "country":
 				w.BlockCountries = append(w.BlockCountries, r.Value)
@@ -593,11 +601,38 @@ func buildWAF(s cf.Snapshot, opts Options) ir.WAFPolicy {
 			case "ip", "ip_range", "ip6":
 				w.BlockIPs = append(w.BlockIPs, r.Value)
 			}
-		case "whitelist":
-			if r.Target == "ip" || r.Target == "ip_range" || r.Target == "ip6" {
-				w.AllowIPs = append(w.AllowIPs, r.Value)
+			continue
+		}
+		if r.Mode == "whitelist" && (r.Target == "ip" || r.Target == "ip_range" || r.Target == "ip6") {
+			w.AllowIPs = append(w.AllowIPs, r.Value)
+		}
+	}
+	// Zone User-Agent Blocking rules → caddy-waf rules matching HEADERS:User-Agent
+	// (the same shape wafRuleFromMatch produces for an http.user_agent firewall
+	// rule). A block emits directly; a challenge emits only when hardened into a
+	// block (the ua-challenge-as-block ASK) — same predicate the classifier uses.
+	for _, r := range s.UARules {
+		name := r.UserAgent
+		if r.Description != "" {
+			name = r.Description
+		}
+		emit := r.Mode == "block"
+		if !emit && isChallengeAction(r.Mode) {
+			if a, ok := opts.answer("ua-challenge-as-block:" + name); ok && a == "yes" {
+				emit = true
 			}
 		}
+		if !emit {
+			continue
+		}
+		w.CustomRules = append(w.CustomRules, ir.WAFRule{
+			Description: r.Description,
+			Pattern:     regexpQuote(r.UserAgent),
+			Targets:     []string{"HEADERS:User-Agent"},
+			Action:      "block",
+			Score:       10,
+			Sample:      r.UserAgent,
+		})
 	}
 	// Country/ASN blocks can arrive from both IP Access Rules and firewall custom
 	// rules (a zone may express the same block twice) — dedup so the directive is

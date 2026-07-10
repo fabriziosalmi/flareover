@@ -152,15 +152,20 @@ func classifyGlobalSettings(s cf.Snapshot, add func(report.Finding)) {
 		add(auto("proto", "http3", "caddy", "HTTP/3 → Caddy serves HTTP/3 (enabled by default)."))
 	}
 	if st.AutomaticHTTPSRewrites.On() {
-		add(auto("transform", "automatic-https-rewrites", "caddy",
-			"Automatic HTTPS Rewrites → Caddy replace directive rewriting http:// asset links to https://."))
+		// Cloudflare rewrites http:// asset links inside response BODIES. Caddy's
+		// default build has no response-body replace directive (the xcaddy build
+		// carries only caddy-waf + souin), and nothing in the plan/IR emits one —
+		// so this cannot be AUTO without silently claiming coverage it never emits.
+		add(manual("transform", "automatic-https-rewrites",
+			"Automatic HTTPS Rewrites rewrites http:// asset links in response bodies; Caddy's default build has no equivalent (it would need a response-body replace plugin) — reproduce it at the origin/app."))
 	}
 	if len(st.Ciphers) > 0 {
-		add(report.Finding{
-			Kind: "tls", Name: "custom-ciphers", Verdict: report.Ask, Target: "caddy",
-			Rationale: "A custom cipher suite is configured. Caddy exposes a narrower, safe-by-default cipher set; confirm mapping to the closest supported list.",
-			Question:  &report.Question{ID: "custom-ciphers", Prompt: "Map custom ciphers to Caddy's closest supported set?", Options: []string{"yes", "no"}, Default: "yes"},
-		})
+		// A custom cipher list is not mapped: ir.TLS carries no cipher field and the
+		// caddy generator emits only `protocols`, never `ciphers`. Surfacing this as
+		// an answerable ASK would be a false-ASK (the answer changes nothing), so it
+		// is MANUAL — Caddy's default suite is safe but not a faithful reproduction.
+		add(manual("tls", "custom-ciphers",
+			"A custom cipher suite is configured. Caddy's default cipher set is safe but flareover does not map a custom list — apply cipher customization by hand if it is required."))
 	}
 }
 
@@ -174,7 +179,12 @@ func classifyPageRules(s cf.Snapshot, add func(report.Finding)) {
 		name := pr.Target
 		// A page rule may carry several actions; classify each once, but collapse
 		// the several cache-related actions into a single cache finding so a rule
-		// with cache_level + edge_cache_ttl doesn't surface as duplicates.
+		// with cache_level + edge_cache_ttl doesn't surface as duplicates. Only
+		// edge_cache_ttl actually materializes (plan.cacheForZone reads that key and
+		// nothing else), so a rule whose sole cache action is cache_level or
+		// browser_cache_ttl emits nothing — it must be MANUAL, not PARTIAL, to keep
+		// classify ⟺ generate honest.
+		_, hasEdgeCacheTTL := pr.Actions["edge_cache_ttl"]
 		cacheEmitted := false
 		for action := range pr.Actions {
 			switch action {
@@ -184,8 +194,12 @@ func classifyPageRules(s cf.Snapshot, add func(report.Finding)) {
 				add(auto("redirect", name, "caddy", "Page Rule Always Use HTTPS → Caddy HTTP→HTTPS redirect for the matched pattern."))
 			case "cache_level", "edge_cache_ttl", "browser_cache_ttl":
 				if !cacheEmitted {
-					add(partial("cache", name, "caddy", "Page Rule cache settings → Caddy cache handler (souin); TTL parity is approximate."))
 					cacheEmitted = true
+					if hasEdgeCacheTTL {
+						add(partial("cache", name, "caddy", "Page Rule edge cache TTL → Caddy cache handler (souin); TTL parity is approximate."))
+					} else {
+						add(manual("cache", name, "Page Rule cache_level/browser_cache_ttl has no faithful Caddy cache mapping (only edge_cache_ttl is emitted) — set caching by hand."))
+					}
 				}
 			case "ssl":
 				add(partial("tls", name, "caddy", "Page Rule per-URL SSL override → Caddy per-site TLS; review scope."))
@@ -442,7 +456,15 @@ func classifyIPAccessRules(s cf.Snapshot, add func(report.Finding)) {
 				add(manual("ip-access", name, fmt.Sprintf("Block on target %q has no caddy-waf mapping.", r.Target)))
 			}
 		case "whitelist":
-			add(auto("ip-access", name, "caddy-waf", "Allowlist → caddy-waf whitelist entry."))
+			// buildWAF only materializes an allow entry for IP/CIDR targets
+			// (AllowIPs); there is no allow-country / allow-ASN directive in
+			// ir.WAFPolicy or caddy-waf, so a country/ASN allowlist must not be AUTO.
+			switch r.Target {
+			case "ip", "ip_range", "ip6":
+				add(auto("ip-access", name, "caddy-waf", "IP/CIDR allowlist → caddy-waf ip_whitelist_file entry."))
+			default:
+				add(manual("ip-access", name, fmt.Sprintf("Allowlist on target %q has no caddy-waf allow directive (only IP/CIDR allowlists map).", r.Target)))
+			}
 		case "challenge", "js_challenge", "managed_challenge":
 			add(report.Finding{
 				Kind: "ip-access", Name: name, Verdict: report.Ask, Target: "caddy-waf",

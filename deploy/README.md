@@ -18,7 +18,10 @@ It is the containerized twin of [`../docs/deploy-hardened.md`](../docs/deploy-ha
 | **MinIO** | S3-compatible object storage | `9000` (S3), `9001` (console) |
 | **secure-proxy-manager** | outbound egress shield (optional) | `3128` |
 
-Only Caddy is exposed to the internet; everything else is bound to `127.0.0.1`.
+Caddy (`80`/`443`) and PowerDNS (`53`, authoritative — it must be publicly
+reachable to serve the zone) are internet-facing; every admin/API surface
+(PowerDNS `8081`, CertMate `8000`, MinIO `9000`/`9001`, SPM `3128`) is bound to
+`127.0.0.1`.
 
 ## Use it
 
@@ -32,10 +35,13 @@ cp .env.example .env && $EDITOR .env      # PDNS_API_KEY, CERTMATE_TOKEN, MinIO 
 # 3. stand it up (the --build compiles the custom Caddy once)
 docker compose up -d --build
 
-# 4. provision your target — the DNS zone + certs — via its APIs
+# 4. provision your target — the DNS zone + certs — via its APIs.
+#    Secrets come from the environment only, never argv (the .env already
+#    defines PDNS_API_KEY / CERTMATE_TOKEN):
+set -a; . ./.env; set +a
 flareover provision --snapshot snap.json --decisions decisions.lock \
-  --pdns-url http://localhost:8081  --pdns-key "$PDNS_API_KEY" \
-  --certmate-url http://localhost:8000 --certmate-token "$CERTMATE_TOKEN"
+  --pdns-url http://localhost:8081 \
+  --certmate-url http://localhost:8000
 
 # object storage, if any:
 flareover storage buckets.json --out ./out && sh ./out/minio/provision.sh

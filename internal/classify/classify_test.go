@@ -93,6 +93,41 @@ func TestURLRewriteSymmetry(t *testing.T) {
 	}
 }
 
+// TestSymmetryDowngrades pins the draconian-audit fixes: features the generator
+// cannot emit must be MANUAL, never a false-AUTO/false-ASK. Each case here was a
+// confirmed classify ⟺ generate asymmetry before the fix.
+func TestSymmetryDowngrades(t *testing.T) {
+	on := cf.OnOff(true)
+	snap := cf.Snapshot{
+		DNSRecords: []cf.DNSRecord{{Type: "A", Name: "example.com", Proxied: true}},
+		Settings: cf.ZoneSettings{
+			AutomaticHTTPSRewrites: &on,                                     // no response-body replace directive exists
+			Ciphers:                []string{"ECDHE-RSA-AES128-GCM-SHA256"}, // no cipher mapping in ir.TLS/caddy
+		},
+		PageRules: []cf.PageRule{
+			{Target: "example.com/legacy", Status: "active", Actions: map[string]any{"cache_level": "cache_everything"}},
+			{Target: "example.com/api", Status: "active", Actions: map[string]any{"edge_cache_ttl": float64(3600)}},
+		},
+		IPAccessRules: []cf.IPAccessRule{
+			{Mode: "whitelist", Target: "country", Value: "US"},
+			{Mode: "whitelist", Target: "ip", Value: "203.0.113.4"},
+		},
+	}
+	r := Classify(snap)
+	check := func(kind, name string, want report.Verdict) {
+		f := find(r, kind, name)
+		if f == nil || f.Verdict != want {
+			t.Errorf("%s/%s: got %v, want %v", kind, name, f, want)
+		}
+	}
+	check("transform", "automatic-https-rewrites", report.Manual) // was false-AUTO
+	check("tls", "custom-ciphers", report.Manual)                 // was false-ASK
+	check("cache", "example.com/legacy", report.Manual)           // cache_level-only → not emitted
+	check("cache", "example.com/api", report.Auto)                // edge_cache_ttl → emitted (PARTIAL==Auto)
+	check("ip-access", "whitelist country=US", report.Manual)     // no allow-country directive
+	check("ip-access", "whitelist ip=203.0.113.4", report.Auto)   // IP allowlist → AllowIPs
+}
+
 // TestChallengeAskOnlyWhenEmittable: a challenge rule is an honorable ASK
 // ("convert to a hard block?") only when the match is one the plan can emit; a
 // compound match is MANUAL — never an ASK the generator would then ignore.

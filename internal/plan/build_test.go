@@ -70,12 +70,28 @@ func TestBuildShape(t *testing.T) {
 	if !p.DNS.DNSSEC {
 		t.Error("DNSSEC should be enabled (answered yes)")
 	}
-	// The compound WAF rule was left ASK (unanswered) → must NOT be generated.
-	if len(p.WAF.CustomRules) != 1 {
-		t.Fatalf("custom WAF rules = %d, want 1 (only the simple one)", len(p.WAF.CustomRules))
+	// The simple firewall rule AND the legacy User-Agent Blocking rule both emit
+	// (classify marks each AUTO); the compound WAF rule stays ASK (unanswered) →
+	// must NOT be generated.
+	if len(p.WAF.CustomRules) != 2 {
+		t.Fatalf("custom WAF rules = %d, want 2 (simple firewall + UA block)", len(p.WAF.CustomRules))
 	}
-	if p.WAF.CustomRules[0].Description != "block bad UA" {
-		t.Errorf("unexpected WAF rule: %q", p.WAF.CustomRules[0].Description)
+	var sawFirewall, sawUA bool
+	for _, r := range p.WAF.CustomRules {
+		switch r.Description {
+		case "block bad UA":
+			sawFirewall = true
+		case "block curl": // the legacy User-Agent Blocking rule
+			sawUA = true
+			if len(r.Targets) != 1 || r.Targets[0] != "HEADERS:User-Agent" {
+				t.Errorf("UA block rule must target HEADERS:User-Agent, got %v", r.Targets)
+			}
+		default:
+			t.Errorf("unexpected WAF rule: %q", r.Description)
+		}
+	}
+	if !sawFirewall || !sawUA {
+		t.Errorf("missing expected rules: firewall=%v ua=%v", sawFirewall, sawUA)
 	}
 	if !p.WAF.ManagedOWASP {
 		t.Error("managed OWASP should be on")
@@ -134,6 +150,41 @@ func TestOriginRuleAppliedToSite(t *testing.T) {
 	}
 	if o := p.Sites[0].Origin; o.HostHeader != "app.origin" || o.SNI != "app.tls" {
 		t.Errorf("origin-rule override not applied to the site: %+v", o)
+	}
+}
+
+// TestChallengeAsBlockHonored pins the audit fix: the UA and IP-access
+// challenge-as-block ASKs must actually emit a block when answered yes (they were
+// false-ASKs before — buildWAF never read s.UARules and ignored ip-access
+// challenges), and must emit nothing when unanswered.
+func TestChallengeAsBlockHonored(t *testing.T) {
+	snap := cf.Snapshot{
+		UARules:       []cf.UARule{{Mode: "challenge", UserAgent: "curl/7", Description: "curl challenge"}},
+		IPAccessRules: []cf.IPAccessRule{{Mode: "challenge", Target: "country", Value: "CN"}},
+	}
+	p, err := Build(snap, Options{Decisions: map[string]string{
+		"ua-challenge-as-block:curl challenge":    "yes",
+		"challenge-as-block:challenge country=CN": "yes",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawUA bool
+	for _, r := range p.WAF.CustomRules {
+		if len(r.Targets) == 1 && r.Targets[0] == "HEADERS:User-Agent" {
+			sawUA = true
+		}
+	}
+	if !sawUA {
+		t.Error("answered ua-challenge-as-block=yes must emit a HEADERS:User-Agent block rule")
+	}
+	if len(p.WAF.BlockCountries) != 1 || p.WAF.BlockCountries[0] != "CN" {
+		t.Errorf("answered challenge-as-block=yes must block the country, got %v", p.WAF.BlockCountries)
+	}
+	// Unanswered → the ASK is honest: nothing emitted, never a silent block.
+	p2, _ := Build(snap, Options{})
+	if len(p2.WAF.CustomRules) != 0 || len(p2.WAF.BlockCountries) != 0 {
+		t.Errorf("un-answered challenge ASKs must emit nothing, got %d rules / %v countries", len(p2.WAF.CustomRules), p2.WAF.BlockCountries)
 	}
 }
 

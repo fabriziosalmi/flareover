@@ -98,8 +98,8 @@ PHASES
                             tier (EU-owned vs US-operator/EU-region).
 
 DOCTOR FLAGS
-  --pdns-url / --pdns-key            probe the PowerDNS API + auth
-  --certmate-url / --certmate-token  probe CertMate health + DNS-provider config
+  --pdns-url  (+ PDNS_API_KEY env)   probe the PowerDNS API + auth
+  --certmate-url (+ CERTMATE_TOKEN)  probe CertMate health + DNS-provider config
   --minio-endpoint <url>             probe MinIO/S3 reachability
   --spm-url <url>                    probe secure-proxy-manager readiness
   --check-caddy                      check the local caddy build (caddy-waf + souin)
@@ -786,6 +786,10 @@ func cmdProvision(args []string) int {
 	var pdnsURL, pdnsKey, cmURL, cmToken, ca, cmAccount, cmDNS, dnsTarget string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
+		if a == "--pdns-key" || a == "--certmate-token" {
+			fmt.Fprintf(os.Stderr, "flareover provision: %s is no longer accepted (it would expose the secret on argv) — set PDNS_API_KEY / CERTMATE_TOKEN in the environment instead\n", a)
+			return 2
+		}
 		next := func() string { i++; return args[i] }
 		if i+1 >= len(args) && strings.HasPrefix(a, "--") {
 			fmt.Fprintf(os.Stderr, "flareover provision: %s needs a value\n", a)
@@ -804,12 +808,8 @@ func cmdProvision(args []string) int {
 			dnsTarget = next()
 		case "--pdns-url":
 			pdnsURL = next()
-		case "--pdns-key":
-			pdnsKey = next()
 		case "--certmate-url":
 			cmURL = next()
-		case "--certmate-token":
-			cmToken = next()
 		case "--certmate-account":
 			cmAccount = next()
 		case "--certmate-dns":
@@ -821,6 +821,11 @@ func cmdProvision(args []string) int {
 			return 2
 		}
 	}
+	// PowerDNS/CertMate secrets come from the environment only, never argv — like
+	// every other backend, so they never leak via ps / /proc / shell history.
+	pdnsKey = os.Getenv("PDNS_API_KEY")
+	cmToken = os.Getenv("CERTMATE_TOKEN")
+
 	// DNS backend selection (default: self-hosted PowerDNS). Scaleway managed DNS
 	// takes its credentials from the environment, never from argv.
 	var scwSecret, scwProject string
@@ -866,7 +871,7 @@ func cmdProvision(args []string) int {
 		azTenant, azClient, azSecret = os.Getenv("AZURE_TENANT_ID"), os.Getenv("AZURE_CLIENT_ID"), os.Getenv("AZURE_CLIENT_SECRET")
 		azSub, azRG = os.Getenv("AZURE_SUBSCRIPTION_ID"), os.Getenv("AZURE_RESOURCE_GROUP")
 	default:
-		fmt.Fprintf(os.Stderr, "flareover provision: unknown --dns %q (want: powerdns | scaleway | ovh | gandi | leaseweb | route53 | clouddns | azure)\n", dnsTarget)
+		fmt.Fprintf(os.Stderr, "flareover provision: unknown --dns %q (want: powerdns | scaleway | ovh | gandi | leaseweb | hetzner | route53 | clouddns | azure)\n", dnsTarget)
 		return 2
 	}
 	anyDNS := useScaleway || useOVH || useGandi || useLeaseweb || useHetzner || useRoute53 || useCloudDNS || useAzure
@@ -1546,6 +1551,10 @@ func cmdDoctor(args []string) int {
 			o.CheckCaddy = true
 			continue
 		}
+		if a == "--pdns-key" || a == "--certmate-token" {
+			fmt.Fprintf(os.Stderr, "flareover doctor: %s is no longer accepted (it exposes the secret on argv) — set PDNS_API_KEY / CERTMATE_TOKEN in the environment instead\n", a)
+			return 2
+		}
 		if i+1 >= len(args) {
 			fmt.Fprintf(os.Stderr, "flareover doctor: %s needs a value\n", a)
 			return 2
@@ -1554,12 +1563,8 @@ func cmdDoctor(args []string) int {
 		switch a {
 		case "--pdns-url":
 			o.PDNSURL = args[i]
-		case "--pdns-key":
-			o.PDNSKey = args[i]
 		case "--certmate-url":
 			o.CertMateURL = args[i]
-		case "--certmate-token":
-			o.CertMateToken = args[i]
 		case "--minio-endpoint":
 			o.MinIOEndpoint = args[i]
 		case "--spm-url":
@@ -1569,6 +1574,9 @@ func cmdDoctor(args []string) int {
 			return 2
 		}
 	}
+	// Secrets come from the environment only, never argv.
+	o.PDNSKey = os.Getenv("PDNS_API_KEY")
+	o.CertMateToken = os.Getenv("CERTMATE_TOKEN")
 
 	checks := doctor.Run(context.Background(), o)
 	fmt.Print(render.Doctor(checks, render.Enabled(os.Stdout)))

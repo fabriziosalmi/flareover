@@ -94,8 +94,8 @@ services:
     networks: [internal]
 
 networks:
-  edge: {} # public-facing tier (Caddy only)
-  internal: {} # PowerDNS · CertMate · MinIO · SPM — bound to localhost, not the internet
+  edge: {} # public-facing tier (Caddy 80/443, and PowerDNS 53 — authoritative DNS must be public)
+  internal: {} # inter-container tier; the admin/API ports (8081, 8000, 9000/9001, 3128) publish only to 127.0.0.1
 
 volumes:
   pdns-data: {}

@@ -100,6 +100,33 @@ func TestRcloneAndProvisionArtifacts(t *testing.T) {
 	}
 }
 
+// TestLifecycleZeroExpiryIsManual pins the audit fix: a lifecycle rule with no
+// positive object-expiry (multipart-abort / noncurrent-version only) has no
+// MinIO ILM equivalent, so classify must mark it MANUAL — it was a false-AUTO
+// before — and Generate must emit no `mc ilm` line for it (classify ⟺ generate).
+func TestLifecycleZeroExpiryIsManual(t *testing.T) {
+	snap := Snapshot{Source: "s3", Buckets: []Bucket{{
+		Name: "b", Lifecycle: []LifecycleRule{
+			{ID: "abort-only", ExpireDays: 0}, // no expiry → MANUAL, not emitted
+			{ID: "expire-30", ExpireDays: 30}, // positive → AUTO, emitted
+		},
+	}}}
+	r := Classify(snap)
+	if f := find(r, "lifecycle", "b/abort-only"); f == nil || f.Verdict != report.Manual {
+		t.Errorf("zero-expiry lifecycle must be MANUAL, got %v", f)
+	}
+	if f := find(r, "lifecycle", "b/expire-30"); f == nil || f.Verdict != report.Auto {
+		t.Errorf("positive-expiry lifecycle must be AUTO, got %v", f)
+	}
+	prov := artifact(Generate(snap, GenOptions{}), "minio/provision.sh")
+	if strings.Contains(prov, "--expire-days 0") {
+		t.Error("Generate must not emit an mc ilm line for the zero-expiry rule")
+	}
+	if !strings.Contains(prov, "--expire-days 30") {
+		t.Error("Generate must emit the positive-expiry rule")
+	}
+}
+
 // TestScalewayDestination checks the managed-EU-S3 preset: right endpoint,
 // region, credentials env, alias, and artifact folder.
 func TestScalewayDestination(t *testing.T) {

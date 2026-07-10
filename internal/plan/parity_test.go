@@ -66,6 +66,39 @@ func TestIPAccessParity(t *testing.T) {
 	}
 }
 
+// TestUABlockMaterializes extends the diamond invariant to legacy User-Agent
+// Blocking rules: every block-mode UA rule (which the classifier marks AUTO) must
+// materialize as a caddy-waf HEADERS:User-Agent rule carrying its UA as the
+// sample. It was a silently-dropped security control before the audit fix, and
+// matching per-UA (not by count) means a regression can't be masked by an
+// unrelated firewall-custom UA rule.
+func TestUABlockMaterializes(t *testing.T) {
+	s := load(t)
+	p, err := plan.Build(s, buildPlan(t, s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	uaSamples := map[string]bool{}
+	for _, r := range p.WAF.CustomRules {
+		if len(r.Targets) == 1 && r.Targets[0] == "HEADERS:User-Agent" {
+			uaSamples[r.Sample] = true
+		}
+	}
+	found := false
+	for _, ua := range s.UARules {
+		if ua.Mode != "block" {
+			continue
+		}
+		found = true
+		if !uaSamples[ua.UserAgent] {
+			t.Errorf("UA block rule %q is classified AUTO but was not emitted as a caddy-waf rule", ua.UserAgent)
+		}
+	}
+	if !found {
+		t.Skip("fixture exercises no User-Agent Blocking rule")
+	}
+}
+
 func TestBlocklistsWiring(t *testing.T) {
 	s := load(t)
 	p, err := plan.Build(s, plan.Options{Blocklists: []string{"domain", "ip"}, Decisions: map[string]string{}})

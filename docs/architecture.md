@@ -75,8 +75,8 @@ adapter against the real provider before you trust it.
 | `internal/classify` | The verdict engine (AUTO/ASK/MANUAL) → `report.Report` |
 | `internal/report` | Verdict vocabulary + the coverage report (text / Markdown / JSON / HTML) |
 | `internal/plan` | Builds the deployable `ir.Plan` from snapshot + decisions — only the faithful surface |
-| `internal/target/*` | Render/provision adapters: `caddy`, `caddywaf`, `certmate`, `mesh`, `spm`; DNS via `powerdns` (self-hosted) or a managed EU provider — `bunnydns`, `scalewaydns`, `ovhdns`, `gandidns`, `leasewebdns` — all sharing the BIND renderer in `zonefile` |
-| `internal/objstore` | R2/S3 → self-hosted MinIO **or** managed EU S3 (Scaleway/OVH); hand-rolled SigV4 extraction, `mc`/rclone generation |
+| `internal/target/*` | Render/provision adapters: `caddy`, `caddywaf`, `certmate`, `mesh`, `spm`; DNS via `powerdns` (self-hosted) or a managed provider — EU-owned `bunnydns`, `scalewaydns`, `ovhdns`, `gandidns`, `leasewebdns`, `hetznerdns`, or the honestly-tiered US-operated `route53`, `clouddns`, `azuredns` — all sharing the BIND renderer in `zonefile` |
+| `internal/objstore` | R2/S3 → self-hosted MinIO **or** managed EU S3 (Scaleway/OVH/Contabo/Aruba); hand-rolled SigV4 extraction, `mc`/rclone generation |
 | `internal/provider` | EU edge-provider catalogue + honest sovereignty tiering + edge cloud-init (and Scaleway/OVH instance create scripts) |
 | `internal/parity` | The parity prober: live edge vs staged edge, HARD/SOFT divergence |
 | `internal/validate` | Proves generated artifacts parse (`caddy validate`, zone lint) |
@@ -84,7 +84,7 @@ adapter against the real provider before you trust it.
 | `internal/guard` | Failguards watchdog: health-watch + rollback/failover trigger |
 | `internal/runbook` | The human-facing `MIGRATION.md` report + cutover/rollback steps |
 | `internal/render` · `internal/cost` · `internal/stack` | Terminal rendering · cost comparison · stack profiles |
-| `cmd/flareover` | The CLI: the twelve phase verbs |
+| `cmd/flareover` | The CLI: the thirteen phase verbs |
 
 ## Design invariants
 

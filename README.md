@@ -73,8 +73,8 @@ assess → prepare → present → execute → guard
 | Landing zone | one-command `deploy/` docker-compose, bare-metal / Proxmox, or any EU provider — `flareover providers` |
 
 Every target is tagged with its jurisdiction so the migration provably stays EU-scoped. Edge providers
-carry an honest **sovereignty tier**: EU-owned operators (Hetzner, OVH, Contabo, Aruba, Scaleway) are
-labelled sovereign; a hyperscaler's EU region (AWS/GCP/Azure in Milan) is offered too, but labelled for
+carry an honest **sovereignty tier**: EU-owned operators (Hetzner, OVH, Contabo, Aruba, Scaleway, Leaseweb)
+are labelled sovereign; a hyperscaler's EU region (AWS/GCP/Azure in Milan) is offered too, but labelled for
 what it is — EU *residency* under a US operator (CLOUD Act reach), **never** "sovereign". The engine
 never touches your source provider or your registrar — the DS publish and the final NS move stay
 explicit human steps.
@@ -135,17 +135,21 @@ flareover prepare zone.snapshot.json \
   --egress-deny --egress-allow api.example.com,10.0.0.0/8 \
   --mesh-edge 203.0.113.10:51820 --out ./out
 
+# Secrets are read from the environment only, never passed on argv (so they
+# can't leak via ps / /proc / shell history):
+export PDNS_API_KEY=… CERTMATE_TOKEN=…
+
 # 2b. Prove the artifacts parse, and pre-flight the target before touching it
 flareover prepare zone.snapshot.json --edge-ip 203.0.113.10 --out ./out --validate
-flareover doctor --pdns-url http://pdns:8081 --pdns-key "$PDNS_KEY" \
-  --certmate-url http://certmate:8000 --certmate-token "$CM_TOKEN" \
+flareover doctor --pdns-url http://pdns:8081 \
+  --certmate-url http://certmate:8000 \
   --spm-url http://spm:5001 --check-caddy   # GO / NO-GO, exit 0 only when ready
 
 # 3. Stand up the live target (PowerDNS zone + DNSSEC, CertMate wildcard via DNS-01)
 flareover provision --snapshot zone.snapshot.json --decisions decisions.lock \
   --edge-ip 203.0.113.10 \
-  --pdns-url http://pdns:8081 --pdns-key "$PDNS_KEY" --nameservers ns1.example.eu,ns2.example.eu \
-  --certmate-url http://certmate:8000 --certmate-token "$CM_TOKEN" \
+  --pdns-url http://pdns:8081 --nameservers ns1.example.eu,ns2.example.eu \
+  --certmate-url http://certmate:8000 \
   --certmate-dns cloudflare   # pre-cutover: NS still at the source → solve DNS-01 there
 
 # 4. Parity gate before you flip anything

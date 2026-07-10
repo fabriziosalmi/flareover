@@ -111,7 +111,7 @@
     <main>
       <section id="start">
         <h1>Documentation</h1>
-        <p class="lead">flareover reads a live Cloudflare zone and rebuilds it — DNS, TLS, redirects, WAF,
+        <p class="lead">flareover reads your live orange-cloud zone and rebuilds it — DNS, TLS, redirects, WAF,
           caching — on EU-sovereign, self-hosted or EU-owned managed infrastructure. It never emits config
           that silently changes behavior: what it can't map exactly, it asks about or flags. This is the
           working reference; the <a href="index.html">landing</a> is the overview and
@@ -132,7 +132,7 @@ go install github.com/fabriziosalmi/flareover/cmd/flareover@latest
 
 flareover version</pre></div>
         <p class="muted">The engine is standard-library only — no runtime dependencies, no telemetry, no
-          network access outside the read-only Cloudflare API and your own target's APIs.</p>
+          network access outside the source's read-only API and your own target's APIs.</p>
       </section>
 
       <section id="flow">
@@ -163,7 +163,7 @@ flareover provision --snapshot snap.json --decisions decisions.lock \
 
       <section id="pipeline">
         <h2>The pipeline</h2>
-        <p class="lead">A Cloudflare zone goes in; a faithful EU stack comes out; a verdict is attached to
+        <p class="lead">An orange-cloud zone goes in; a faithful EU stack comes out; a verdict is attached to
           every element on the way. Extraction and classification never know which target is in play — the
           provider-agnostic IR is the seam, so adding a backend is adding one adapter.</p>
         <div class="term"><div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
@@ -191,7 +191,7 @@ flareover provision --snapshot snap.json --decisions decisions.lock \
         </table>
         <p class="muted">The invariant is symmetry: <code>classify ⟺ generate</code>. If the generator would
           drop something, the classifier must not call it AUTO. A host/path-scoped transform, a compound WAF
-          expression, a Cloudflare challenge with no simple match — each is surfaced honestly, never a hopeful
+          expression, an orange-cloud challenge with no simple match — each is surfaced honestly, never a hopeful
           AUTO. Determinism is enforced too: no wall-clock, no randomness, no network in classify/generate.</p>
       </section>
 
@@ -212,7 +212,7 @@ flareover provision --snapshot snap.json --decisions decisions.lock \
 
       <section id="cli">
         <h2>CLI — every phase</h2>
-        <p class="lead">Twelve verbs walk a migration end to end. Everything up to <code>execute</code> is
+        <p class="lead">Thirteen verbs walk a migration end to end. Everything up to <code>execute</code> is
           read-only against your source.</p>
         <table>
           <tr><th>Phase</th><th>What it does</th></tr>
@@ -220,7 +220,7 @@ flareover provision --snapshot snap.json --decisions decisions.lock \
           <tr><td class="k">extract</td><td>Read a live zone (read-only API) into a snapshot JSON. Needs <code>CLOUDFLARE_API_TOKEN</code>.</td></tr>
           <tr><td class="k">assess</td><td>Classify the snapshot into an honest AUTO/ASK/MANUAL report. <code>--md</code> / <code>--json</code> / <code>--html</code>.</td></tr>
           <tr><td class="k">resolve</td><td>Walk the ASK questions into a <code>decisions.lock</code> (interactive, or <code>--defaults</code> / <code>--merge</code>).</td></tr>
-          <tr><td class="k">cost</td><td>Estimate the Cloudflare tier/add-on cost vs a flat EU stack (<code>--vps</code> to override).</td></tr>
+          <tr><td class="k">cost</td><td>Estimate the orange-cloud tier/add-on cost vs a flat EU stack (<code>--vps</code> to override).</td></tr>
           <tr><td class="k">prepare</td><td>Generate the target artifacts + a <code>MIGRATION.md</code> report. <code>--edge-ip</code>, <code>--dns</code>, <code>--stack</code>, <code>--validate</code>, <code>--edge-provider</code>, <code>--mesh-edge</code>.</td></tr>
           <tr><td class="k">provision</td><td>Stand the target up via APIs: DNS zone + DNSSEC, CertMate DNS-01. <code>--pdns-url</code> or <code>--dns scaleway|ovh|gandi|leaseweb|hetzner|route53|clouddns|azure</code>.</td></tr>
           <tr><td class="k">present</td><td>Parity gate: probe the live edge vs the staged edge (<code>--after-addr</code>). PASS/FAIL.</td></tr>
@@ -265,17 +265,17 @@ flareover provision --snapshot snap.json --decisions decisions.lock \
       </section>
 
       <section id="cb-selfhost">
-        <h2>Cookbook — Cloudflare → self-hosted EU</h2>
+        <h2>Cookbook — orange cloud → self-hosted EU</h2>
         <p class="lead">The full-sovereignty path: your own PowerDNS + Caddy on an EU VPS.</p>
         <div class="term"><div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
 <pre>flareover extract example.com &gt; snap.json
 flareover resolve snap.json --defaults &gt; decisions.lock
 flareover prepare snap.json --decisions decisions.lock --edge-ip <span class="fl">$EDGE_IP</span> --out out/
+<span class="fl">export</span> PDNS_API_KEY=… CERTMATE_TOKEN=…   <span class="dm"># secrets from env only, never on argv</span>
 flareover doctor --pdns-url http://pdns:8081 --certmate-url http://certmate:8000  <span class="dm"># GO/NO-GO</span>
 flareover provision --snapshot snap.json --decisions decisions.lock \
-  --pdns-url http://pdns:8081 --pdns-key <span class="fl">$PDNS_KEY</span> \
-  --nameservers ns1.example.eu,ns2.example.eu \
-  --certmate-url http://certmate:8000 --certmate-token <span class="fl">$CM</span> --ca actalis
+  --pdns-url http://pdns:8081 --nameservers ns1.example.eu,ns2.example.eu \
+  --certmate-url http://certmate:8000 --ca actalis
 flareover present --after-addr <span class="fl">$EDGE_IP</span>   <span class="dm"># parity gate before you flip DNS</span></pre></div>
         <div class="note">No box to run the stack on? <b>deploy/</b> is a one-command
           <code>docker compose</code> landing zone (PowerDNS · Caddy+caddy-waf+souin · CertMate ·
@@ -283,7 +283,7 @@ flareover present --after-addr <span class="fl">$EDGE_IP</span>   <span class="d
       </section>
 
       <section id="cb-managed">
-        <h2>Cookbook — Cloudflare → managed EU DNS</h2>
+        <h2>Cookbook — orange cloud → managed EU DNS</h2>
         <p class="lead">Prefer managed over self-hosting the nameservers? Point <code>--dns</code> at an
           EU-owned provider; the records map deterministically and the apply is idempotent.</p>
         <div class="term"><div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
