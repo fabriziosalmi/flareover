@@ -118,8 +118,11 @@
   .term{background:#0a0d14;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
   .term .bar{display:flex;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:#0d1119}
   .term .bar i{width:12px;height:12px;border-radius:50%;display:inline-block}
-  .term pre{margin:0;padding:18px 20px;overflow:auto;font-family:var(--mono);font-size:13px;line-height:1.6}
-  .cy{color:#57c7d4}.gn{color:var(--eu)}.yl{color:var(--ask)}.rd{color:var(--manual)}.dm{color:var(--dim)}.bl{color:var(--blue)}.bd{font-weight:700}
+  /* force the terminal's base text to its own light ink in BOTH themes — the
+     body `color` is resolved on <body>, so a child would otherwise inherit the
+     dark light-mode ink and vanish on the always-dark terminal background */
+  .term pre{margin:0;padding:18px 20px;overflow:auto;font-family:var(--mono);font-size:13px;line-height:1.6;color:var(--ink)}
+  .cy{color:#7dd3df}.gn{color:var(--eu)}.yl{color:var(--ask)}.rd{color:var(--manual)}.dm{color:var(--dim)}.bl{color:var(--blue)}.bd{font-weight:700}
   .gate{background:var(--eu);color:#062318;font-weight:700;padding:0 .4rem;border-radius:3px}
 
   /* stack table */

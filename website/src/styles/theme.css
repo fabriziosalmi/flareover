@@ -51,3 +51,10 @@
 .sl-markdown-content strong {
   color: var(--sl-color-white);
 }
+
+/* Keep short code tokens (targets like `caddy-waf`) from breaking at the hyphen
+   inside the narrow columns of the coverage matrix. These tokens are all short,
+   so this never forces a horizontal scroll; the surrounding prose still wraps. */
+.sl-markdown-content table :not(pre) > code {
+  white-space: nowrap;
+}
