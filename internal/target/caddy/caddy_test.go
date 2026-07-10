@@ -139,6 +139,28 @@ func TestMatcherGuardedHeader(t *testing.T) {
 	}
 }
 
+// TestOriginTrustedCARendered pins #12's render side: a verified origin with a
+// private replacement-cert CA emits tls_trusted_ca_certs and never skips
+// verification.
+func TestOriginTrustedCARendered(t *testing.T) {
+	plan := ir.Plan{Zone: "example.com", Sites: []ir.Site{{
+		Host:   "example.com",
+		Origin: ir.Origin{Upstreams: []string{"10.0.0.9:443"}, Scheme: "https", VerifyTLS: true, TrustedCA: "/etc/caddy/origin-ca.pem"},
+		TLS:    ir.TLS{Provider: "certmate"},
+	}}}
+	arts, err := Generator{}.Generate(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(arts[0].Content)
+	if !strings.Contains(out, "tls_trusted_ca_certs /etc/caddy/origin-ca.pem") {
+		t.Errorf("verified origin with a trusted CA must emit tls_trusted_ca_certs:\n%s", out)
+	}
+	if strings.Contains(out, "tls_insecure_skip_verify") {
+		t.Error("a verified origin must NOT skip verification")
+	}
+}
+
 func TestScopedProxyEmission(t *testing.T) {
 	plan := ir.Plan{Zone: "example.com", Sites: []ir.Site{{
 		Host:   "example.com",

@@ -26,6 +26,11 @@ type Options struct {
 	EdgeIP string
 	// CA is the default certificate authority ("letsencrypt" | "actalis").
 	CA string
+	// OriginCA is a PEM path Caddy trusts when verifying the origin (Full strict
+	// answered "verify" with a private replacement origin cert → transport
+	// tls_trusted_ca_certs). Empty means the replacement origin cert is expected
+	// to be publicly trusted.
+	OriginCA string
 	// Decisions maps report.Question.ID → chosen answer.
 	Decisions map[string]string
 	// Blocklists names external threat feeds to layer onto the WAF: "domain"
@@ -153,12 +158,20 @@ func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 		// which overrides the SSL-mode-derived scheme — the operator knows what
 		// the backend actually speaks. Without a scheme, the SSL mode decides.
 		upstream, oScheme, oVerify := resolveOrigin(origin, scheme, verify)
+		// A verified HTTPS origin trusts a private replacement-cert CA when the
+		// operator supplied one (--origin-ca); otherwise the replacement cert is
+		// expected to be publicly trusted. Skip-verify origins carry no CA.
+		trustedCA := ""
+		if oVerify && oScheme == "https" {
+			trustedCA = opts.OriginCA
+		}
 		site := ir.Site{
 			Host: rec.Name,
 			Origin: ir.Origin{
 				Upstreams: []string{upstream},
 				Scheme:    oScheme,
 				VerifyTLS: oVerify,
+				TrustedCA: trustedCA,
 			},
 			TLS: ir.TLS{
 				Provider:   "certmate",
@@ -261,6 +274,12 @@ func resolveOrigin(answer, defScheme string, defVerify bool) (string, string, bo
 func originScheme(s cf.Snapshot, opts Options) (scheme string, verify bool) {
 	switch strings.ToLower(s.Settings.SSL) {
 	case "strict":
+		// Verified by default; "skip" is an explicit, answered downgrade (the
+		// origin's Cloudflare Origin CA cert can't be verified by Caddy — see the
+		// origin-verify ASK). classify surfaces this, so it is never a silent break.
+		if a, ok := opts.answer("origin-verify"); ok && a == "skip" {
+			return "https", false
+		}
 		return "https", true
 	case "full":
 		return "https", false

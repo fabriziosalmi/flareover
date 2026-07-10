@@ -128,6 +128,18 @@ func TestSymmetryDowngrades(t *testing.T) {
 	check("ip-access", "whitelist ip=203.0.113.4", report.Auto)   // IP allowlist → AllowIPs
 }
 
+// TestStrictSSLModeIsAsk pins #12: Full (strict) is no longer a silent AUTO
+// (which shipped a Caddyfile whose edge→origin verification breaks against a
+// Cloudflare Origin CA cert). It is an ASK — verify with a replacement cert, or
+// an explicit skip-verify downgrade.
+func TestStrictSSLModeIsAsk(t *testing.T) {
+	r := Classify(cf.Snapshot{Settings: cf.ZoneSettings{SSL: "strict"}})
+	f := find(r, "tls", "ssl-mode")
+	if f == nil || f.Verdict != report.Ask || f.Question == nil || f.Question.ID != "origin-verify" {
+		t.Errorf("strict SSL must be an ASK (origin-verify), not a silent AUTO — got %+v", f)
+	}
+}
+
 // TestChallengeAskOnlyWhenEmittable: a challenge rule is an honorable ASK
 // ("convert to a hard block?") only when the match is one the plan can emit; a
 // compound match is MANUAL — never an ASK the generator would then ignore.

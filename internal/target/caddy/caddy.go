@@ -160,10 +160,15 @@ func renderReverseProxy(o ir.Origin, matcher string) string {
 		fmt.Fprintf(&body, "\t\theader_up Host %s\n", o.HostHeader)
 	}
 	insecure := o.Scheme == "https" && !o.VerifyTLS
-	if insecure || o.SNI != "" {
+	trusted := o.Scheme == "https" && o.VerifyTLS && o.TrustedCA != ""
+	if insecure || o.SNI != "" || trusted {
 		body.WriteString("\t\ttransport http {\n")
 		if o.SNI != "" {
 			fmt.Fprintf(&body, "\t\t\ttls_server_name %s\n", o.SNI)
+		}
+		if trusted {
+			// Verify the replacement origin cert against its (private) CA.
+			fmt.Fprintf(&body, "\t\t\ttls_trusted_ca_certs %s\n", o.TrustedCA)
 		}
 		if insecure {
 			body.WriteString("\t\t\ttls_insecure_skip_verify\n")

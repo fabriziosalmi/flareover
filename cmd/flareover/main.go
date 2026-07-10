@@ -113,6 +113,10 @@ PREPARE FLAGS
   --decisions <file>   JSON map of ASK question id -> answer (decisions.lock)
   --edge-ip <ip>       public IP of the new Caddy edge (proxied records repoint here)
   --ca <name>          default cert CA: letsencrypt (default) | actalis
+  --origin-ca <path>   PEM CA Caddy trusts to verify the origin when SSL was
+                       Full (strict) and you answered origin-verify=verify with a
+                       private replacement origin cert (→ tls_trusted_ca_certs).
+                       Omit if the replacement origin cert is publicly trusted.
   --stack <id>         target stack profile (default: caddy)
   --dns <id>           authoritative DNS target: powerdns (default, self-hosted),
                        bunny, or managed scaleway / ovh / gandi / leaseweb / hetzner
@@ -783,7 +787,7 @@ func cmdPresent(args []string) int {
 // the auto-provision step that closes the gap between "generate" and "done".
 func cmdProvision(args []string) int {
 	var snapPath, decisionsPath, nsList, edgeIP string
-	var pdnsURL, pdnsKey, cmURL, cmToken, ca, cmAccount, cmDNS, dnsTarget string
+	var pdnsURL, pdnsKey, cmURL, cmToken, ca, originCA, cmAccount, cmDNS, dnsTarget string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if a == "--pdns-key" || a == "--certmate-token" {
@@ -816,6 +820,8 @@ func cmdProvision(args []string) int {
 			cmDNS = next()
 		case "--ca":
 			ca = next()
+		case "--origin-ca":
+			originCA = next()
 		default:
 			fmt.Fprintf(os.Stderr, "flareover provision: unknown arg %q\n", a)
 			return 2
@@ -934,7 +940,7 @@ func cmdProvision(args []string) int {
 		fmt.Fprintf(os.Stderr, "flareover provision: %v\n", err)
 		return 1
 	}
-	built, err := plan.Build(snap, plan.Options{Decisions: decisions, CA: ca, EdgeIP: edgeIP})
+	built, err := plan.Build(snap, plan.Options{Decisions: decisions, CA: ca, OriginCA: originCA, EdgeIP: edgeIP})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "flareover provision: %v\n", err)
 		return 1
@@ -1225,7 +1231,7 @@ func cmdGuard(args []string) int {
 }
 
 func cmdPrepare(args []string) int {
-	var path, decisionsPath, edgeIP, ca, stackID, dnsTarget, outDir, blocklists, egressAllow, edgeProvider string
+	var path, decisionsPath, edgeIP, ca, originCA, stackID, dnsTarget, outDir, blocklists, egressAllow, edgeProvider string
 	var meshEdges []string
 	var egressDeny, egressSSLBump, doValidate bool
 	for i := 0; i < len(args); i++ {
@@ -1242,7 +1248,7 @@ func cmdPrepare(args []string) int {
 			continue
 		}
 		switch a {
-		case "--decisions", "--edge-ip", "--ca", "--stack", "--dns", "--out", "--blocklists", "--egress-allow", "--mesh-edge", "--edge-provider":
+		case "--decisions", "--edge-ip", "--ca", "--origin-ca", "--stack", "--dns", "--out", "--blocklists", "--egress-allow", "--mesh-edge", "--edge-provider":
 			if i+1 >= len(args) {
 				fmt.Fprintf(os.Stderr, "flareover prepare: %s needs a value\n", a)
 				return 2
@@ -1255,6 +1261,8 @@ func cmdPrepare(args []string) int {
 				edgeIP = args[i]
 			case "--ca":
 				ca = args[i]
+			case "--origin-ca":
+				originCA = args[i]
 			case "--stack":
 				stackID = args[i]
 			case "--dns":
@@ -1334,7 +1342,7 @@ func cmdPrepare(args []string) int {
 		egAllow = strings.Split(egressAllow, ",")
 	}
 	built, err := plan.Build(snap, plan.Options{
-		EdgeIP: edgeIP, CA: ca, Decisions: decisions, Blocklists: bl,
+		EdgeIP: edgeIP, CA: ca, OriginCA: originCA, Decisions: decisions, Blocklists: bl,
 		EgressDeny: egressDeny, EgressAllow: egAllow, EgressSSLBump: egressSSLBump,
 	})
 	if err != nil {

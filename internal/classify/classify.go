@@ -91,8 +91,20 @@ func classifyDNSSEC(s cf.Snapshot, add func(report.Finding)) {
 func classifyTLS(s cf.Snapshot, add func(report.Finding)) {
 	switch strings.ToLower(s.Settings.SSL) {
 	case "strict":
-		add(auto("tls", "ssl-mode", "caddy",
-			"SSL Full (strict) → Caddy terminates TLS and verifies the origin certificate (verify_tls on)."))
+		// Full (strict) verifies the origin cert — but on Cloudflare that cert is
+		// typically a Cloudflare Origin CA cert, trusted ONLY by Cloudflare. A
+		// self-hosted Caddy edge would fail to verify it, so emitting verify_tls
+		// unconditionally would ship a Caddyfile whose edge→origin handshake
+		// breaks. Not a silent AUTO: ask how the new edge should trust the origin.
+		add(report.Finding{
+			Kind: "tls", Name: "ssl-mode", Verdict: report.Ask, Target: "caddy",
+			Rationale: "SSL Full (strict) verifies the origin certificate, but a Cloudflare Origin CA cert is trusted only by Cloudflare — a self-hosted Caddy edge cannot verify it. Reproduce the verified edge→origin link with a replacement origin cert, or accept an encrypted-but-unverified link (a downgrade from strict).",
+			Question: &report.Question{
+				ID:      "origin-verify",
+				Prompt:  "Verify the origin certificate on the new edge? 'verify' needs a replacement trusted origin cert (issue one via CertMate and install it on the origin, or pass --origin-ca <ca.pem>); 'skip' encrypts but does not verify (a downgrade from strict).",
+				Options: []string{"verify", "skip"}, Default: "verify",
+			},
+		})
 	case "full":
 		add(auto("tls", "ssl-mode", "caddy",
 			"SSL Full → Caddy terminates TLS and forwards over HTTPS without verifying the origin cert."))

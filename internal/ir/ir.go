@@ -71,6 +71,12 @@ type Origin struct {
 	// (→ tls_server_name).
 	HostHeader string `json:"host_header,omitempty"`
 	SNI        string `json:"sni,omitempty"`
+	// TrustedCA, when set with VerifyTLS, is a PEM path Caddy trusts when
+	// verifying the origin (→ transport tls_trusted_ca_certs) — for a replacement
+	// origin cert signed by a private CA. Empty + VerifyTLS means the origin cert
+	// is expected to be publicly trusted; VerifyTLS=false means verification is
+	// skipped (tls_insecure_skip_verify).
+	TrustedCA string `json:"trusted_ca,omitempty"`
 }
 
 // TLS is the certificate intent for a Site.

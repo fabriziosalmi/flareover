@@ -153,6 +153,43 @@ func TestOriginRuleAppliedToSite(t *testing.T) {
 	}
 }
 
+// TestStrictOriginVerify pins #12's plan side: strict SSL answered "verify"
+// yields a verified origin (+ the private replacement CA when --origin-ca is
+// given); answered "skip" yields an explicit, unverified downgrade.
+func TestStrictOriginVerify(t *testing.T) {
+	snap := cf.Snapshot{
+		Zone:       cf.Zone{Name: "example.com"},
+		Settings:   cf.ZoneSettings{SSL: "strict"},
+		DNSRecords: []cf.DNSRecord{{Type: "A", Name: "app.example.com", Content: "192.0.2.1", Proxied: true}},
+	}
+	origin := "10.0.0.9:443"
+
+	// verify + a private replacement CA → VerifyTLS on, TrustedCA wired.
+	pv, err := Build(snap, Options{EdgeIP: "5.9.1.1", OriginCA: "/etc/caddy/origin-ca.pem",
+		Decisions: map[string]string{"origin:app.example.com": origin, "origin-verify": "verify"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := pv.Sites[0].Origin; !o.VerifyTLS || o.TrustedCA != "/etc/caddy/origin-ca.pem" {
+		t.Errorf("verify+origin-ca: VerifyTLS=%v TrustedCA=%q, want true + the CA path", o.VerifyTLS, o.TrustedCA)
+	}
+
+	// verify without --origin-ca → verified, but relies on a publicly-trusted
+	// replacement cert (no TrustedCA emitted).
+	pp, _ := Build(snap, Options{EdgeIP: "5.9.1.1",
+		Decisions: map[string]string{"origin:app.example.com": origin, "origin-verify": "verify"}})
+	if o := pp.Sites[0].Origin; !o.VerifyTLS || o.TrustedCA != "" {
+		t.Errorf("verify (public): VerifyTLS=%v TrustedCA=%q, want true + empty", o.VerifyTLS, o.TrustedCA)
+	}
+
+	// skip → explicit downgrade: not verified, no CA.
+	ps, _ := Build(snap, Options{EdgeIP: "5.9.1.1",
+		Decisions: map[string]string{"origin:app.example.com": origin, "origin-verify": "skip"}})
+	if o := ps.Sites[0].Origin; o.VerifyTLS || o.TrustedCA != "" {
+		t.Errorf("skip: VerifyTLS=%v TrustedCA=%q, want false + empty", o.VerifyTLS, o.TrustedCA)
+	}
+}
+
 // TestChallengeAsBlockHonored pins the audit fix: the UA and IP-access
 // challenge-as-block ASKs must actually emit a block when answered yes (they were
 // false-ASKs before — buildWAF never read s.UARules and ignored ip-access
