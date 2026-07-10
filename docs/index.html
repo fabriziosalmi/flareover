@@ -16,22 +16,50 @@
 <meta name="twitter:title" content="flareover — leave the orange cloud, without breaking your site">
 <meta name="twitter:description" content="Deterministic migration to EU-sovereign self-hosted infrastructure. 0% false-positive.">
 <meta name="twitter:image" content="https://www.flareover.com/og-image.svg">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f8f7f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0e14" media="(prefers-color-scheme: dark)">
+<link rel="preload" as="image" href="logo-mark.svg" type="image/svg+xml">
+<script>(function(){try{var t=localStorage.getItem('theme');if(!t)t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';document.documentElement.dataset.theme=t;}catch(e){}})();</script>
 <style>
+  /* ── design tokens · dark is the base (also the no-JS fallback) ── */
   :root{
+    color-scheme:dark;
     --bg:#0b0e14; --panel:#111621; --line:#1e2636; --ink:#e6ebf2; --dim:#8a94a6;
     --flare:#ff8a3d; --flare2:#ffb347; --eu:#5fd39a; --ask:#f5c451; --manual:#ff6b6b;
-    --blue:#8ab4ff; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --blue:#8ab4ff; --glow:rgba(255,138,61,.10); --btn-ink:#1a1206;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
   }
+  /* light · brand kept, darkened for contrast on paper-white */
+  :root[data-theme="light"]{
+    color-scheme:light;
+    --bg:#f8f7f4; --panel:#ffffff; --line:#e7e3da; --ink:#14181f; --dim:#5a6472;
+    --flare:#e2650f; --flare2:#c2560a; --eu:#0e9c62; --ask:#b7860a; --manual:#d64545;
+    --blue:#2f6fe0; --glow:rgba(226,101,15,.05);
+  }
+  /* the terminal is a screenshot — always dark, in either theme */
+  .term{--panel:#0d1119;--line:#1e2636;--ink:#e6ebf2;--dim:#8a94a6;--eu:#5fd39a;--ask:#f5c451;--manual:#ff6b6b;--blue:#8ab4ff}
+
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
-  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,rgba(255,138,61,.10),transparent),var(--bg);
-       color:var(--ink);font:16px/1.65 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,var(--glow),transparent),var(--bg);
+       color:var(--ink);font:16px/1.65 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+       transition:background-color .25s ease,color .2s ease}
   a{color:var(--flare2);text-decoration:none}
   a:hover{text-decoration:underline}
+  :focus-visible{outline:2px solid var(--flare);outline-offset:3px;border-radius:4px}
   .wrap{max-width:960px;margin:0 auto;padding:0 24px}
   .mono{font-family:var(--mono)}
   .tag{display:inline-block;padding:.28rem .7rem;border-radius:999px;font-size:.78rem;letter-spacing:.04em;
-       border:1px solid var(--line);color:var(--eu);background:rgba(95,211,154,.06)}
+       border:1px solid var(--line);color:var(--eu);background:color-mix(in srgb,var(--eu) 9%,transparent)}
+
+  /* theme toggle — sun in dark, moon in light */
+  .themetoggle{position:fixed;top:16px;right:16px;z-index:20;width:40px;height:40px;display:grid;place-items:center;
+       border-radius:10px;border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 82%,transparent);
+       color:var(--ink);cursor:pointer;backdrop-filter:blur(6px);transition:border-color .2s,background-color .2s,transform .12s}
+  .themetoggle:hover{border-color:var(--flare);transform:translateY(-1px)}
+  .themetoggle svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  :root[data-theme="light"] .themetoggle .sun,:root:not([data-theme="light"]) .themetoggle .moon{display:none}
 
   /* hero */
   header{padding:96px 0 64px;text-align:center}
@@ -43,9 +71,12 @@
   h1 .flare{background:linear-gradient(90deg,var(--flare),var(--flare2));-webkit-background-clip:text;background-clip:text;color:transparent}
   .sub{font-size:clamp(1.05rem,2.5vw,1.35rem);color:var(--dim);max-width:640px;margin:1rem auto 2rem}
   .cta{display:inline-flex;gap:12px;flex-wrap:wrap;justify-content:center}
-  .btn{padding:.7rem 1.2rem;border-radius:10px;border:1px solid var(--line);font-weight:600;font-size:.95rem}
-  .btn.p{background:linear-gradient(90deg,var(--flare),var(--flare2));color:#1a1206;border-color:transparent}
+  .btn{padding:.7rem 1.2rem;border-radius:10px;border:1px solid var(--line);font-weight:600;font-size:.95rem;transition:transform .12s ease,border-color .2s,box-shadow .2s}
+  .btn:hover{transform:translateY(-1px)}
+  .btn.p{background:linear-gradient(90deg,var(--flare),var(--flare2));color:var(--btn-ink);border-color:transparent}
+  .btn.p:hover{box-shadow:0 6px 20px color-mix(in srgb,var(--flare) 40%,transparent)}
   .btn.g{background:var(--panel);color:var(--ink)}
+  .btn.g:hover{border-color:var(--flare)}
 
   section{padding:56px 0;border-top:1px solid var(--line)}
   h2{font-size:1.6rem;margin:0 0 .4rem;letter-spacing:-.01em}
@@ -72,13 +103,16 @@
   .step:nth-child(4){animation-delay:3s} .step:nth-child(5){animation-delay:4s}
   @keyframes lite{
     0%,12%   {color:var(--dim);border-color:var(--line);box-shadow:none}
-    14%,22%  {color:#1a1206;background:linear-gradient(90deg,var(--flare),var(--flare2));border-color:transparent;box-shadow:0 0 20px rgba(255,138,61,.45)}
-    26%,100% {color:var(--eu);border-color:rgba(95,211,154,.4);background:rgba(95,211,154,.06)}}
-  .gatebadge{font-family:var(--mono);font-weight:700;padding:.5rem .8rem;border-radius:6px;background:#0d1119;color:var(--dim);border:1px solid var(--line);animation:gate 7s infinite}
+    14%,22%  {color:var(--btn-ink);background:linear-gradient(90deg,var(--flare),var(--flare2));border-color:transparent;box-shadow:0 0 20px color-mix(in srgb,var(--flare) 45%,transparent)}
+    26%,100% {color:var(--eu);border-color:color-mix(in srgb,var(--eu) 40%,transparent);background:color-mix(in srgb,var(--eu) 8%,transparent)}}
+  .gatebadge{font-family:var(--mono);font-weight:700;padding:.5rem .8rem;border-radius:6px;background:var(--panel);color:var(--dim);border:1px solid var(--line);animation:gate 7s infinite}
   @keyframes gate{
-    0%,58%  {color:var(--dim);background:#0d1119;border-color:var(--line);box-shadow:none}
-    64%,100%{color:#062318;background:var(--eu);border-color:transparent;box-shadow:0 0 24px rgba(95,211,154,.5)}}
-  @media(prefers-reduced-motion:reduce){.step,.gatebadge{animation:none;color:var(--eu)}}
+    0%,58%  {color:var(--dim);background:var(--panel);border-color:var(--line);box-shadow:none}
+    64%,100%{color:#062318;background:var(--eu);border-color:transparent;box-shadow:0 0 24px color-mix(in srgb,var(--eu) 50%,transparent)}}
+  @media(prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    .step,.gatebadge{animation:none;color:var(--eu)}
+    body,.btn,.themetoggle{transition:none}}
 
   /* terminal */
   .term{background:#0a0d14;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
@@ -100,9 +134,17 @@
   .pill b{color:var(--eu);font-family:var(--mono)}
 
   footer{padding:48px 0 80px;color:var(--dim);text-align:center;border-top:1px solid var(--line);font-size:.9rem}
+  .by{margin-top:1.1rem;display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;align-items:center}
+  .by a{color:var(--dim);display:inline-flex;align-items:center;gap:.35rem}
+  .by a:hover{color:var(--flare2);text-decoration:none}
+  .by svg{display:block}
 </style>
 </head>
 <body>
+<button class="themetoggle" type="button" aria-label="Switch light / dark theme" title="Switch theme">
+  <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+  <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+</button>
 <div class="wrap">
 
   <header>
@@ -224,8 +266,23 @@
       · <a href="https://github.com/fabriziosalmi/flareover/blob/main/docs/deploy-hardened.md">Hardened deploy</a>
       · AGPL-3.0</p>
     <p class="dm">Built from the discipline that real, high-stakes DNS and edge migrations demand.</p>
+    <p class="by">
+      <a href="https://github.com/fabriziosalmi" rel="me noopener" target="_blank">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 014 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        Fabrizio Salmi</a>
+      <a href="https://www.linkedin.com/in/fabriziosalmi" rel="me noopener" target="_blank">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M13.63 0H2.37A2.37 2.37 0 000 2.37v11.26A2.37 2.37 0 002.37 16h11.26A2.37 2.37 0 0016 13.63V2.37A2.37 2.37 0 0013.63 0zM4.9 13.4H2.75V6.4H4.9v7zM3.82 5.4a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5zM13.4 13.4h-2.14V9.6c0-.9-.02-2.06-1.26-2.06-1.26 0-1.45.98-1.45 1.99v3.87H6.4V6.4h2.06v.96h.03c.29-.54 1-1.11 2.05-1.11 2.19 0 2.6 1.44 2.6 3.32v3.83z"/></svg>
+        LinkedIn</a>
+    </p>
   </footer>
 
 </div>
+<script>
+  document.querySelector('.themetoggle').addEventListener('click',function(){
+    var next=document.documentElement.dataset.theme==='light'?'dark':'light';
+    document.documentElement.dataset.theme=next;
+    try{localStorage.setItem('theme',next);}catch(e){}
+  });
+</script>
 </body>
 </html>
