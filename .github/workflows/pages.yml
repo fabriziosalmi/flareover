@@ -48,6 +48,10 @@ jobs:
           cp -R docs/. _site/
           mkdir -p _site/docs
           cp -R website/dist/. _site/docs/
+      # Rasterize the Open Graph card to PNG (SVG OG images don't render on
+      # LinkedIn/Slack). sharp is already installed by the docs build above.
+      - name: Rasterize OG image
+        run: node website/scripts/rasterize-og.mjs _site/og-image.png
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

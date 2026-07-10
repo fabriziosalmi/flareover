@@ -8,7 +8,7 @@
 [![Release](https://img.shields.io/github/v/release/fabriziosalmi/flareover?sort=semver)](https://github.com/fabriziosalmi/flareover/releases)
 [![Go](https://img.shields.io/github/go-mod/go-version/fabriziosalmi/flareover)](go.mod)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Wiki](https://img.shields.io/badge/docs-Wiki-0a7bbb)](https://github.com/fabriziosalmi/flareover/wiki)
+[![Docs](https://img.shields.io/badge/docs-flareover.com-ff8a3d)](https://www.flareover.com/docs/)
 
 <p align="center"><img src="docs/demo.svg" alt="flareover — assess, cost, providers, prepare (real output, honest numbers)" width="820"></p>
 
@@ -29,7 +29,7 @@ what it can and can't carry over.
 
 **Contents:** [The contract](#the-contract-no-silent-surprises) · [How it works](#how-it-works--five-phases) · [Target stack](#target-stack-eu-sovereign) · [Install](#install) · [Usage](#usage) · [Status](#status) · [Architecture](docs/architecture.md) · [Contributing](CONTRIBUTING.md)
 
-📖 **Full documentation lives in the [Wiki](https://github.com/fabriziosalmi/flareover/wiki)** — [Quick Start](https://github.com/fabriziosalmi/flareover/wiki/Quick-Start), [Coverage Matrix](https://github.com/fabriziosalmi/flareover/wiki/Coverage-Matrix), [DNS Targets](https://github.com/fabriziosalmi/flareover/wiki/DNS-Targets), and the [FAQ](https://github.com/fabriziosalmi/flareover/wiki/FAQ).
+📖 **Full documentation lives at [flareover.com/docs](https://www.flareover.com/docs/)** — [Quick Start](https://www.flareover.com/docs/quick-start/), [Coverage Matrix](https://www.flareover.com/docs/coverage-matrix/), [DNS Targets](https://www.flareover.com/docs/dns-targets/), and the [FAQ](https://www.flareover.com/docs/faq/).
 
 ## The contract: no silent surprises
 
