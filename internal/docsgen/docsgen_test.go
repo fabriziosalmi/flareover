@@ -13,8 +13,11 @@ import (
 
 var update = flag.Bool("update", false, "regenerate the coverage-matrix docs page from the classifier")
 
-// genPath is the canonical, generated docs page inside the Starlight site.
-const genPath = "../../website/src/content/docs/coverage-matrix.md"
+// Canonical, generated docs pages inside the Starlight site.
+const (
+	genPath       = "../../website/src/content/docs/coverage-matrix.md"
+	sovereigntyMD = "../../website/src/content/docs/sovereignty-tiers.md"
+)
 
 func load(t *testing.T, p string) cf.Snapshot {
 	t.Helper()
@@ -37,21 +40,35 @@ func TestCoverageMatrixInSync(t *testing.T) {
 	got := Coverage(
 		load(t, "../../testdata/fixtures/example.snapshot.json"),
 		load(t, "../../testdata/fixtures/conformance.snapshot.json"),
+		load(t, "../../testdata/fixtures/strict-ssl.snapshot.json"),
 	)
+	syncCheck(t, genPath, got, "coverage-matrix.md", "the classifier")
+}
+
+// TestSovereigntyInSync keeps the sovereignty-tiers catalogue generated from the
+// same provider.Registry the CLI uses — a hyperscaler can't be silently retiered.
+func TestSovereigntyInSync(t *testing.T) {
+	syncCheck(t, sovereigntyMD, Sovereignty(), "sovereignty-tiers.md", "provider.Registry")
+}
+
+// syncCheck writes the generated page when -update is set, otherwise fails if the
+// committed page has drifted from what the code produces.
+func syncCheck(t *testing.T, path, got, name, source string) {
+	t.Helper()
 	if *update {
-		if err := os.WriteFile(genPath, []byte(got), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("wrote %s", genPath)
+		t.Logf("wrote %s", path)
 		return
 	}
-	want, err := os.ReadFile(genPath)
+	want, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read generated docs (run `go test ./internal/docsgen -update`): %v", err)
 	}
 	if string(want) != got {
-		t.Errorf("coverage-matrix.md is out of sync with the classifier — run:\n" +
-			"  go test ./internal/docsgen -update\n" +
-			"(The docs are generated from the code and must not drift — that is the 0%%FP guarantee applied to the docs themselves.)")
+		t.Errorf("%s is out of sync with %s — run:\n"+
+			"  go test ./internal/docsgen -update\n"+
+			"(The docs are generated from the code and must not drift — the 0%%FP guarantee applied to the docs themselves.)", name, source)
 	}
 }

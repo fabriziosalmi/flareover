@@ -55,6 +55,7 @@ Generate the target-stack artifacts (Caddyfile, caddy-waf rules, PowerDNS zone, 
 | `--decisions <file>` | JSON map of ASK question id → answer (`decisions.lock`) |
 | `--edge-ip <ip>` | Public IP of the new Caddy edge (proxied records repoint here) |
 | `--ca <name>` | Default cert CA: `letsencrypt` (default) \| `actalis` (EU CA) |
+| `--origin-ca <path>` | PEM CA that Caddy trusts to verify the origin when SSL was **Full (strict)** and you answered `origin-verify=verify` with a private replacement origin cert (→ `tls_trusted_ca_certs`). Omit if the replacement origin cert is publicly trusted. |
 | `--stack <id>` | Target stack profile (default: `caddy`) |
 | `--dns <id>` | Authoritative DNS target — see [DNS Targets](/docs/dns-targets/) |
 | `--out <dir>` | Write artifacts under `<dir>` (default: stdout preview) |

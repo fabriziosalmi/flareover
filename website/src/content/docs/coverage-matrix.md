@@ -50,6 +50,7 @@ Every element gets exactly one verdict. **AUTO** = a proven equivalent is genera
 | `r2` | `minio` | R2 bucket → MinIO bucket on Contabo (S3-compatible). Bucket + data copy is deterministic; application code that binds to R2 must be repointed by hand. |
 | `redirect` | `caddy` | Redirect target is expression-derived (built from request fields). Caddy can template many of these, but not all Cloudflare functions have equivalents. |
 | `tls` | `caddy` | SSL Flexible means Cloudflare→origin is plaintext HTTP. That is insecure and often reflects an origin with no TLS. Confirm the intended origin scheme. |
+| `tls` | `caddy` | SSL Full (strict) verifies the origin certificate, but a Cloudflare Origin CA cert is trusted only by Cloudflare — a self-hosted Caddy edge cannot verify it. Reproduce the verified edge→origin link with a replacement origin cert, or accept an encrypted-but-unverified link (a downgrade from strict). |
 | `ua-block` | `caddy-waf` | User-Agent challenge has no faithful caddy-waf equivalent (no interactive challenge); a hard block would change behavior for real users. |
 
 ## MANUAL — surfaced, never guessed

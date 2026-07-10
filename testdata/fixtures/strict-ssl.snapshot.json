@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "zone": { "id": "00000000000000000000000000005712", "name": "strict.example", "status": "active" },
+  "settings": {
+    "ssl": "strict"
+  }
+}
