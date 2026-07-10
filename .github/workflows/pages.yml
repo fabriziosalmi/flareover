@@ -8,6 +8,7 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "website/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -30,9 +31,26 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Build the Starlight docs site (base: /docs) from website/.
+      - name: Build docs site
+        working-directory: website
+        run: |
+          npm ci
+          npm run build
+      # Assemble the deploy artifact: the hand-rolled landing at the root
+      # (index.html, assets, CNAME), the Starlight docs mounted at /docs/.
+      - name: Assemble site
+        run: |
+          rm -rf _site && mkdir -p _site
+          cp -R docs/. _site/
+          mkdir -p _site/docs
+          cp -R website/dist/. _site/docs/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: ./docs # includes CNAME → the www.flareover.com custom domain is preserved
+          path: ./_site # root = landing (+ CNAME → www.flareover.com); /docs = Starlight
       - id: deployment
         uses: actions/deploy-pages@v4

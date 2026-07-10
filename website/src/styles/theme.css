@@ -1,0 +1,53 @@
+/* flareover docs theme — dark, EU-blue + orange-flare accent, matching the landing. */
+
+:root {
+  /* orange-flare accent (the brand signature) */
+  --sl-color-accent-low: #3a1e08;
+  --sl-color-accent: #ff8a3d;
+  --sl-color-accent-high: #ffcba0;
+  --sl-color-text-accent: #ff9d5c;
+}
+
+/* dark theme surfaces tuned to the landing palette */
+:root[data-theme='dark'] {
+  --sl-color-white: #f3f5fa;
+  --sl-color-gray-1: #e6ebf2;
+  --sl-color-gray-2: #c6ccd8;
+  --sl-color-gray-3: #8a94a6;
+  --sl-color-gray-4: #4a5468;
+  --sl-color-gray-5: #262f3f;
+  --sl-color-gray-6: #171d29;
+  --sl-color-black: #0b0e14;
+  --sl-color-bg: #0b0e14;
+  --sl-color-bg-nav: #0d111a;
+  --sl-color-bg-sidebar: #0d111a;
+  --sl-color-bg-inline-code: #171d29;
+  --sl-color-hairline: #1e2636;
+  --sl-color-hairline-shade: #161c28;
+}
+
+/* light theme keeps EU-blue as the structural anchor */
+:root[data-theme='light'] {
+  --sl-color-accent-low: #dbe6ff;
+  --sl-color-accent: #123c9c;
+  --sl-color-accent-high: #0b285f;
+  --sl-color-text-accent: #123c9c;
+}
+
+/* a soft flare glow behind the header, like the landing hero */
+:root[data-theme='dark'] body {
+  background:
+    radial-gradient(1200px 500px at 75% -10%, rgba(255, 138, 61, 0.08), transparent),
+    var(--sl-color-bg);
+}
+
+/* brand wordmark next to the logo */
+.site-title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* honest-verdict callout tints, reused from the coverage docs */
+.sl-markdown-content strong {
+  color: var(--sl-color-white);
+}
