@@ -14,6 +14,11 @@ export default defineConfig({
       logo: { src: './src/assets/logo-mark.svg', alt: 'flareover' },
       favicon: '/favicon.svg',
       customCss: ['./src/styles/theme.css'],
+      // Wraps Starlight's own footer to add the privacy notice link, so it
+      // reaches every docs page instead of only the hand-written landing.
+      components: {
+        Footer: './src/components/Footer.astro',
+      },
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/fabriziosalmi/flareover' },
       ],

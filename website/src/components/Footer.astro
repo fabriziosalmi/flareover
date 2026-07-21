@@ -1,0 +1,24 @@
+---
+// Starlight's own footer, plus a link to the privacy notice.
+//
+// The notice is not part of this Astro site: it is a hand-written page served
+// at the root of www.flareover.com, while Starlight is mounted under /docs.
+// The href is therefore root-absolute and deliberately not prefixed with the
+// site's base - Astro would otherwise resolve it to /docs/privacy.html, which
+// does not exist.
+import Default from '@astrojs/starlight/components/Footer.astro';
+---
+
+<Default><slot /></Default>
+
+<p class="privacy-notice">
+  <a href="/privacy.html">Privacy &amp; legal notice</a>
+</p>
+
+<style>
+  .privacy-notice {
+    margin-top: 1rem;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+  }
+</style>
