@@ -93,7 +93,13 @@ func (pr *Progress) redraw() {
 		fmt.Fprintf(pr.w, "\033[2K%s\n", pr.lineFor(s)) // clear line, print
 	}
 	pr.drawn = len(pr.steps)
-	pr.spinIdx++
+	// Only increment spinner index if at least one step is running
+	for _, s := range pr.steps {
+		if s.state == stRunning {
+			pr.spinIdx++
+			break
+		}
+	}
 }
 
 // lineFor formats one step's line.
