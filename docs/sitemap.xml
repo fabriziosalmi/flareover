@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The hand-rolled landing only. The Starlight docs under /docs/ generate their own
+     sitemap at build time (@astrojs/sitemap); robots.txt declares both. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://www.flareover.com/</loc></url>
+  <url><loc>https://www.flareover.com/docs.html</loc></url>
+  <url><loc>https://www.flareover.com/privacy.html</loc></url>
+</urlset>

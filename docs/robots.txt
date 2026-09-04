@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+
+# Two sitemaps: the hand-rolled landing, and the Starlight docs mounted at /docs/.
+Sitemap: https://www.flareover.com/sitemap.xml
+Sitemap: https://www.flareover.com/docs/sitemap-index.xml
