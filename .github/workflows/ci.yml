@@ -19,8 +19,12 @@ jobs:
       - name: vet
         run: go vet ./...
       - name: staticcheck
+        # Pinned, not @latest: this job runs with GOTOOLCHAIN=local on the version in
+        # go.mod (1.25), and staticcheck v0.8.x declares `go 1.26.0`, so `@latest`
+        # cannot even install ("requires go >= 1.26.0, running go 1.25.14"). v0.7.0 is
+        # the last release that builds on 1.25. Bump it together with go.mod, on purpose.
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
+          go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
           staticcheck ./...
       - name: test
         run: go test -race ./...
