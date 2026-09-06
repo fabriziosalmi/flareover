@@ -1,12 +1,14 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import sitemap from '@astrojs/sitemap';
 
 export default defineConfig({
   site: 'https://www.flareover.com',
   base: '/docs',
   outDir: './dist',
   integrations: [
+    sitemap(),
     starlight({
       title: 'flareover',
       description:
