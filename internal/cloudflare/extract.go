@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -75,6 +76,11 @@ const maxBody = 32 << 20
 // into a failing dependency is amplification, so this is small and paired with
 // the server's own Retry-After when it sends one.
 const maxAttempts = 4
+
+// accessConcurrency bounds the per-app policy fan-out. Small on purpose: the
+// binding constraint on a large account is the provider's request budget, and
+// spending it faster is not an improvement.
+const accessConcurrency = 6
 
 // fetch performs a request, retrying while the API says "slow down" or "not
 // now". It returns the last body and status; interpreting them is the caller's.
@@ -334,18 +340,39 @@ func (c *Client) extractAccess(ctx context.Context, zoneName string) ([]AccessAp
 	if err := c.get(ctx, "/accounts/"+c.AccountID+"/access/apps", &apps); err != nil {
 		return nil, err
 	}
-	var out []AccessApp
+	// Keep only this zone's apps, then count each one's policies. The count is
+	// one extra request per app, and they used to run one after another for a
+	// single integer apiece. Bounded fan-out, written by index so the snapshot
+	// stays byte-identical across runs.
+	var mine []struct {
+		ID     string `json:"id"`
+		Name   string `json:"name"`
+		Domain string `json:"domain"`
+	}
 	for _, a := range apps {
 		if a.Domain != zoneName && !strings.HasSuffix(a.Domain, "."+zoneName) {
 			continue
 		}
-		policies := 0
-		var pols []json.RawMessage
-		if err := c.get(ctx, "/accounts/"+c.AccountID+"/access/apps/"+a.ID+"/policies", &pols); err == nil {
-			policies = len(pols)
-		}
-		out = append(out, AccessApp{Name: a.Name, Domain: a.Domain, Policies: policies})
+		mine = append(mine, a)
 	}
+
+	out := make([]AccessApp, len(mine))
+	sem := make(chan struct{}, accessConcurrency)
+	var wg sync.WaitGroup
+	for i, a := range mine {
+		out[i] = AccessApp{Name: a.Name, Domain: a.Domain}
+		wg.Add(1)
+		go func(i int, id string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			var pols []json.RawMessage
+			if err := c.get(ctx, "/accounts/"+c.AccountID+"/access/apps/"+id+"/policies", &pols); err == nil {
+				out[i].Policies = len(pols)
+			}
+		}(i, a.ID)
+	}
+	wg.Wait()
 	return out, nil
 }
 

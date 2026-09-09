@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fabriziosalmi/flareover/internal/ir"
@@ -188,8 +189,21 @@ func (c *Comparer) Compare(ctx context.Context, before, after Endpoint, probes [
 	rep := Report{Before: before.label(), After: after.label()}
 	bc, ac := before.client(), after.client()
 	for _, p := range probes {
-		bResp, errB := fetch(ctx, bc, before.scheme(), p)
-		aResp, errA := fetch(ctx, ac, after.scheme(), p)
+		// Fetch the two edges at the same time, not one after the other. Two
+		// reasons, and the second is the better one. Wall time: `present` is the
+		// gate an operator waits on immediately before a cutover, often more
+		// than once as divergences are fixed, and it cost two serial round trips
+		// per probe. Correctness: comparing a live response with a staged one
+		// taken seconds later is weaker evidence than comparing two taken
+		// together — a redirect or a header that changes between them would show
+		// up as a divergence that is not one.
+		var bResp, aResp response
+		var errB, errA error
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); bResp, errB = fetch(ctx, bc, before.scheme(), p) }()
+		go func() { defer wg.Done(); aResp, errA = fetch(ctx, ac, after.scheme(), p) }()
+		wg.Wait()
 		res := Result{Probe: p}
 		switch {
 		case errB != nil && errA != nil:

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -57,76 +58,107 @@ func ExtractS3(ctx context.Context, cfg S3Config) (Snapshot, error) {
 		return s, fmt.Errorf("list buckets: %w", err)
 	}
 
-	for _, b := range lb.Buckets.Bucket {
-		bucket := Bucket{Name: b.Name, Region: cfg.Region}
-
-		// Versioning.
-		var v struct {
-			Status string `xml:"Status"`
-		}
-		if err := cfg.getXML(ctx, "/"+b.Name+"?versioning", &v); err == nil {
-			bucket.Versioning = v.Status == "Enabled"
-		}
-
-		// CORS (404/NoSuchCORSConfiguration is normal).
-		var cors struct {
-			Rules []struct {
-				Origins []string `xml:"AllowedOrigin"`
-				Methods []string `xml:"AllowedMethod"`
-				Headers []string `xml:"AllowedHeader"`
-				MaxAge  int      `xml:"MaxAgeSeconds"`
-			} `xml:"CORSRule"`
-		}
-		if err := cfg.getXML(ctx, "/"+b.Name+"?cors", &cors); err == nil {
-			for _, r := range cors.Rules {
-				bucket.CORS = append(bucket.CORS, CORSRule{
-					AllowedOrigins: r.Origins, AllowedMethods: r.Methods,
-					AllowedHeaders: r.Headers, MaxAgeSeconds: r.MaxAge,
-				})
-			}
-		}
-
-		// Lifecycle.
-		var lc struct {
-			Rules []struct {
-				ID     string `xml:"ID"`
-				Filter struct {
-					Prefix string `xml:"Prefix"`
-				} `xml:"Filter"`
-				Prefix     string `xml:"Prefix"`
-				Expiration *struct {
-					Days int `xml:"Days"`
-				} `xml:"Expiration"`
-				Transition *struct {
-					StorageClass string `xml:"StorageClass"`
-				} `xml:"Transition"`
-			} `xml:"Rule"`
-		}
-		if err := cfg.getXML(ctx, "/"+b.Name+"?lifecycle", &lc); err == nil {
-			for _, r := range lc.Rules {
-				prefix := r.Prefix
-				if prefix == "" {
-					prefix = r.Filter.Prefix
-				}
-				rule := LifecycleRule{ID: r.ID, Prefix: prefix}
-				if r.Expiration != nil {
-					rule.ExpireDays = r.Expiration.Days
-				}
-				if r.Transition != nil {
-					rule.Transition = true
-				}
-				bucket.Lifecycle = append(bucket.Lifecycle, rule)
-			}
-		}
-
-		// Policy presence (JSON, not XML): record it so it surfaces as MANUAL.
-		if body, err := cfg.get(ctx, "/"+b.Name+"?policy"); err == nil && len(strings.TrimSpace(string(body))) > 0 {
-			bucket.PolicyJSON = string(body)
-		}
-
-		s.Buckets = append(s.Buckets, bucket)
+	// One bucket's four metadata reads are independent of every other bucket's,
+	// and they used to run strictly one after another: an account with two
+	// hundred buckets made eight hundred serial round trips, minutes of wall
+	// time for work that overlaps perfectly, with nothing printed while it
+	// happened. Bounded fan-out, results written by index so the snapshot stays
+	// byte-stable — determinism is the contract here, so the output order must
+	// not depend on which goroutine finished first.
+	buckets := make([]Bucket, len(lb.Buckets.Bucket))
+	sem := make(chan struct{}, s3Concurrency)
+	var wg sync.WaitGroup
+	for i, b := range lb.Buckets.Bucket {
+		wg.Add(1)
+		go func(i int, name string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			buckets[i] = cfg.describeBucket(ctx, name)
+		}(i, b.Name)
 	}
+	wg.Wait()
+	s.Buckets = buckets
 	return s, nil
+}
+
+// s3Concurrency bounds the fan-out. Small on purpose: the point is to stop
+// paying full latency per bucket, not to spend an account's request budget as
+// fast as possible — an S3 provider that starts refusing is worse than a slow
+// extraction.
+const s3Concurrency = 8
+
+// describeBucket performs one bucket's four metadata reads. Each is best-effort
+// by design: a 404 on ?cors means the bucket has none, and an error on any of
+// them leaves that facet at its zero value rather than failing the extraction.
+func (cfg S3Config) describeBucket(ctx context.Context, name string) Bucket {
+	bucket := Bucket{Name: name, Region: cfg.Region}
+
+	// Versioning.
+	var v struct {
+		Status string `xml:"Status"`
+	}
+	if err := cfg.getXML(ctx, "/"+name+"?versioning", &v); err == nil {
+		bucket.Versioning = v.Status == "Enabled"
+	}
+
+	// CORS (404/NoSuchCORSConfiguration is normal).
+	var cors struct {
+		Rules []struct {
+			Origins []string `xml:"AllowedOrigin"`
+			Methods []string `xml:"AllowedMethod"`
+			Headers []string `xml:"AllowedHeader"`
+			MaxAge  int      `xml:"MaxAgeSeconds"`
+		} `xml:"CORSRule"`
+	}
+	if err := cfg.getXML(ctx, "/"+name+"?cors", &cors); err == nil {
+		for _, r := range cors.Rules {
+			bucket.CORS = append(bucket.CORS, CORSRule{
+				AllowedOrigins: r.Origins, AllowedMethods: r.Methods,
+				AllowedHeaders: r.Headers, MaxAgeSeconds: r.MaxAge,
+			})
+		}
+	}
+
+	// Lifecycle.
+	var lc struct {
+		Rules []struct {
+			ID     string `xml:"ID"`
+			Filter struct {
+				Prefix string `xml:"Prefix"`
+			} `xml:"Filter"`
+			Prefix     string `xml:"Prefix"`
+			Expiration *struct {
+				Days int `xml:"Days"`
+			} `xml:"Expiration"`
+			Transition *struct {
+				StorageClass string `xml:"StorageClass"`
+			} `xml:"Transition"`
+		} `xml:"Rule"`
+	}
+	if err := cfg.getXML(ctx, "/"+name+"?lifecycle", &lc); err == nil {
+		for _, r := range lc.Rules {
+			prefix := r.Prefix
+			if prefix == "" {
+				prefix = r.Filter.Prefix
+			}
+			rule := LifecycleRule{ID: r.ID, Prefix: prefix}
+			if r.Expiration != nil {
+				rule.ExpireDays = r.Expiration.Days
+			}
+			if r.Transition != nil {
+				rule.Transition = true
+			}
+			bucket.Lifecycle = append(bucket.Lifecycle, rule)
+		}
+	}
+
+	// Policy presence (JSON, not XML): record it so it surfaces as MANUAL.
+	if body, err := cfg.get(ctx, "/"+name+"?policy"); err == nil && len(strings.TrimSpace(string(body))) > 0 {
+		bucket.PolicyJSON = string(body)
+	}
+
+	return bucket
 }
 
 // get performs a SigV4-signed GET and returns the body (non-2xx → error).
