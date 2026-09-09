@@ -35,11 +35,22 @@ wrong".
 ```bash
 make fmt        # gofmt ./cmd ./internal
 make vet        # go vet ./...
-make lint       # staticcheck ./...
+make lint       # staticcheck, the version CI runs
+make vuln       # govulncheck, the version CI runs
 make race       # go test -race ./...
 ```
 
-CI runs exactly these (build + vet + staticcheck + `go test -race` + gofmt check). Please keep commits focused and their messages explaining the *why*.
+CI runs exactly these (build + vet + staticcheck + govulncheck + `go test -race`
++ gofmt check). `lint` and `vuln` are pinned to the versions in the Makefile;
+bump them together with the `toolchain` line in `go.mod`, on purpose — a linter
+release should not fail an unrelated PR. Please keep commits focused and their
+messages explaining the *why*.
+
+**Why govulncheck, with zero dependencies?** Because that is the reason it is
+needed rather than the reason it is not: the only code that can carry an
+advisory here is the standard library, and `osv-scanner` has no `go.sum` to
+read. The first run reported eighteen reachable standard-library
+vulnerabilities.
 
 ## Getting started
 

@@ -36,7 +36,7 @@ guarantee, install cosign first — `brew install cosign`, or see
 go install github.com/fabriziosalmi/flareover/cmd/flareover@latest
 ```
 
-Building from source requires **Go 1.25+**. The engine is pure Go, standard library only: no `go.sum` full of third-party modules to vet.
+Building from source requires **Go 1.26+**. The engine is pure Go, standard library only: no `go.sum` full of third-party modules to vet.
 
 ## Release binaries
 

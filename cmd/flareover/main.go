@@ -28,6 +28,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -147,6 +148,47 @@ PREPARE FLAGS
 
 // version is stamped at build time via -ldflags "-X main.version=…" (goreleaser
 // sets it from the git tag). It stays "dev" for `go run` and local builds.
+// versionLine reports the version and the commit it was built from.
+//
+// The compiler stamps vcs.revision, vcs.time and vcs.modified into every binary
+// built from a checkout, so the commit was always in there — but nothing read
+// it, and `flareover version` printed the tag alone. An operator on an edge host
+// could say "v0.3.0" and no more, which is ambiguous across a re-cut tag and
+// says nothing about whether the build came from a dirty tree; recovering that
+// needed `go version -m` and therefore a Go toolchain on the machine holding the
+// binary.
+func versionLine() string {
+	var rev, when string
+	dirty := false
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range bi.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				rev = s.Value
+			case "vcs.time":
+				when = s.Value
+			case "vcs.modified":
+				dirty = s.Value == "true"
+			}
+		}
+	}
+	out := "flareover " + version
+	if rev != "" {
+		if len(rev) > 12 {
+			rev = rev[:12]
+		}
+		out += " (" + rev
+		if dirty {
+			out += ", dirty"
+		}
+		if when != "" {
+			out += ", " + when
+		}
+		out += ")"
+	}
+	return out + "\n"
+}
+
 // Exit codes. These are a documented part of the CLI contract — CI and shell
 // chains branch on them — so they live here as named constants rather than as
 // literals scattered through thirteen verbs. The table in the CLI reference is
@@ -181,7 +223,7 @@ func main() {
 	rootCtx = ctx
 	switch os.Args[1] {
 	case "version", "--version", "-v":
-		fmt.Printf("flareover %s\n", version)
+		fmt.Print(versionLine())
 		return
 	case "zones":
 		os.Exit(cmdZones(os.Args[2:]))

@@ -236,3 +236,59 @@ func TestCostRejectsAPriceItCannotParse(t *testing.T) {
 		t.Error("cost --vps 12.50 was rejected")
 	}
 }
+
+// --- execute: the verb that authorises a cutover ---------------------------
+//
+// Nothing invoked cmdExecute. It is the one verb that decides whether a
+// migration may proceed to the DNS flip, and its refusals are the asymmetric
+// kind: a gate that stops working does not fail loudly, it lets a cutover
+// through that should have been blocked. These drive the decision points that
+// need no network.
+
+func TestExecuteRefusesWhenMANUALItemsAreOutstanding(t *testing.T) {
+	silence(t)
+	snap := fixture(t, "example.snapshot.json")
+	got := cmdExecute([]string{"--snapshot", snap, "--after-addr", "127.0.0.1:1"})
+	if got != exitManual {
+		t.Fatalf("execute with MANUAL items = %d, want %d: it must not authorize a cutover "+
+			"while a control the generated stack does not reproduce is outstanding", got, exitManual)
+	}
+}
+
+// --accept-manual is the operator overriding that refusal explicitly. It must
+// get past the MANUAL gate — and then fail for a different reason (there is no
+// staged edge at 127.0.0.1:1), which is what distinguishes "the gate let it
+// through" from "the gate never ran".
+func TestExecuteAcceptManualGetsPastTheManualGate(t *testing.T) {
+	silence(t)
+	snap := fixture(t, "example.snapshot.json")
+	got := cmdExecute([]string{"--snapshot", snap, "--after-addr", "127.0.0.1:1", "--accept-manual"})
+	if got == exitManual {
+		t.Error("--accept-manual did not override the MANUAL gate")
+	}
+}
+
+func TestExecuteRejectsUnknownFlagsAndMissingArguments(t *testing.T) {
+	silence(t)
+	snap := fixture(t, "example.snapshot.json")
+	for _, args := range [][]string{
+		{},                                   // no --snapshot, no --after-addr
+		{"--snapshot", snap},                 // no --after-addr
+		{"--after-addr", "127.0.0.1:1"},      // no --snapshot
+		{"--snapshot"},                       // flag without a value
+		{"--snapshot", snap, "--nonesuch"},   // unknown flag
+		{"--snapshot", snap, "--after-addr"}, // trailing flag without a value
+	} {
+		if got := cmdExecute(args); got != exitUsage {
+			t.Errorf("execute %v = %d, want %d", args, got, exitUsage)
+		}
+	}
+}
+
+func TestExecuteOnAMissingSnapshotIsARuntimeErrorNotAUsageError(t *testing.T) {
+	silence(t)
+	got := cmdExecute([]string{"--snapshot", "/nonexistent/zone.json", "--after-addr", "127.0.0.1:1"})
+	if got != exitRuntime {
+		t.Errorf("execute on a missing snapshot = %d, want %d", got, exitRuntime)
+	}
+}
