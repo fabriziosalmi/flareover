@@ -58,6 +58,33 @@ say "downloading $archive ($tag)"
 fetch "$base/$archive" "$tmp/$archive" || die "download failed. Check the version/platform exists"
 fetch "$base/checksums.txt" "$tmp/checksums.txt" || die "could not fetch checksums.txt"
 
+# Verify the signature over checksums.txt when cosign is available.
+#
+# The checksum below proves the archive matches checksums.txt. It does NOT prove
+# checksums.txt is ours: both come from the same place, so an attacker able to
+# replace release assets would replace both. The cosign signature is what closes
+# that, by tying checksums.txt to the workflow that built it. Verifying it first
+# means the checksum check that follows rests on a trusted file.
+#
+# cosign is optional (it is a large dependency for a one-line installer), but
+# when it IS present, using it is not optional: a failed verification aborts.
+if command -v cosign >/dev/null 2>&1; then
+  say "verifying signature (cosign)"
+  fetch "$base/checksums.txt.sig" "$tmp/checksums.txt.sig" || die "could not fetch checksums.txt.sig"
+  fetch "$base/checksums.txt.pem" "$tmp/checksums.txt.pem" || die "could not fetch checksums.txt.pem"
+  cosign verify-blob "$tmp/checksums.txt" \
+    --signature "$tmp/checksums.txt.sig" \
+    --certificate "$tmp/checksums.txt.pem" \
+    --certificate-identity-regexp "^https://github.com/$REPO/\.github/workflows/release\.yml@refs/tags/" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    >/dev/null 2>&1 || die "SIGNATURE VERIFICATION FAILED for checksums.txt: refusing to install"
+  say "signature OK (built by $REPO's release workflow)"
+else
+  say "cosign not found: falling back to checksum-only verification."
+  say "  This detects corruption, not a tampered release. Install cosign for full provenance:"
+  say "  https://github.com/sigstore/cosign"
+fi
+
 # Verify sha256 (fail closed if no checksum tool is available).
 say "verifying checksum"
 expected="$(grep " $archive\$" "$tmp/checksums.txt" | awk '{print $1}')"
@@ -84,4 +111,3 @@ else
 fi
 
 say "installed $("$BIN_DIR/flareover" version) → $BIN_DIR/flareover"
-say "for stronger assurance, verify the checksums signature with cosign (see the release notes)"
