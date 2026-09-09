@@ -58,6 +58,9 @@ func TestProvisionDeletesThenCreates(t *testing.T) {
 		}
 		seq = append(seq, r.Method+" "+r.URL.Path)
 		switch r.Method {
+		case http.MethodGet:
+			// The pre-read that makes the replacement window recoverable.
+			w.WriteHeader(404)
 		case http.MethodDelete:
 			// Pretend the MX set doesn't exist yet → 404 must be tolerated.
 			if strings.HasSuffix(r.URL.Path, "/example.com/MX") {
@@ -84,13 +87,18 @@ func TestProvisionDeletesThenCreates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Every rrset is deleted before it is created (REPLACE).
-	for i := 0; i+1 < len(seq); i += 2 {
-		if !strings.HasPrefix(seq[i], "DELETE ") {
-			t.Errorf("step %d = %q, want a DELETE first", i, seq[i])
+	// Every rrset is read, then deleted, then created (REPLACE). The GET is what
+	// lets a failed create put back what the delete removed: without it the
+	// replacement window is destructive rather than merely incomplete.
+	for i := 0; i+2 < len(seq); i += 3 {
+		if !strings.HasPrefix(seq[i], "GET ") {
+			t.Errorf("step %d = %q, want a GET first (so the old rrset can be restored)", i, seq[i])
 		}
-		if !strings.HasPrefix(seq[i+1], "POST ") {
-			t.Errorf("step %d = %q, want a POST after the DELETE", i+1, seq[i+1])
+		if !strings.HasPrefix(seq[i+1], "DELETE ") {
+			t.Errorf("step %d = %q, want a DELETE after the GET", i+1, seq[i+1])
+		}
+		if !strings.HasPrefix(seq[i+2], "POST ") {
+			t.Errorf("step %d = %q, want a POST after the DELETE", i+2, seq[i+2])
 		}
 	}
 

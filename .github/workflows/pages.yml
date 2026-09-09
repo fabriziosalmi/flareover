@@ -42,7 +42,12 @@ jobs:
       # the only way to clear this is to commit a fixed lockfile.
       - name: Audit docs dependencies
         working-directory: website
-        run: npm audit --audit-level=high
+        # moderate, not high. Under pages:write and an OIDC token the axis that
+        # matters is not npm's severity rating but that `npm ci` runs install
+        # scripts from every one of ~475 packages. If this becomes noisy, accept
+        # a specific advisory with a comment naming it rather than raising the
+        # threshold for the whole tree.
+        run: npm audit --audit-level=moderate
 
       - name: Build docs site
         working-directory: website
@@ -61,6 +66,26 @@ jobs:
       # LinkedIn/Slack). sharp is already installed by the docs build above.
       - name: Rasterize OG image
         run: node website/scripts/rasterize-og.mjs _site/og-image.png
+      # The wiki was converted from hand-copying to generation because it had
+      # drifted — after v0.2.0/v0.3.0 its CLI-Reference was missing four flags
+      # and described exit codes that had changed. Generation alone does not fix
+      # that: it moves the diligence one step, to remembering to run the script.
+      # The coverage matrix and the sovereignty tiers are defended by tests that
+      # fail on drift; this does the same for the wiki.
+      - name: The wiki is in sync with the canonical docs
+        continue-on-error: true # the wiki repo may not be cloneable from CI
+        run: |
+          git clone --depth 1 https://github.com/${{ github.repository }}.wiki.git /tmp/wiki 2>/dev/null || {
+            echo "::notice::wiki not cloneable from CI; skipping the drift check"
+            exit 0
+          }
+          node website/scripts/sync-wiki.mjs /tmp/wiki
+          if ! git -C /tmp/wiki diff --quiet; then
+            echo "::warning::the wiki has drifted from website/src/content/docs. Regenerate it:"
+            echo "  node website/scripts/sync-wiki.mjs <wiki-clone> && cd <wiki-clone> && git commit -am 'docs: sync' && git push"
+            git -C /tmp/wiki diff --stat
+          fi
+
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

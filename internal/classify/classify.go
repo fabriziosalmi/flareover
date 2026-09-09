@@ -39,9 +39,35 @@ func Classify(s cf.Snapshot) report.Report {
 	classifyR2(s, add)
 	classifyAccess(s, add)
 	classifyEmail(s, add)
+	classifyStaleCapture(s, add)
 	classifyExtractionGaps(s, add)
 
 	return r
+}
+
+// classifyStaleCapture reports a snapshot written before the extractor could
+// record what it failed to read.
+//
+// This is the same boundary condition as classifyExtractionGaps, one step
+// earlier: that function classifies the gaps a snapshot declares, and this one
+// classifies a snapshot that cannot declare any. Below schema_version 2 an
+// absent surface and an unread surface are the same empty slice, so the report
+// would claim full coverage on the strength of a file's age. The case that
+// makes this a security property rather than a tidiness one is Cloudflare
+// Access: plan.accessGatedHosts reads an empty AccessApps as "no host needs an
+// identity gate" and emits a plain reverse_proxy for every host, which would
+// publish an application that today requires a login.
+func classifyStaleCapture(s cf.Snapshot, add func(report.Finding)) {
+	if !s.PredatesGapReporting() {
+		return
+	}
+	shape := fmt.Sprintf("schema_version %d", s.SchemaVersion)
+	if s.SchemaVersion == 0 {
+		shape = "no schema_version at all"
+	}
+	add(manual("extraction-gap", "snapshot schema_version",
+		fmt.Sprintf("This snapshot carries %s; this build writes %d. A snapshot written before that version could not record which surfaces extraction failed to read, so anything absent here may be absent from the zone or merely never read, and nothing distinguishes the two. That includes Cloudflare Access, whose emptiness is what decides that a host needs no identity gate. Re-run `flareover extract` and re-assess before trusting this report.",
+			shape, cf.CurrentSchemaVersion)))
 }
 
 // classifyExtractionGaps turns every surface the extractor could not read into a
@@ -56,10 +82,33 @@ func Classify(s cf.Snapshot) report.Report {
 // nothing to generate and no bounded question to ask.
 func classifyExtractionGaps(s cf.Snapshot, add func(report.Finding)) {
 	for _, g := range s.ExtractionGaps {
-		why := fmt.Sprintf("Extraction could not read this surface, so the snapshot does not describe it: anything configured there is NOT covered by this report and was NOT migrated. Re-run `flareover extract` with a token that can read it, then re-assess. Cause: %s",
-			gapDetail(g))
+		why := fmt.Sprintf("Extraction could not read this surface, so the snapshot does not describe it: anything configured there is NOT covered by this report and was NOT migrated. %s Cause: %s",
+			gapRemedy(g), gapDetail(g))
 		add(manual("extraction-gap", g.Surface, why))
 	}
+}
+
+// gapRemedy picks the instruction that matches the cause.
+//
+// warn() is called for every non-fatal read failure, so one text covered a
+// missing token scope, an unset account id, a rate limit and a transient 5xx —
+// and it named the first for all four. An operator throttled halfway through an
+// account-wide extraction got a list of MANUAL items each telling them to
+// obtain permissions they already had, while the actual remedy (wait, re-run)
+// appeared nowhere.
+func gapRemedy(g cf.Gap) string {
+	d := strings.ToLower(g.Detail)
+	switch {
+	case strings.Contains(d, "rate limited") || strings.Contains(d, "429"):
+		return "The API refused the read because this token is being rate limited, not because it lacks access: wait for the limit to reset and re-run `flareover extract`, then re-assess."
+	case strings.Contains(d, "transient") || strings.Contains(d, "http 5"):
+		return "The API failed transiently rather than refusing access: re-run `flareover extract`, then re-assess."
+	case strings.Contains(d, "cloudflare_account_id"):
+		return "This surface is account-scoped: set CLOUDFLARE_ACCOUNT_ID and re-run `flareover extract`, then re-assess."
+	case strings.Contains(d, "scope") || strings.Contains(d, "403") || strings.Contains(d, "401"):
+		return "Re-run `flareover extract` with a token that can read it, then re-assess."
+	}
+	return "Re-run `flareover extract` once the cause below is addressed, then re-assess."
 }
 
 func gapDetail(g cf.Gap) string {

@@ -31,7 +31,7 @@ flareover prepare zone.snapshot.json --decisions decisions.lock \
   --edge-ip 203.0.113.10 --out ./out                 # generate the target-stack config
 ```
 
-Everything up to the DNS flip is a review artifact you can read in `git` before anything goes live. See **[Quick Start](/docs/quick-start/)** for a full walkthrough.
+Everything up to the DNS flip is a review artifact you can read in `git` (privately — the output also holds generated key material) before anything goes live. See **[Quick Start](/docs/quick-start/)** for a full walkthrough.
 
 ## What's in the box
 

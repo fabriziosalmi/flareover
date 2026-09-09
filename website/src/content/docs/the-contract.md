@@ -27,7 +27,7 @@ Classification and artifact generation are a **pure function** of `snapshot + de
 verdicts, config = f(snapshot, decisions.lock)
 ```
 
-Run it twice, get **byte-identical** output. This is enforced by golden tests. The practical consequence: the entire migration is reviewable in `git`: you diff `./out` like any code change before anything goes live.
+Run it twice, get **byte-identical** output. This is enforced by golden tests. The practical consequence: the entire migration is reviewable in `git`: you diff `./out` like any code change before anything goes live — in a private repository, and never the WireGuard keys under `<out>/mesh`, which `prepare` excludes with a generated `.gitignore`.
 
 Two things sit outside this function, and both are named rather than hidden:
 

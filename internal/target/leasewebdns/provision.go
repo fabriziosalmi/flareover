@@ -91,15 +91,48 @@ func (p *Provisioner) Provision(ctx context.Context, z ir.DNSZone) error {
 
 	base := "/" + z.Name + "/resourceRecordSets"
 	for _, k := range order {
-		// Delete the existing set first (a 404 just means there was none), then
-		// create the desired one. The delete path uses the undotted name.
 		delName := strings.TrimSuffix(k.name, ".")
+
+		// Leaseweb has no upsert: an rrset is replaced by deleting it and
+		// creating the new one, which leaves a window in which the record does
+		// not exist. Interrupt the run there — Ctrl-C cancels the in-flight
+		// request through rootCtx, or the 20s timeout fires — and the rrset is
+		// simply gone, with nothing to put it back. On the apex A record of a
+		// live zone that is an outage, not a partial application.
+		//
+		// So: read the existing set first, and if the create fails, put back
+		// exactly what was there. It cannot cover a SIGKILL, but it covers
+		// every failure the process survives, which is all of the likely ones.
+		var previous []lswRecordSet
+		var prior *lswRecordSet
+		if status, err := p.do(ctx, http.MethodGet, base+"/"+delName+"/"+k.typ, nil, &prior); err == nil && status < 300 && prior != nil {
+			previous = append(previous, *prior)
+		}
+
 		if status, err := p.do(ctx, http.MethodDelete, base+"/"+delName+"/"+k.typ, nil, nil); err != nil && status != http.StatusNotFound {
 			return fmt.Errorf("delete %s/%s: %w", delName, k.typ, err)
 		}
 		if _, err := p.do(ctx, http.MethodPost, base, sets[k], nil); err != nil {
-			return fmt.Errorf("create %s/%s: %w", k.name, k.typ, err)
+			return fmt.Errorf("create %s/%s: %w%s", k.name, k.typ, err, p.restore(ctx, base, previous))
 		}
 	}
 	return nil
+}
+
+// restore puts back an rrset that was deleted for a replacement that then
+// failed, and reports what happened as a suffix to the caller's error. It uses
+// context.WithoutCancel deliberately: the most likely reason the create failed
+// is that the context was cancelled, and that is exactly when the record most
+// needs putting back.
+func (p *Provisioner) restore(ctx context.Context, base string, previous []lswRecordSet) string {
+	if len(previous) == 0 {
+		return " (no previous rrset to restore)"
+	}
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
+	defer cancel()
+	if _, rerr := p.do(rctx, http.MethodPost, base, previous[0], nil); rerr != nil {
+		return fmt.Sprintf(" — AND THE PREVIOUS RECORD COULD NOT BE RESTORED (%v): %s/%s is now absent from the zone, restore it by hand",
+			rerr, previous[0].Name, previous[0].Type)
+	}
+	return " (the previous record was restored)"
 }

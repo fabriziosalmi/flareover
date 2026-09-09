@@ -115,3 +115,69 @@ func TestNoAccessAppsChangesNothing(t *testing.T) {
 		t.Fatalf("sites = %d, want both hosts when no Access app is present", len(p.Sites))
 	}
 }
+
+// An Access app can be registered on a wildcard domain. Stored verbatim,
+// "*.internal.example.com" is a map key nothing matches, so every host it
+// actually protects gets an A record and a plain reverse_proxy — the gate
+// present, covering nothing.
+func TestWildcardAccessAppGatesTheHostsItProtects(t *testing.T) {
+	snap := cf.Snapshot{
+		SchemaVersion: cf.CurrentSchemaVersion,
+		Zone:          cf.Zone{Name: "example.com"},
+		AccessApps: []cf.AccessApp{
+			{Name: "internal tools", Domain: "*.internal.example.com", Policies: 2},
+		},
+		DNSRecords: []cf.DNSRecord{
+			{Type: "A", Name: "grafana.internal.example.com", Content: "198.51.100.7", Proxied: true, TTL: 300},
+			{Type: "A", Name: "shop.example.com", Content: "198.51.100.8", Proxied: true, TTL: 300},
+		},
+	}
+	p, err := Build(snap, Options{
+		EdgeIP: "203.0.113.10",
+		Decisions: map[string]string{
+			"origin:grafana.internal.example.com": "198.51.100.7:443",
+			"origin:shop.example.com":             "198.51.100.8:443",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, s := range p.Sites {
+		if s.Host == "grafana.internal.example.com" {
+			t.Error("a host behind a wildcard Access app was given a site block: it would be published without its login")
+		}
+	}
+	for _, r := range p.DNS.Records {
+		if r.Name == "grafana.internal.example.com" && r.Type == "A" {
+			t.Error("a host behind a wildcard Access app was given an A record pointing at the new edge")
+		}
+	}
+	// The gate must not swallow the rest of the zone.
+	var sawShop bool
+	for _, s := range p.Sites {
+		if s.Host == "shop.example.com" {
+			sawShop = true
+		}
+	}
+	if !sawShop {
+		t.Error("an unrelated host was gated: the wildcard suffix matched too much")
+	}
+}
+
+// Cloudflare's "*.internal.example.com" does not cover the bare parent, and
+// neither should the gate: over-matching would silently drop a host nobody
+// protected.
+func TestWildcardAccessAppDoesNotGateTheBareParent(t *testing.T) {
+	g := accessGatedHosts(cf.Snapshot{
+		AccessApps: []cf.AccessApp{{Domain: "*.internal.example.com"}},
+	})
+	if g.has("internal.example.com") {
+		t.Error("the bare parent of a wildcard app was gated")
+	}
+	if !g.has("app.internal.example.com") {
+		t.Error("a host under the wildcard was not gated")
+	}
+	if g.has("notinternal.example.com") {
+		t.Error("a host merely ending in the same letters was gated")
+	}
+}

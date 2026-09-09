@@ -50,16 +50,114 @@ flareover storage buckets.json --out ./out && sh ./out/minio/provision.sh
 Caddy live-reloads the bind-mounted Caddyfile; re-run `prepare --out ./out` and it
 picks up the change.
 
+## Gotchas
+
+**Port 53 is probably already taken.** Ubuntu, Debian and Fedora run
+systemd-resolved, whose stub listener holds `127.0.0.53:53`. Publishing DNS on
+`0.0.0.0:53` collides with it and the container never starts:
+
+```
+Error response from daemon: failed to set up container networking: driver failed
+programming external connectivity ... failed to bind host port for 0.0.0.0:53:
+address already in use
+```
+
+Two ways out. Bind only the address that will actually serve DNS —
+`DNS_BIND=203.0.113.10` in `.env` — or free port 53 on the host, which is what
+an edge dedicated to this stack wants:
+
+```sh
+sudo mkdir -p /etc/systemd/resolved.conf.d
+printf '[Resolve]\nDNSStubListener=no\n' | sudo tee /etc/systemd/resolved.conf.d/no-stub.conf
+sudo ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+sudo systemctl restart systemd-resolved
+```
+
+(Found by the smoke workflow, on a runner that has exactly this configuration.)
+
+## Keep the guard running
+
+After the cutover the guard is the entire recovery mechanism, and started from a
+shell it dies with a closed terminal, an SSH drop or a reboot — silently, since
+a guard that is quietly healthy and a guard that is gone produce the same absent
+output. [`flareover-guard.service`](flareover-guard.service) supervises it:
+
+```sh
+sudo cp flareover-guard.service /etc/systemd/system/
+sudo systemctl edit flareover-guard     # set FLAREOVER_GUARD_URL and the rollback hook
+sudo systemctl enable --now flareover-guard
+systemctl is-active flareover-guard     # the answer to "is anything still watching?"
+```
+
+It runs with `--keep-watching` (the default fire-once behaviour is right for a
+CI gate, not for a watchdog) and `--log-json`, so journald gets structured
+records including `trigger-completed` / `trigger-failed` with the elapsed time.
+
+## Back it up
+
+The seven volumes are not equal, and which is which is not guessable. Three hold
+state that cannot be regenerated from anything else you have:
+
+| Volume | Holds | If you lose it |
+|--------|-------|----------------|
+| `pdns-data` | the authoritative zone **and the DNSSEC signing keys** | the zone stops resolving, and the DS record at your registrar points at keys that no longer exist |
+| `certmate-data` + `certs` | issued certificates and issuance state | re-issuance, and rate limits at the CA |
+| `minio-data` | the migrated objects | possibly the only remaining copy, once the source bucket is gone |
+
+`caddy-data`, `caddy-config` and `spm-data` are disposable: re-running
+`flareover prepare` plus a restart rebuilds them.
+
+Snapshot the three that matter, with the stack stopped (sqlite and MinIO both
+dislike being copied mid-write):
+
+```sh
+docker compose stop
+for v in pdns-data certmate-data certs minio-data; do
+  docker run --rm -v flareover_$v:/data -v "$PWD/backup:/backup" alpine \
+    tar czf "/backup/$v.tgz" -C /data .
+done
+docker compose start
+```
+
+Restore is the same in reverse (`tar xzf` into a fresh volume) — do it before
+the first `docker compose up`, so `pdns-init` sees an existing database and
+leaves it alone.
+
+## Upgrading
+
+Image versions are pinned in `.env`, not floating on `:latest`. To upgrade, edit
+the version there, `docker compose up -d`, and check the service. To go back,
+put the previous version back and do the same — which only works because the
+previous version is written down. Take the backup above first: a major version
+of PowerDNS or MinIO may migrate its on-disk format, and that is not reversible.
+
 ## Confirm before you trust it (the live-proof)
 
-This compose is structurally validated but not yet run end-to-end in CI (no Docker
-there). Bring it up in your lab and confirm: the same Tier-A bar the rest of
-flareover meets (see [`../docs/live-proof.md`](../docs/live-proof.md)):
+**The PowerDNS half is now proven, not assumed.** Bringing this stack up
+revealed that the API had never worked: the compose set `PDNS_api_key` /
+`PDNS_webserver*`, names this image reads nowhere, so
+`provision --pdns-url http://localhost:8081` met a closed port. With
+`PDNS_AUTH_API_KEY` and the webserver arguments on the command line, a real run
+against the shipped stack now gets:
 
-- **PowerDNS backend.** The `gsqlite3` schema must exist on first boot. If the
-  image does not auto-create it, initialize once:
-  `docker compose exec powerdns pdnsutil create-zone <zone>` (or load the gsqlite3
-  schema), then re-run `provision`.
+```
+✓ DNS zone  4 records (PowerDNS (self-hosted)), DNSSEC signed (3 DS)
+```
+
+— zone created, records applied, zone signed with ECDSAP256SHA256, and the API
+restricted to `127.0.0.1,172.28.0.0/16` rather than `0.0.0.0/0`, with every
+service under `cap_drop: ALL` and `no-new-privileges`.
+`.github/workflows/deploy-smoke.yml` re-runs that assertion on every change to
+this directory, so it cannot silently regress.
+
+The rest still wants a lab run — the same Tier-A bar the rest of flareover meets
+(see [`../docs/live-proof.md`](../docs/live-proof.md)):
+
+- **The capability tightening.** Every service runs with `no-new-privileges` and
+  `cap_drop: ALL`, with capabilities added back only where the image's entrypoint
+  needs them (binding 53/80/443, and the privilege drop PowerDNS does itself).
+  The smoke test covers PowerDNS and MinIO; if you swap `CERTMATE_IMAGE` or
+  `SPM_IMAGE` for an image with a different entrypoint, confirm it still starts.
 - **CertMate image + certbot plugins.** Point `CERTMATE_IMAGE` at your published
   image; it must carry `certbot` and the matching DNS plugin
   (`certbot-dns-rfc2136` for PowerDNS) on `PATH`, or issuance fails.

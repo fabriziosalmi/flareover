@@ -23,10 +23,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -145,6 +148,61 @@ PREPARE FLAGS
 
 // version is stamped at build time via -ldflags "-X main.version=…" (goreleaser
 // sets it from the git tag). It stays "dev" for `go run` and local builds.
+// versionLine reports the version and the commit it was built from.
+//
+// The compiler stamps vcs.revision, vcs.time and vcs.modified into every binary
+// built from a checkout, so the commit was always in there — but nothing read
+// it, and `flareover version` printed the tag alone. An operator on an edge host
+// could say "v0.3.0" and no more, which is ambiguous across a re-cut tag and
+// says nothing about whether the build came from a dirty tree; recovering that
+// needed `go version -m` and therefore a Go toolchain on the machine holding the
+// binary.
+func versionLine() string {
+	var rev, when string
+	dirty := false
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range bi.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				rev = s.Value
+			case "vcs.time":
+				when = s.Value
+			case "vcs.modified":
+				dirty = s.Value == "true"
+			}
+		}
+	}
+	out := "flareover " + version
+	if rev != "" {
+		if len(rev) > 12 {
+			rev = rev[:12]
+		}
+		out += " (" + rev
+		if dirty {
+			out += ", dirty"
+		}
+		if when != "" {
+			out += ", " + when
+		}
+		out += ")"
+	}
+	return out + "\n"
+}
+
+// Exit codes. These are a documented part of the CLI contract — CI and shell
+// chains branch on them — so they live here as named constants rather than as
+// literals scattered through thirteen verbs. The table in the CLI reference is
+// asserted against this vocabulary by cmd_test.go.
+const (
+	exitOK       = 0  // clean: everything is AUTO
+	exitRuntime  = 1  // something failed while running
+	exitUsage    = 2  // the command line was wrong
+	exitManual   = 10 // MANUAL items outstanding (an extraction gap is one)
+	exitAsk      = 11 // ASK questions unanswered
+	exitDiverged = 12 // the parity gate found a HARD divergence
+	exitGuard    = 20 // the guard fired: rollback/failover triggered
+)
+
 var version = "dev"
 
 // rootCtx is cancelled when the process is asked to stop. Every phase takes a
@@ -165,7 +223,7 @@ func main() {
 	rootCtx = ctx
 	switch os.Args[1] {
 	case "version", "--version", "-v":
-		fmt.Printf("flareover %s\n", version)
+		fmt.Print(versionLine())
 		return
 	case "zones":
 		os.Exit(cmdZones(os.Args[2:]))
@@ -252,10 +310,10 @@ func cmdAssess(args []string) int {
 	// Exit non-zero when human attention is required, so CI/automation can gate.
 	c := rep.Counts()
 	if c[report.Manual] > 0 {
-		return 10
+		return exitManual
 	}
 	if c[report.Ask] > 0 {
-		return 11
+		return exitAsk
 	}
 	return 0
 }
@@ -446,7 +504,25 @@ func cmdExtract(args []string) int {
 		return 1
 	}
 	fmt.Fprintf(os.Stderr, "wrote %s\n", outPath)
-	return 0
+	return extractExit(snap)
+}
+
+// extractExit reports the exit code for a completed extraction.
+//
+// A partial capture used to exit 0: the warnings went to stderr, which a shell
+// pipeline routinely discards, so `flareover extract … > zone.json && deploy`
+// carried on against a snapshot that might be missing the WAF rules or the
+// Access apps. The degradation did reach the exit-code channel eventually,
+// because each gap becomes a MANUAL and assess/prepare then exit 10 — but one
+// step too late, and named as a coverage problem rather than an extraction one.
+// Exit 10 here is the same code for the same reason: a gap IS a MANUAL item.
+func extractExit(snap cf.Snapshot) int {
+	if len(snap.ExtractionGaps) == 0 {
+		return 0
+	}
+	fmt.Fprintf(os.Stderr, "flareover extract: %d surface(s) could not be read; the snapshot is a PARTIAL capture (exit %d)\n",
+		len(snap.ExtractionGaps), exitManual)
+	return exitManual
 }
 
 func cmdCost(args []string) int {
@@ -461,7 +537,17 @@ func cmdCost(args []string) int {
 				return 2
 			}
 			i++
-			fmt.Sscanf(args[i], "%f", &vps)
+			// Parsed strictly. Sscanf discarded its error, so `--vps 12,50`
+			// (the European decimal separator) silently became 12 and
+			// `--vps twelve` silently left 0 — and the cost report then
+			// compared the managed edge against a self-hosted stack that
+			// appeared to cost nothing, with a confident number and no warning.
+			v, err := strconv.ParseFloat(args[i], 64)
+			if err != nil || v < 0 {
+				fmt.Fprintf(os.Stderr, "flareover cost: --vps %q is not a non-negative monthly price (e.g. 12 or 12.50)\n", args[i])
+				return exitUsage
+			}
+			vps = v
 		default:
 			if len(a) > 0 && a[0] == '-' {
 				fmt.Fprintf(os.Stderr, "flareover cost: unknown flag %q\n", a)
@@ -616,10 +702,10 @@ func cmdStorage(args []string) int {
 	}
 	c := rep.Counts()
 	if c[report.Manual] > 0 {
-		return 10
+		return exitManual
 	}
 	if c[report.Ask] > 0 {
-		return 11
+		return exitAsk
 	}
 	return 0
 }
@@ -698,7 +784,7 @@ func cmdExecute(args []string) int {
 		pr.Fail(0, fmt.Sprintf("%d MANUAL item(s): cutover not authorized", c[report.Manual]))
 		printManual(rep, "execute")
 		fmt.Fprintln(os.Stderr, "\n  Handle these by hand, or re-run with --accept-manual to proceed anyway.")
-		return 10
+		return exitManual
 	}
 
 	pr.Start(1)
@@ -728,7 +814,7 @@ func cmdExecute(args []string) int {
 		pr.Fail(2, fmt.Sprintf("%d probes · GATE FAIL: cutover blocked", len(prep.Results)))
 		pr.PrintLine("")
 		fmt.Print(render.Parity(prep, color))
-		return 12
+		return exitDiverged
 	}
 	pr.Done(2, fmt.Sprintf("%d probes · GATE PASS", len(prep.Results)))
 
@@ -910,6 +996,11 @@ func cmdProvision(args []string) int {
 		fmt.Fprintf(os.Stderr, "flareover provision: %v\n", err)
 		return 1
 	}
+	if err := checkEdgeIP("provision", edgeIP); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitUsage
+	}
+	reportUnknownDecisions("provision", decisions, classify.Classify(snap))
 	built, err := plan.Build(snap, plan.Options{Decisions: decisions, CA: ca, OriginCA: originCA, EdgeIP: edgeIP})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "flareover provision: %v\n", err)
@@ -1093,6 +1184,27 @@ func cmdGuard(args []string) int {
 			emit("unhealthy", s, nil)
 		}
 	}
+	// Resolve the shell before the watch starts, not when the rollback fires.
+	// `bash` was exec'd by name with no LookPath, in the one command whose whole
+	// purpose is to run when things are already broken — so on Alpine, a
+	// distroless image or a minimal Debian the guard would watch happily for
+	// hours and only discover the missing shell at the moment the site was
+	// already down. Every other external binary in this tree is resolved this
+	// way first (internal/validate, internal/doctor).
+	shell := ""
+	if onUnhealthy != "" {
+		for _, cand := range []string{"bash", "sh"} {
+			if p, err := exec.LookPath(cand); err == nil {
+				shell = p
+				break
+			}
+		}
+		if shell == "" {
+			fmt.Fprintln(os.Stderr, "flareover guard: --on-unhealthy needs bash or sh on PATH")
+			return exitUsage
+		}
+	}
+
 	onFail := func(reason string) error {
 		now := guard.Status{At: time.Now(), Reason: reason, ConsecutiveFails: fails}
 		emit("threshold-reached", now, nil)
@@ -1100,14 +1212,29 @@ func cmdGuard(args []string) int {
 			emit("trigger-skipped", now, map[string]any{"note": "no --on-unhealthy set; alerting only"})
 			return nil
 		}
-		emit("trigger-running", now, map[string]any{"command": onUnhealthy})
-		cmd := exec.Command("bash", "-c", onUnhealthy) // #nosec G204: the operator's own --on-unhealthy hook, by design
+		emit("trigger-running", now, map[string]any{"command": onUnhealthy, "shell": shell})
+		cmd := exec.Command(shell, "-c", onUnhealthy) // #nosec G204: the operator's own --on-unhealthy hook, by design
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		// Detach the trigger from this process's signal group. A Ctrl-C aimed at
 		// the watchdog would otherwise also hit a rollback already in flight,
 		// interrupting the very thing the guard exists to complete.
 		detachProcessGroup(cmd)
-		return cmd.Run()
+
+		// Record how it ended. Without this the log showed the most
+		// consequential action the tool takes starting and never said whether
+		// it finished — and under --keep-watching nothing else ever would,
+		// because the loop resets and carries on emitting health ticks.
+		started := time.Now()
+		err := cmd.Run()
+		done := guard.Status{At: time.Now(), Reason: reason, ConsecutiveFails: fails}
+		extra := map[string]any{"elapsed": time.Since(started).Round(time.Millisecond).String()}
+		if err != nil {
+			extra["error"] = err.Error()
+			emit("trigger-failed", done, extra)
+			return err
+		}
+		emit("trigger-completed", done, extra)
+		return nil
 	}
 
 	// The watch ends for a reason, and the reason is worth recording: without a
@@ -1128,7 +1255,7 @@ func cmdGuard(args []string) int {
 	}
 	if triggered {
 		end("watch-ended", map[string]any{"note": "guard fired: rollback/failover triggered"})
-		return 20
+		return exitGuard
 	}
 	end("watch-ended", map[string]any{"note": "watch completed"})
 	return 0
@@ -1208,6 +1335,10 @@ func cmdPrepare(args []string) int {
 		fmt.Fprintf(os.Stderr, "flareover prepare: %v\n", err)
 		return 1
 	}
+	if err := checkEdgeIP("prepare", edgeIP); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitUsage
+	}
 	profile, err := stack.Profile(stackID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "flareover prepare: %v\n", err)
@@ -1235,6 +1366,7 @@ func cmdPrepare(args []string) int {
 	// runbook and the MANUAL summary printed at the end, and computing it once
 	// keeps the two from disagreeing.
 	rep := classify.Classify(snap)
+	reportUnknownDecisions("prepare", decisions, rep)
 	built, err := plan.Build(snap, plan.Options{
 		EdgeIP: edgeIP, CA: ca, OriginCA: originCA, Decisions: decisions, Blocklists: bl,
 		EgressDeny: egressDeny, EgressAllow: egAllow, EgressSSLBump: egressSSLBump,
@@ -1355,10 +1487,10 @@ func cmdPrepare(args []string) int {
 	c := rep.Counts()
 	if c[report.Manual] > 0 {
 		printManual(rep, "prepare")
-		return 10
+		return exitManual
 	}
 	if c[report.Ask] > 0 {
-		return 11
+		return exitAsk
 	}
 	return 0
 }
@@ -1592,6 +1724,63 @@ func loadDecisions(path string) (map[string]string, error) {
 		return nil, fmt.Errorf("parsing decisions %s: %w", path, err)
 	}
 	return m, nil
+}
+
+// checkEdgeIP validates --edge-ip before it becomes the content of every
+// de-proxied A record.
+//
+// opts.edge() returns the flag verbatim and plan.buildDNS writes it as
+// `Type: "A", Content: opts.edge()`, while ir.Plan.Validate checks a record's
+// Name and not its Content. So `--edge-ip 203.0.113` produced a zone file the
+// operator was invited to review in git and then apply, with the blast radius
+// of every migrated hostname, and the failure appearing at resolution time
+// rather than at parse time.
+func checkEdgeIP(verb, v string) error {
+	if strings.TrimSpace(v) == "" {
+		return nil // optional: the plan emits EDGE_IP_PLACEHOLDER instead
+	}
+	ip := net.ParseIP(v)
+	if ip == nil {
+		return fmt.Errorf("flareover %s: --edge-ip %q is not an IP address", verb, v)
+	}
+	if ip.To4() == nil {
+		// Proxied records are re-pointed as A records; an AAAA edge would need
+		// the generator to emit AAAA, which it does not.
+		return fmt.Errorf("flareover %s: --edge-ip %q is IPv6; the de-proxied records are emitted as A records, so this edge needs an IPv4 address", verb, v)
+	}
+	return nil
+}
+
+// reportUnknownDecisions names answers that matched no question in this
+// snapshot.
+//
+// Every consumer reads answers by lookup and an unanswered ASK is deliberately
+// omitted rather than guessed, so a misspelled key and a question nobody
+// answered are indistinguishable: the operator gets a smaller Caddyfile, the
+// ASK still listed in the report, and nothing connecting the two.
+func reportUnknownDecisions(verb string, decisions map[string]string, rep report.Report) {
+	if len(decisions) == 0 {
+		return
+	}
+	known := make(map[string]bool, len(rep.Findings))
+	for _, f := range rep.Findings {
+		if f.Question != nil {
+			known[f.Question.ID] = true
+		}
+	}
+	var unknown []string
+	for k := range decisions {
+		if !known[k] {
+			unknown = append(unknown, k)
+		}
+	}
+	if len(unknown) == 0 {
+		return
+	}
+	sort.Strings(unknown)
+	for _, k := range unknown {
+		fmt.Fprintf(os.Stderr, "flareover %s: decisions key %q matches no question in this snapshot; ignored\n", verb, k)
+	}
 }
 
 func loadSnapshot(path string) (cf.Snapshot, error) {

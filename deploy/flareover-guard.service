@@ -1,0 +1,76 @@
+# flareover guard, supervised.
+#
+# After the DNS flip the guard is the entire recovery mechanism: it polls the
+# migrated URL and, past the failure threshold, runs the rollback. Started from
+# a shell it dies with a closed terminal, an SSH drop, an OOM kill or a reboot —
+# and it dies silently, because a guard that is quietly healthy and a guard that
+# is gone produce the same (absent) output. Every other service in deploy/ has a
+# restart policy; the one whose job is to be alive during a failure had none.
+#
+#   sudo cp flareover-guard.service /etc/systemd/system/
+#   sudo systemctl edit flareover-guard      # set the URL and the rollback hook
+#   sudo systemctl enable --now flareover-guard
+#   journalctl -u flareover-guard -f
+#
+# Check it is actually watching:
+#   systemctl is-active flareover-guard
+
+[Unit]
+Description=flareover guard: health-watch the migrated edge and trigger rollback
+Documentation=https://www.flareover.com/docs/cli-reference/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Override these with `systemctl edit flareover-guard`, which writes a drop-in
+# rather than editing this file:
+#
+#   [Service]
+#   Environment=FLAREOVER_GUARD_URL=https://example.com
+#   Environment=FLAREOVER_GUARD_ROLLBACK=/usr/local/bin/rollback.sh
+#
+# The rollback hook is visible in the process listing and in the guard's own
+# event stream, so put credentials in a script that reads its own environment
+# rather than inline on this line.
+Environment=FLAREOVER_GUARD_URL=https://example.com
+Environment=FLAREOVER_GUARD_ROLLBACK=/usr/local/bin/rollback.sh
+Environment=FLAREOVER_GUARD_INTERVAL=30s
+Environment=FLAREOVER_GUARD_FAILS=3
+
+# --keep-watching, deliberately: the default is fire-once, which is right for a
+# CI gate but leaves the migration unguarded for whatever happens next —
+# including a rollback that itself failed. A supervised watchdog wants the other
+# behaviour. --log-json so journald gets structured records.
+ExecStart=/usr/local/bin/flareover guard \
+    --url ${FLAREOVER_GUARD_URL} \
+    --interval ${FLAREOVER_GUARD_INTERVAL} \
+    --fails ${FLAREOVER_GUARD_FAILS} \
+    --keep-watching \
+    --log-json \
+    --on-unhealthy "${FLAREOVER_GUARD_ROLLBACK}"
+
+Restart=always
+RestartSec=10s
+
+# The guard reads a URL and runs one operator-supplied command. It needs no
+# privileges of its own; the rollback script it invokes inherits this sandbox,
+# so loosen these if your rollback needs more than network access.
+DynamicUser=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target

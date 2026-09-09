@@ -82,13 +82,33 @@ var (
 // and must stay MANUAL.
 func CaddyMatcher(expr string) (string, bool) {
 	if m := pathStartsWith.FindStringSubmatch(expr); m != nil {
+		if !safePathToken.MatchString(m[1]) {
+			return "", false
+		}
 		return "path " + m[1] + "*", true // prefix → Caddy path glob
 	}
 	if m := pathEq.FindStringSubmatch(expr); m != nil {
+		if !safePathToken.MatchString(m[1]) {
+			return "", false
+		}
 		return "path " + m[1], true // exact
 	}
 	return "", false
 }
+
+// safePathToken is a path that survives becoming ONE argument of a Caddy `path`
+// matcher.
+//
+// The capture above is `[^"]+`, which admits whitespace and braces, and the
+// matcher takes a space-separated LIST of patterns — so a rule scoped to
+// `starts_with(http.request.uri.path, "/a b")` would render as `path /a b*`,
+// which Caddy reads as two patterns: everything under /a, plus b*. The result
+// is a matcher far broader than the rule it came from, applied silently, with
+// the classifier calling the element AUTO because this function returned ok.
+// That is precisely the outcome the comment above rules out. A path that is not
+// a single safe token has no faithful Caddy matcher, so it degrades to MANUAL
+// like any other unmappable scope.
+var safePathToken = regexp.MustCompile(`^/[^\s"'{}\\]*$`)
 
 var hostEq = regexp.MustCompile(`(?i)^\s*http\.host\s+eq\s+"([^"]+)"\s*$`)
 

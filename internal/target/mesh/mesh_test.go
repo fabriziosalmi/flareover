@@ -138,3 +138,31 @@ func pubOf(t *testing.T, privB64 string) string {
 	}
 	return base64.StdEncoding.EncodeToString(k.PublicKey().Bytes())
 }
+
+// The docs tell an operator to review ./out in git, and this is the one
+// directory in it that must not be committed. The protection has to be written
+// beside the keys, because the repository's own .gitignore only covers a run
+// made inside a clone of flareover itself.
+func TestGeneratedMeshShipsAGitignoreForThePrivateKeys(t *testing.T) {
+	arts, err := GenerateWireGuard(Config{EdgeEndpoint: "203.0.113.10:51820"})
+	if err != nil {
+		t.Fatalf("GenerateWireGuard: %v", err)
+	}
+	files := map[string]string{}
+	for _, a := range arts {
+		files[a.Path] = string(a.Content)
+		if strings.HasSuffix(a.Path, ".wg0.conf") && a.Mode != 0o600 {
+			t.Errorf("%s mode = %o, want 600", a.Path, a.Mode)
+		}
+	}
+	gi, ok := files["mesh/.gitignore"]
+	if !ok {
+		t.Fatal("no mesh/.gitignore: the keys would be committed by an operator following the docs")
+	}
+	if !strings.Contains(gi, "*.wg0.conf") {
+		t.Errorf("the .gitignore does not exclude the key files: %q", gi)
+	}
+	if !strings.Contains(files["mesh/README.md"], "private keys") {
+		t.Error("the generated README does not say the .conf files are secrets")
+	}
+}

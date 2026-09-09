@@ -19,13 +19,23 @@ jobs:
       - name: vet
         run: go vet ./...
       - name: staticcheck
-        # Pinned, not @latest: this job runs with GOTOOLCHAIN=local on the version in
-        # go.mod (1.25), and staticcheck v0.8.x declares `go 1.26.0`, so `@latest`
-        # cannot even install ("requires go >= 1.26.0, running go 1.25.14"). v0.7.0 is
-        # the last release that builds on 1.25. Bump it together with go.mod, on purpose.
+        # Pinned, not @latest, so a linter release cannot fail an unrelated PR.
+        # Bump it together with the toolchain in go.mod, on purpose: v0.8.x
+        # requires go >= 1.26, which is why this moved when go.mod did.
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
+          go install honnef.co/go/tools/cmd/staticcheck@v0.8.0
           staticcheck ./...
+
+      # Zero third-party modules is exactly why this is needed rather than why
+      # it is not: the only code that can carry an advisory here is the standard
+      # library, and osv-scanner has no go.sum to read. When this was first run
+      # it reported eighteen reachable standard-library vulnerabilities against
+      # the toolchain then in use, none of which anything in this repository
+      # would have surfaced. Pinned for the same reason as staticcheck.
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          govulncheck ./...
       - name: test
         run: go test -race ./...
       - name: gofmt

@@ -21,6 +21,16 @@ Read a live zone (read-only API) into a snapshot JSON on stdout. Needs `CLOUDFLA
 flareover extract example.com > zone.snapshot.json
 ```
 
+Set `CLOUDFLARE_ACCOUNT_ID` too: without it the account-scoped surfaces (R2
+buckets and **Cloudflare Access apps**) are not read at all, and an unread
+Access surface is what would let a login-protected host be generated as a
+public one.
+
+**Exit codes:** `0` = every surface read · `10` = **partial capture**: one or
+more surfaces could not be read. The snapshot is still written and records each
+gap, and every gap becomes a MANUAL item in `assess` — the non-zero code is so a
+shell chain stops here rather than two commands later.
+
 ### `assess <snapshot.json>`
 Classify a snapshot into an honest AUTO/ASK/MANUAL coverage report.
 
@@ -173,7 +183,7 @@ Print the build version.
 | `0` | all | Success / clean |
 | `1` | all | Runtime error |
 | `2` | all | Usage / bad arguments |
-| `10` | `assess`, `prepare`, `storage`, `execute` | MANUAL items present. `prepare` still writes its artifacts; `execute` refuses to proceed without `--accept-manual`. |
+| `10` | `extract`, `assess`, `prepare`, `storage`, `execute` | MANUAL items present. From `extract` it means the capture is **partial**: one or more surfaces could not be read, and each becomes a MANUAL item downstream. `prepare` still writes its artifacts; `execute` refuses to proceed without `--accept-manual`. |
 | `11` | `assess`, `prepare`, `storage` | ASK items present (no MANUAL) |
 | `12` | `present`, `execute` | Parity divergence / cutover blocked |
 | `20` | `guard` | The failguard fired: the rollback / failover trigger ran |

@@ -72,6 +72,21 @@ func (s Snapshot) CheckSchemaVersion() error {
 	}
 }
 
+// PredatesGapReporting reports whether this snapshot was written before the
+// extractor could record what it failed to read (schema_version < 2).
+//
+// It matters because of what an empty slice means. In a current snapshot an
+// empty AccessApps means "the extractor read the Access surface and the zone
+// has none"; in an older one it can equally mean "nobody ever asked", and
+// ExtractionGaps is empty either way so nothing says which. The plan builder
+// reads exactly that emptiness to decide a host needs no identity gate, so a
+// stale capture can silently turn a login-protected host into a public one.
+// The classifier reports this as MANUAL rather than letting the age of the
+// file decide a security property in silence.
+func (s Snapshot) PredatesGapReporting() bool {
+	return s.SchemaVersion < CurrentSchemaVersion
+}
+
 // Gap is one surface the extractor could not read, and why. A zone with gaps is
 // a partial capture: the classifier reports each one as MANUAL so the operator
 // sees "not read" rather than "not present".

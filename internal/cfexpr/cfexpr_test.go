@@ -208,3 +208,39 @@ func TestOriginOverridePathScoped(t *testing.T) {
 		t.Error("a path-scoped rule without an origin must stay MANUAL")
 	}
 }
+
+// A Caddy `path` matcher takes a space-separated LIST of patterns, so a path
+// carrying whitespace stops being one pattern and becomes two: `path /a b*`
+// matches everything under /a as well as b*. That is broader than the rule it
+// came from, applied silently, and reported as AUTO. A scope that cannot be
+// reproduced faithfully must return ok=false so it degrades to MANUAL.
+func TestCaddyMatcherRefusesAPathThatIsNotOneToken(t *testing.T) {
+	for _, expr := range []string{
+		`starts_with(http.request.uri.path, "/a b")`,
+		"starts_with(http.request.uri.path, \"/a\tb\")", // a real tab
+		`starts_with(http.request.uri.path, "/a\\b")`,   // a backslash: Caddyfile escape
+		`http.request.uri.path eq "/a b"`,
+		`starts_with(http.request.uri.path, "/x{y}")`,
+		`starts_with(http.request.uri.path, "/x'y")`,
+		`starts_with(http.request.uri.path, "no-leading-slash")`,
+	} {
+		if got, ok := CaddyMatcher(expr); ok {
+			t.Errorf("CaddyMatcher(%q) = %q, true; want ok=false so the rule stays MANUAL", expr, got)
+		}
+	}
+}
+
+func TestCaddyMatcherStillAcceptsOrdinaryPaths(t *testing.T) {
+	for expr, want := range map[string]string{
+		`starts_with(http.request.uri.path, "/api")`:       "path /api*",
+		`starts_with(http.request.uri.path, "/a-b_c.d~e")`: "path /a-b_c.d~e*",
+		`http.request.uri.path eq "/exact"`:                "path /exact",
+		`starts_with(http.request.uri.path, "/wp-admin/")`: "path /wp-admin/*",
+		`starts_with(http.request.uri.path, "/v1/%20enc")`: "path /v1/%20enc*",
+	} {
+		got, ok := CaddyMatcher(expr)
+		if !ok || got != want {
+			t.Errorf("CaddyMatcher(%q) = %q, %v; want %q, true", expr, got, ok, want)
+		}
+	}
+}

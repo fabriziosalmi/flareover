@@ -1,7 +1,7 @@
 # flareover: common tasks. `make help` lists them.
 BIN := flareover
 
-.PHONY: help build test race vet lint fmt cover run clean
+.PHONY: help build test race vet lint vuln fmt cover run clean
 help: ## List targets
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-10s\033[0m %s\n",$$1,$$2}'
 
@@ -17,9 +17,17 @@ race: ## Run tests with the race detector (what CI runs)
 vet: ## go vet
 	go vet ./...
 
-lint: ## staticcheck (install if missing)
-	@command -v staticcheck >/dev/null || go install honnef.co/go/tools/cmd/staticcheck@latest
-	staticcheck ./...
+# Pinned to the version CI uses, and always that version: the `command -v` guard
+# this used to have made the result depend on whatever happened to be installed,
+# and @latest could not install at all on the toolchain in go.mod.
+STATICCHECK_VERSION := v0.8.0
+GOVULNCHECK_VERSION := v1.1.4
+
+lint: ## staticcheck (the version CI runs)
+	go run honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION) ./...
+
+vuln: ## govulncheck (the version CI runs)
+	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 fmt: ## Format
 	gofmt -w ./cmd ./internal

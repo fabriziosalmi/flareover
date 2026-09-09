@@ -28,7 +28,7 @@ No. Everything up to the DNS flip is **read-only or writes only to your new targ
 That the tool never claims to have handled something it didn't. If a setting is reported **AUTO**, config for it is genuinely generated; if it can't be mapped faithfully, it's marked **MANUAL** and surfaced, never guessed. See [The Contract](/docs/the-contract/).
 
 ### Can I trust the generated config?
-It's a **pure function** of your snapshot plus your answers: run it twice, get byte-identical output (golden-tested). So you review `./out` in `git` like any code change *before* anything goes live. Nothing is applied to production without your explicit action.
+It's a **pure function** of your snapshot plus your answers: run it twice, get byte-identical output (golden-tested). So you review `./out` in `git` like any code change *before* anything goes live — in a private repository, and not the WireGuard keys under `<out>/mesh`, which come with a generated `.gitignore`. Nothing is applied to production without your explicit action.
 
 ### How thoroughly is the "AUTO means emitted" promise checked?
 The classifier and the generator share one source of truth, and *parity tests* assert that every AUTO finding materializes as real config. On top of that, the project periodically runs an adversarial audit specifically to hunt for any drift, and treats a verdict that claims coverage the generator doesn't deliver as a **critical** bug.

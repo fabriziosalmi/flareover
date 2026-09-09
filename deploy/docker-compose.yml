@@ -8,34 +8,92 @@
 #   1. flareover prepare snap.json --decisions decisions.lock --edge-ip <ip> --out ./out
 #   2. cp .env.example .env   &&   edit the secrets
 #   3. docker compose up -d --build
-#   4. flareover provision --snapshot snap.json --decisions decisions.lock \
-#        --pdns-url http://localhost:8081 --pdns-key "$PDNS_API_KEY" \
-#        --certmate-url http://localhost:8000 --certmate-token "$CERTMATE_TOKEN"
+#   4. set -a; . ./.env; set +a          # secrets come from the environment, never argv
+#      flareover provision --snapshot snap.json --decisions decisions.lock \
+#        --pdns-url http://localhost:8081 \
+#        --certmate-url http://localhost:8000
 #
 # ARTIFACTS defaults to ./out (the prepare --out dir). Override it in .env.
+#
+# Image versions are pinned in .env, not floating on :latest. An upgrade should
+# be a diff somebody reviewed, not whatever the registry served the day a
+# container happened to be recreated — these hold the authoritative zone, the
+# DNSSEC keys and the migrated objects.
 name: flareover
 
 services:
+  # Loads the gsqlite3 schema on first boot. The image ships the schema but does
+  # not apply it, so without this PowerDNS starts and cannot serve — and the
+  # failure looks like an API problem rather than a missing database. Runs to
+  # completion before powerdns starts and is a no-op on every later boot.
+  pdns-init:
+    image: ${PDNS_IMAGE:-powerdns/pdns-auth-49:4.9.17}
+    user: root
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        db=/var/lib/powerdns/pdns.sqlite3
+        if [ -s "$$db" ]; then echo "pdns-init: schema already present"; exit 0; fi
+        schema=$$(find / -name 'schema.sqlite3.sql' -print -quit 2>/dev/null || true)
+        if [ -z "$$schema" ]; then
+          echo "pdns-init: schema.sqlite3.sql not found in the image; cannot initialize" >&2
+          exit 1
+        fi
+        echo "pdns-init: loading $$schema"
+        sqlite3 "$$db" < "$$schema"
+        chown -R 953:953 /var/lib/powerdns 2>/dev/null || true
+        echo "pdns-init: done"
+    volumes:
+      - pdns-data:/var/lib/powerdns
+    networks: [internal]
+
   powerdns:
-    image: powerdns/pdns-auth-49:latest
+    image: ${PDNS_IMAGE:-powerdns/pdns-auth-49:4.9.17}
     restart: unless-stopped
+    depends_on:
+      pdns-init:
+        condition: service_completed_successfully
     environment:
-      PDNS_launch: gsqlite3
-      PDNS_gsqlite3_database: /var/lib/powerdns/pdns.sqlite3
-      PDNS_gsqlite3_dnssec: "yes"
-      PDNS_api: "yes"
-      PDNS_api_key: ${PDNS_API_KEY:?set PDNS_API_KEY in .env}
-      PDNS_webserver: "yes"
-      PDNS_webserver_address: 0.0.0.0
-      PDNS_webserver_port: "8081"
-      PDNS_webserver_allow_from: 0.0.0.0/0
+      # PDNS_AUTH_API_KEY is the name this image acts on: its startup script
+      # writes /etc/powerdns/pdns.d/_api.conf only when this is set. The
+      # PDNS_api / PDNS_api_key / PDNS_webserver* names that used to be here
+      # were read by nothing, so the API never started and
+      # `provision --pdns-url http://localhost:8081` met a closed port. Found by
+      # running the stack; see .github/workflows/deploy-smoke.yml, which now
+      # asserts the API answers.
+      PDNS_AUTH_API_KEY: ${PDNS_API_KEY:?set PDNS_API_KEY in .env}
+    # That generated _api.conf hardcodes webserver-allow-from=0.0.0.0/0. These
+    # are command-line arguments, which override the config files, so the
+    # constraint lives in the setting rather than only in the port binding —
+    # otherwise every container on `internal` reaches the zone's control plane,
+    # and exposing 8081 later would remove the only real restriction without
+    # touching anything that looks like one.
+    command:
+      - --webserver-allow-from=127.0.0.1,${INTERNAL_SUBNET:-172.28.0.0/16}
+      - --webserver-port=8081
+      - --launch=gsqlite3
+      - --gsqlite3-database=/var/lib/powerdns/pdns.sqlite3
+      - --gsqlite3-dnssec=yes
     volumes:
       - pdns-data:/var/lib/powerdns
     ports:
-      - "53:53/udp"
-      - "53:53/tcp"
+      # DNS_BIND exists because of a conflict most hosts have: systemd-resolved
+      # (Ubuntu, Debian, Fedora) listens on 127.0.0.53:53, and publishing on
+      # 0.0.0.0 collides with it — "failed to bind host port for 0.0.0.0:53:
+      # address already in use", before PowerDNS gets to say anything. Set
+      # DNS_BIND to the host's public address, or free 53 first. See
+      # deploy/README.md § Gotchas.
+      - "${DNS_BIND:-0.0.0.0}:53:53/udp"
+      - "${DNS_BIND:-0.0.0.0}:53:53/tcp"
       - "127.0.0.1:8081:8081" # API: provision --pdns-url http://localhost:8081
     networks: [internal]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    # 53 is privileged; the daemon drops to the pdns user itself, which needs
+    # SETUID/SETGID, and the sqlite file is chowned on start.
+    cap_add: [NET_BIND_SERVICE, SETUID, SETGID, CHOWN, DAC_OVERRIDE]
 
   caddy:
     build:
@@ -54,6 +112,11 @@ services:
       - "443:443"
       - "443:443/udp" # HTTP/3
     networks: [edge, internal]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    # The only capability an edge proxy needs: bind 80/443. It stays root inside
+    # the container and writes only to volumes it owns.
+    cap_add: [NET_BIND_SERVICE]
 
   certmate:
     image: ${CERTMATE_IMAGE:-ghcr.io/fabriziosalmi/certmate:latest}
@@ -67,9 +130,12 @@ services:
     ports:
       - "127.0.0.1:8000:8000" # API: provision --certmate-url http://localhost:8000
     networks: [internal]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE]
 
   minio:
-    image: minio/minio:latest
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -81,6 +147,8 @@ services:
       - "127.0.0.1:9000:9000" # S3 API: the generated storage provision.sh targets this
       - "127.0.0.1:9001:9001" # console
     networks: [internal]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
 
   # Egress shield: the outbound default-deny proxy that `prepare --egress-deny`
   # targets. Optional: comment this service out if you don't run one.
@@ -92,11 +160,31 @@ services:
     ports:
       - "127.0.0.1:3128:3128"
     networks: [internal]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE]
 
 networks:
   edge: {} # public-facing tier (Caddy 80/443, and PowerDNS 53: authoritative DNS must be public)
-  internal: {} # inter-container tier; the admin/API ports (8081, 8000, 9000/9001, 3128) publish only to 127.0.0.1
+  # Inter-container tier. The subnet is declared rather than left to Docker so
+  # PDNS_webserver_allow_from above can name it: the admin/API ports (8081,
+  # 8000, 9000/9001, 3128) publish only to 127.0.0.1, and the DNS control plane
+  # additionally refuses anything outside this network.
+  internal:
+    ipam:
+      config:
+        - subnet: ${INTERNAL_SUBNET:-172.28.0.0/16}
 
+# Back these up: they cannot be regenerated.
+#   pdns-data     the authoritative zone AND the DNSSEC signing keys. Lose it and
+#                 the zone stops resolving and the DS record at your registrar
+#                 points at keys that no longer exist.
+#   certmate-data + certs   issued certificates and issuance state.
+#   minio-data    the migrated objects — possibly the only remaining copy once
+#                 the source bucket is decommissioned.
+# These are disposable: re-running `flareover prepare` and a restart rebuild them.
+#   caddy-data, caddy-config, spm-data
+# See deploy/README.md § Back it up for the commands.
 volumes:
   pdns-data: {}
   caddy-data: {}

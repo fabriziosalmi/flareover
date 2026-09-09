@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -64,25 +65,67 @@ type envelope struct {
 	} `json:"result_info"`
 }
 
+// maxBody bounds a single API response. It is a ceiling against a pathological
+// or hostile response, not a working limit: exceeding it is an error rather
+// than a truncation, because a truncated JSON document fails to parse and the
+// operator would see "unexpected end of JSON input" for a zone that is merely
+// large.
+const maxBody = 32 << 20
+
+// maxAttempts bounds the retry of a throttled or transient request. Retrying
+// into a failing dependency is amplification, so this is small and paired with
+// the server's own Retry-After when it sends one.
+const maxAttempts = 4
+
+// accessConcurrency bounds the per-app policy fan-out. Small on purpose: the
+// binding constraint on a large account is the provider's request budget, and
+// spending it faster is not an improvement.
+const accessConcurrency = 6
+
+// fetch performs a request, retrying while the API says "slow down" or "not
+// now". It returns the last body and status; interpreting them is the caller's.
+func (c *Client) fetch(ctx context.Context, path string) ([]byte, int, error) {
+	for attempt := 1; ; attempt++ {
+		body, status, err := c.getOnce(ctx, path)
+		if err != nil {
+			return nil, status, err
+		}
+		if !retryable(status) || attempt == maxAttempts {
+			return body, status, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, status, ctx.Err()
+		case <-time.After(backoff(attempt)):
+		}
+	}
+}
+
+// statusError turns a non-2xx into an error that names the cause, so warn() can
+// record WHY a surface is missing: the remedy for a rate limit is to wait and
+// re-run, not to widen the token, and the gap text said the latter for every
+// cause.
+func statusError(path string, status int) error {
+	switch {
+	case status == http.StatusForbidden || status == http.StatusUnauthorized:
+		return fmt.Errorf("%s: HTTP %d (token missing scope?)", path, status)
+	case status == http.StatusTooManyRequests:
+		return fmt.Errorf("%s: HTTP 429 rate limited after %d attempts: wait for the limit to reset and re-run", path, maxAttempts)
+	case status >= 500:
+		return fmt.Errorf("%s: HTTP %d from the API after %d attempts (transient): re-run", path, status, maxAttempts)
+	}
+	return nil
+}
+
 func (c *Client) get(ctx context.Context, path string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base()+path, nil)
+	body, status, err := c.fetch(ctx, path)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
-	req.Header.Set("Accept", "application/json")
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
+	if err := statusError(path, status); err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("%s: HTTP %d (token missing scope?)", path, resp.StatusCode)
-	}
+
 	var env envelope
 	if err := json.Unmarshal(body, &env); err != nil {
 		return fmt.Errorf("%s: decoding response: %w", path, err)
@@ -96,6 +139,44 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 		}
 	}
 	return nil
+}
+
+// getOnce performs one request and returns its body and status.
+func (c *Client) getOnce(ctx context.Context, path string) ([]byte, int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base()+path, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	// One byte past the limit, so a full buffer is distinguishable from a
+	// document that merely fits.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	if int64(len(body)) > maxBody {
+		return nil, resp.StatusCode, fmt.Errorf("%s: response exceeds the %d-byte limit", path, maxBody)
+	}
+	return body, resp.StatusCode, nil
+}
+
+// retryable reports whether the status is worth asking again. 429 is the
+// provider saying "slow down"; 5xx is it saying "not now".
+func retryable(status int) bool {
+	return status == http.StatusTooManyRequests || status >= 500
+}
+
+// backoff is exponential from one second. Deliberately not jittered: this is a
+// single-process CLI, so there is no thundering herd to spread out. A var so
+// the retry tests do not have to spend ten seconds proving it retries.
+var backoff = func(attempt int) time.Duration {
+	return time.Duration(1<<uint(attempt-1)) * time.Second
 }
 
 // warn records a non-fatal extraction gap.
@@ -259,18 +340,39 @@ func (c *Client) extractAccess(ctx context.Context, zoneName string) ([]AccessAp
 	if err := c.get(ctx, "/accounts/"+c.AccountID+"/access/apps", &apps); err != nil {
 		return nil, err
 	}
-	var out []AccessApp
+	// Keep only this zone's apps, then count each one's policies. The count is
+	// one extra request per app, and they used to run one after another for a
+	// single integer apiece. Bounded fan-out, written by index so the snapshot
+	// stays byte-identical across runs.
+	var mine []struct {
+		ID     string `json:"id"`
+		Name   string `json:"name"`
+		Domain string `json:"domain"`
+	}
 	for _, a := range apps {
 		if a.Domain != zoneName && !strings.HasSuffix(a.Domain, "."+zoneName) {
 			continue
 		}
-		policies := 0
-		var pols []json.RawMessage
-		if err := c.get(ctx, "/accounts/"+c.AccountID+"/access/apps/"+a.ID+"/policies", &pols); err == nil {
-			policies = len(pols)
-		}
-		out = append(out, AccessApp{Name: a.Name, Domain: a.Domain, Policies: policies})
+		mine = append(mine, a)
 	}
+
+	out := make([]AccessApp, len(mine))
+	sem := make(chan struct{}, accessConcurrency)
+	var wg sync.WaitGroup
+	for i, a := range mine {
+		out[i] = AccessApp{Name: a.Name, Domain: a.Domain}
+		wg.Add(1)
+		go func(i int, id string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			var pols []json.RawMessage
+			if err := c.get(ctx, "/accounts/"+c.AccountID+"/access/apps/"+id+"/policies", &pols); err == nil {
+				out[i].Policies = len(pols)
+			}
+		}(i, a.ID)
+	}
+	wg.Wait()
 	return out, nil
 }
 
@@ -454,19 +556,11 @@ func (c *Client) getPaged(ctx context.Context, path string, out any) (*struct {
 	Page       int `json:"page"`
 	TotalPages int `json:"total_pages"`
 }, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base()+path, nil)
+	body, status, err := c.fetch(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
-	req.Header.Set("Accept", "application/json")
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
-	if err != nil {
+	if err := statusError(path, status); err != nil {
 		return nil, err
 	}
 	var env envelope
