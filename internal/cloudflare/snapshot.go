@@ -21,6 +21,14 @@ type Snapshot struct {
 	Zone          Zone         `json:"zone"`
 	Settings      ZoneSettings `json:"settings"`
 
+	// ExtractionGaps records the surfaces the extractor could not read. It is
+	// part of the snapshot, not a side channel, because the alternative is that
+	// "could not read the IP access rules" degrades into "this zone has no IP
+	// access rules" the moment the snapshot is written to a file. The classifier
+	// turns each gap into a MANUAL finding, so an incomplete capture can never
+	// be reported as complete coverage.
+	ExtractionGaps []Gap `json:"extraction_gaps,omitempty"`
+
 	DNSRecords    []DNSRecord      `json:"dns_records,omitempty"`
 	PageRules     []PageRule       `json:"page_rules,omitempty"`
 	Rulesets      []Ruleset        `json:"rulesets,omitempty"`
@@ -34,6 +42,44 @@ type Snapshot struct {
 	UARules       []UARule         `json:"ua_rules,omitempty"`
 	Snippets      []Snippet        `json:"snippets,omitempty"`
 	EmailRouting  *EmailRouting    `json:"email_routing,omitempty"`
+}
+
+// CurrentSchemaVersion is the snapshot shape this build writes.
+//
+//	1 — the original shape.
+//	2 — adds extraction_gaps, so a partial capture says so.
+//
+// A snapshot from a *newer* build is refused by the strict decoder before this
+// check ever runs (an unknown field is a hard error), which is the loud failure
+// we want. CheckSchemaVersion covers the other direction and the case of a
+// version this build has never heard of.
+const CurrentSchemaVersion = 2
+
+// CheckSchemaVersion refuses a snapshot this build does not understand. Before
+// this existed the field was written by every producer and read by nobody, so
+// it guaranteed nothing; a version is only a compatibility control if something
+// declines to proceed on a mismatch.
+//
+// 0 is accepted: hand-authored fixtures predate the field, and a zero value is
+// indistinguishable from "absent".
+func (s Snapshot) CheckSchemaVersion() error {
+	switch s.SchemaVersion {
+	case 0, 1, CurrentSchemaVersion:
+		return nil
+	default:
+		return fmt.Errorf("snapshot schema_version %d is not supported by this build (understands up to %d): re-run `flareover extract`",
+			s.SchemaVersion, CurrentSchemaVersion)
+	}
+}
+
+// Gap is one surface the extractor could not read, and why. A zone with gaps is
+// a partial capture: the classifier reports each one as MANUAL so the operator
+// sees "not read" rather than "not present".
+type Gap struct {
+	// Surface names what could not be read, e.g. "ip access rules".
+	Surface string `json:"surface"`
+	// Detail is the underlying cause, usually an API error or a missing scope.
+	Detail string `json:"detail,omitempty"`
 }
 
 // UARule is a User-Agent Blocking rule (block/challenge by user-agent). Like IP

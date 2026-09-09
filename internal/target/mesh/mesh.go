@@ -14,8 +14,12 @@
 // several public entry points, all meshed to the same untouched origin,
 // distributed by round-robin DNS and health-gated by `flareover guard`.
 //
-// Keys are freshly generated (they are secrets); the config structure is
-// deterministic.
+// Keys are generated on the first run (they are secrets) and REUSED on every
+// run after it, read back from the existing mesh/*.wg0.conf under the output
+// directory. That is what makes a re-run byte-identical, as the contract
+// promises, and what stops an ordinary regeneration from silently invalidating
+// a deployed tunnel. Rotation is possible but must be asked for
+// (`prepare --rotate-mesh-keys`), because it requires redeploying both ends.
 package mesh
 
 import (
@@ -23,6 +27,9 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/fabriziosalmi/flareover/internal/target"
@@ -40,7 +47,22 @@ type Config struct {
 	OriginWGIP string
 	// ListenPort is the WireGuard listen port on each edge (default 51820).
 	ListenPort int
+	// Keys carries private keys to reuse instead of generating fresh ones,
+	// mapped by peer name: "origin" for the origin, and the edge's Name for
+	// each edge. A name absent from the map gets a new keypair.
+	//
+	// This exists because regenerating is destructive. The artifact writer
+	// replaces the previous config, so a second `prepare` on a deployed mesh
+	// used to mint keys that no running peer recognised AND destroy the only
+	// copy of the ones that worked — turning an ordinary re-run (fix a typo in
+	// --edge-ip, answer one more ASK) into a broken tunnel with no way back.
+	// Reusing also restores the byte-identical re-run the contract promises.
+	Keys map[string]string
 }
+
+// OriginKeyName is the key under which the origin's private key is carried in
+// Config.Keys and returned by LoadKeys.
+const OriginKeyName = "origin"
 
 // Edge describes one public edge node the origin will dial out to.
 type Edge struct {
@@ -99,6 +121,66 @@ func genKey() (keypair, error) {
 	}, nil
 }
 
+// keyFor returns the keypair for a named peer: derived from a supplied private
+// key when one is available, freshly generated otherwise. A supplied key that
+// does not parse as X25519 is an error rather than a silent regeneration —
+// quietly minting a new key is the behaviour this whole mechanism exists to
+// stop.
+func keyFor(cfg Config, name string) (keypair, error) {
+	raw, ok := cfg.Keys[name]
+	if !ok || strings.TrimSpace(raw) == "" {
+		return genKey()
+	}
+	b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(raw))
+	if err != nil {
+		return keypair{}, fmt.Errorf("mesh: private key for %q is not valid base64: %w", name, err)
+	}
+	k, err := ecdh.X25519().NewPrivateKey(b)
+	if err != nil {
+		return keypair{}, fmt.Errorf("mesh: private key for %q is not a valid X25519 key: %w", name, err)
+	}
+	return keypair{
+		priv: base64.StdEncoding.EncodeToString(k.Bytes()),
+		pub:  base64.StdEncoding.EncodeToString(k.PublicKey().Bytes()),
+	}, nil
+}
+
+// privateKeyRe matches the PrivateKey line of a wg-quick config.
+var privateKeyRe = regexp.MustCompile(`(?m)^\s*PrivateKey\s*=\s*(\S+)\s*$`)
+
+// LoadKeys reads the private keys out of a previously generated mesh directory
+// (the "mesh/" subtree of a `prepare --out` directory), keyed by peer name.
+//
+// A missing directory is not an error: the first run has nothing to reuse. Only
+// files this package wrote are read, and only their PrivateKey line.
+func LoadKeys(outDir string) (map[string]string, error) {
+	entries, err := os.ReadDir(filepath.Join(outDir, "mesh"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	keys := map[string]string{}
+	for _, e := range entries {
+		name, ok := strings.CutSuffix(e.Name(), ".wg0.conf")
+		if !ok || e.IsDir() {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(outDir, "mesh", e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		if m := privateKeyRe.FindSubmatch(b); m != nil {
+			keys[name] = string(m[1])
+		}
+	}
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	return keys, nil
+}
+
 // GenerateWireGuard emits wg configs for every edge (WireGuard server, public)
 // and the origin (client, outbound-only, one peer per edge). Each edge then
 // reaches the origin at the origin's mesh IP; point every origin upstream there
@@ -109,13 +191,13 @@ func GenerateWireGuard(cfg Config) ([]target.Artifact, error) {
 		return nil, err
 	}
 
-	origin, err := genKey()
+	origin, err := keyFor(cfg, OriginKeyName)
 	if err != nil {
 		return nil, err
 	}
 	edgeKeys := make([]keypair, len(cfg.Edges))
 	for i := range cfg.Edges {
-		if edgeKeys[i], err = genKey(); err != nil {
+		if edgeKeys[i], err = keyFor(cfg, cfg.Edges[i].Name); err != nil {
 			return nil, err
 		}
 	}

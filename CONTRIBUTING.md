@@ -20,7 +20,11 @@ wrong".
 ## Ground rules
 
 - **Determinism.** Classification and generation are a pure function of `snapshot + decisions.lock`.
-  No wall-clock, no randomness, no network in that path. Re-running must produce byte-identical output.
+  No wall-clock, no network in that path. Re-running must produce byte-identical output.
+  The single exception is secret material, which cannot be a function of the inputs: the mesh
+  keypairs are generated on the **first** run and reused from `<out>/mesh` on every run after
+  it (`internal/target/mesh`), so a re-run is still byte-identical. If you ever need randomness
+  elsewhere, it needs the same treatment — generate once, persist, reuse — not a new exception.
 - **Standard library only.** The engine has zero external Go dependencies; please keep it that way
   unless there is a compelling, discussed reason.
 - **Tests are the spec.** Add a test for every mapping (its verdict *and* its generated fragment).

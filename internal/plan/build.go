@@ -84,13 +84,51 @@ func Build(s cf.Snapshot, opts Options) (ir.Plan, error) {
 			Blocklists: p.WAF.Blocklists,
 		}
 	}
+	// The last gate before any generator renders this. Build is the single
+	// choke point every target adapter draws its plan from, so validating here
+	// means no generator has to remember to defend itself — and it is the only
+	// check that also covers values that came from decisions.lock rather than
+	// from the snapshot.
+	if err := p.Validate(); err != nil {
+		return ir.Plan{}, err
+	}
 	return p, nil
 }
 
 // --- DNS ---------------------------------------------------------------------
 
+// accessGatedHosts is the set of hostnames protected by a Cloudflare Access
+// (Zero Trust) application, lower-cased for comparison.
+//
+// The classifier already reports each of these MANUAL ("identity policies must
+// be re-authored; no faithful automatic mapping"), but the report is advice and
+// the generated config is what gets deployed. Until this existed the plan
+// builder never looked at Snapshot.AccessApps at all, so the honest verdict and
+// the emitted artifact disagreed: the report said "re-author this by hand" and
+// the Caddyfile served the host to anyone.
+func accessGatedHosts(s cf.Snapshot) map[string]bool {
+	if len(s.AccessApps) == 0 {
+		return nil
+	}
+	out := make(map[string]bool, len(s.AccessApps))
+	for _, a := range s.AccessApps {
+		// Access app domains can carry a path ("app.example.com/admin"); the
+		// gate applies to the host, and we are deliberately coarse here —
+		// omitting a little too much is the safe direction.
+		host := a.Domain
+		if i := strings.IndexByte(host, '/'); i >= 0 {
+			host = host[:i]
+		}
+		if host = strings.ToLower(strings.TrimSpace(host)); host != "" {
+			out[host] = true
+		}
+	}
+	return out
+}
+
 func buildDNS(s cf.Snapshot, opts Options) ir.DNSZone {
 	z := ir.DNSZone{Name: s.Zone.Name}
+	gated := accessGatedHosts(s)
 	if s.Settings.DNSSEC == "active" {
 		if a, ok := opts.answer("dnssec-ds-update"); ok && a == "yes" {
 			z.DNSSEC = true
@@ -104,6 +142,12 @@ func buildDNS(s cf.Snapshot, opts Options) ir.DNSZone {
 			// several proxied records (A + AAAA) yields ONE A → edge, not a
 			// duplicate.
 			if _, ok := opts.answer("origin:" + rec.Name); !ok {
+				continue
+			}
+			// An Access-gated host gets no Site (see buildSites), so it must get
+			// no edge A record either: repointing DNS at an edge that does not
+			// serve the host would be an outage dressed up as a migration.
+			if gated[strings.ToLower(rec.Name)] {
 				continue
 			}
 			if deproxied[rec.Name] {
@@ -139,6 +183,8 @@ func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 	scopedProxies := pathScopedProxies(s, scheme, verify)
 	wildcard := hasWildcardCert(s)
 
+	gated := accessGatedHosts(s)
+
 	var sites []ir.Site
 	seen := map[string]bool{}
 	for _, rec := range s.DNSRecords {
@@ -148,6 +194,15 @@ func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 		// One host may have several proxied records (A + AAAA, etc.): it is a
 		// single virtual host, not several. Emit it once.
 		if seen[rec.Name] {
+			continue
+		}
+		// A host behind Cloudflare Access is gated by an identity policy the
+		// classifier marks MANUAL because it cannot be translated. Emitting a
+		// plain reverse_proxy for it would take an application that today
+		// requires a login and publish it to the internet — the largest control
+		// this tool could silently drop. Omit it, exactly as an unanswered
+		// origin is omitted, and let the MANUAL finding carry it to the operator.
+		if gated[strings.ToLower(rec.Name)] {
 			continue
 		}
 		origin, ok := opts.answer("origin:" + rec.Name)

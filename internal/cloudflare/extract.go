@@ -35,6 +35,9 @@ type Client struct {
 	// Warnings accumulates non-fatal extraction gaps (optional surfaces that
 	// could not be read). Surfaced to the user so nothing is silently missing.
 	Warnings []string
+	// Gaps is the same information in the form Extract copies into the
+	// Snapshot, so a gap survives being written to a file and read back.
+	Gaps []Gap
 }
 
 // NewClient builds a client with a sane default HTTP timeout.
@@ -96,8 +99,39 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 }
 
 // warn records a non-fatal extraction gap.
+//
+// The message is kept for the operator's stderr, AND recorded structurally on
+// c.Gaps so Extract can carry it into the Snapshot. That matters: a warning
+// that lives only on the Client dies when the snapshot is written to a file,
+// and every later phase then reads "this zone has no IP access rules" where the
+// truth was "this token could not read them" — which is exactly the silent drop
+// the 0% false-positive contract exists to prevent.
+//
+// By convention every warn message is "<surface>: <detail>", so the surface is
+// the text before the first colon; a message without one is all surface.
 func (c *Client) warn(format string, args ...any) {
-	c.Warnings = append(c.Warnings, fmt.Sprintf(format, args...))
+	// A gap's detail is usually a wrapped API error, and an API error can carry
+	// a multi-line response body of arbitrary size. Both go into the snapshot
+	// and then into a rendered report, so collapse the whitespace and bound the
+	// length here rather than letting either travel.
+	msg := oneLine(fmt.Sprintf(format, args...), 512)
+	c.Warnings = append(c.Warnings, msg)
+
+	surface, detail := msg, ""
+	if i := strings.Index(msg, ": "); i >= 0 {
+		surface, detail = msg[:i], msg[i+2:]
+	}
+	c.Gaps = append(c.Gaps, Gap{Surface: surface, Detail: detail})
+}
+
+// oneLine collapses all whitespace runs to single spaces and truncates to max
+// bytes, so a value is safe to embed in a single-line report row.
+func oneLine(s string, max int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > max {
+		s = s[:max] + "…"
+	}
+	return s
 }
 
 // ZoneRef is a lightweight zone listing entry (for account-scoped tokens).
@@ -132,7 +166,7 @@ func (c *Client) ListZones(ctx context.Context) ([]ZoneRef, error) {
 // Extract reads a whole zone (looked up by apex name or zone id) into a Snapshot.
 func (c *Client) Extract(ctx context.Context, zoneRef string) (Snapshot, error) {
 	var s Snapshot
-	s.SchemaVersion = 1
+	s.SchemaVersion = CurrentSchemaVersion
 
 	zone, err := c.lookupZone(ctx, zoneRef)
 	if err != nil {
@@ -207,6 +241,10 @@ func (c *Client) Extract(ctx context.Context, zoneRef string) (Snapshot, error) 
 			s.AccessApps = apps
 		}
 	}
+	// Carry the gaps into the snapshot itself. This is the last thing Extract
+	// does, so it captures every warn recorded above, including those raised
+	// deep inside the per-surface extractors.
+	s.ExtractionGaps = c.Gaps
 	return s, nil
 }
 
