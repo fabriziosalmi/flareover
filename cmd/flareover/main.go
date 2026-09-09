@@ -25,13 +25,17 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/fabriziosalmi/flareover/internal/classify"
 	cf "github.com/fabriziosalmi/flareover/internal/cloudflare"
 	"github.com/fabriziosalmi/flareover/internal/cost"
+	"github.com/fabriziosalmi/flareover/internal/dnstarget"
 	"github.com/fabriziosalmi/flareover/internal/doctor"
 	"github.com/fabriziosalmi/flareover/internal/guard"
 	"github.com/fabriziosalmi/flareover/internal/objstore"
@@ -44,18 +48,8 @@ import (
 	"github.com/fabriziosalmi/flareover/internal/safeio"
 	"github.com/fabriziosalmi/flareover/internal/stack"
 	"github.com/fabriziosalmi/flareover/internal/target"
-	"github.com/fabriziosalmi/flareover/internal/target/azuredns"
-	"github.com/fabriziosalmi/flareover/internal/target/bunnydns"
 	"github.com/fabriziosalmi/flareover/internal/target/certmate"
-	"github.com/fabriziosalmi/flareover/internal/target/clouddns"
-	"github.com/fabriziosalmi/flareover/internal/target/gandidns"
-	"github.com/fabriziosalmi/flareover/internal/target/hetznerdns"
-	"github.com/fabriziosalmi/flareover/internal/target/leasewebdns"
 	"github.com/fabriziosalmi/flareover/internal/target/mesh"
-	"github.com/fabriziosalmi/flareover/internal/target/ovhdns"
-	"github.com/fabriziosalmi/flareover/internal/target/powerdns"
-	"github.com/fabriziosalmi/flareover/internal/target/route53"
-	"github.com/fabriziosalmi/flareover/internal/target/scalewaydns"
 	"github.com/fabriziosalmi/flareover/internal/target/spm"
 	"github.com/fabriziosalmi/flareover/internal/validate"
 )
@@ -94,7 +88,7 @@ PHASES
                             --dest aruba --minio-endpoint <service-point-url>.
                             Emits an rclone data-copy plan too.
   guard --url ...           Failguards watchdog: health-watch + rollback/failover
-                            trigger (--on-unhealthy "<cmd>", --interval, --once).
+                            trigger. See GUARD FLAGS.
   doctor ...                Read-only pre-flight: is every target reachable,
                             authorized, and configured? GO/NO-GO before provision.
   providers                 List EU edge providers with their honest sovereignty
@@ -111,6 +105,17 @@ ASSESS FLAGS
   --md      emit the report as Markdown (migration-report fragment)
   --json    emit the raw findings as JSON
   --html    emit a self-contained, shareable HTML coverage report
+
+GUARD FLAGS
+  --url <url>            the migrated endpoint to health-check (required)
+  --expect-status <code> HTTP status that means healthy (default 200)
+  --interval <dur>       time between checks (default 30s)
+  --fails <n>            consecutive failures before the trigger fires (default 3)
+  --on-unhealthy "<cmd>" the rollback/failover command; runs in its own process
+                         group, so stopping the watch never interrupts it
+  --once                 run a single check and exit (CI health gate)
+  --keep-watching        keep watching after the trigger fires, instead of exiting
+  --log-json             one JSON record per event, for shipping to a log system
 
 PREPARE FLAGS
   --decisions <file>   JSON map of ASK question id -> answer (decisions.lock)
@@ -142,11 +147,22 @@ PREPARE FLAGS
 // sets it from the git tag). It stays "dev" for `go run` and local builds.
 var version = "dev"
 
+// rootCtx is cancelled when the process is asked to stop. Every phase takes a
+// context and honours it — extractors, provisioners, the parity prober, the
+// guard loop — but until this existed the CLI handed them all
+// context.Background(), so the cancellation path each of them implements was
+// unreachable and a signal killed the process mid-operation instead of
+// unwinding it. guard.Watch's ctx.Done() branch was, literally, dead code.
+var rootCtx = context.Background()
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	rootCtx = ctx
 	switch os.Args[1] {
 	case "version", "--version", "-v":
 		fmt.Printf("flareover %s\n", version)
@@ -351,7 +367,7 @@ func cmdZones(args []string) int {
 		return 2
 	}
 	client := cf.NewClient(token)
-	zones, err := client.ListZones(context.Background())
+	zones, err := client.ListZones(rootCtx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "flareover zones: %v\n", err)
 		return 1
@@ -399,7 +415,7 @@ func cmdExtract(args []string) int {
 
 	client := cf.NewClient(token)
 	client.AccountID = os.Getenv("CLOUDFLARE_ACCOUNT_ID")
-	snap, err := client.Extract(context.Background(), zoneRef)
+	snap, err := client.Extract(rootCtx, zoneRef)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "flareover extract: %v\n", err)
 		return 1
@@ -518,7 +534,7 @@ func cmdStorage(args []string) int {
 			return 2
 		}
 		var err error
-		snap, err = objstore.ExtractS3(context.Background(), objstore.S3Config{
+		snap, err = objstore.ExtractS3(rootCtx, objstore.S3Config{
 			Endpoint: s3Endpoint, Region: s3Region, AccessKey: ak, SecretKey: sk,
 		})
 		if err != nil {
@@ -534,7 +550,7 @@ func cmdStorage(args []string) int {
 			return 2
 		}
 		var err error
-		snap, err = objstore.ExtractR2(context.Background(), token, acct)
+		snap, err = objstore.ExtractR2(rootCtx, token, acct)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "flareover storage: %v\n", err)
 			return 1
@@ -703,7 +719,7 @@ func cmdExecute(args []string) int {
 	}
 	before := parity.Endpoint{Scheme: beforeScheme}
 	after := parity.Endpoint{Scheme: afterScheme, DialOverride: afterAddr, Insecure: insecureAfter}
-	prep, err := parity.NewComparer().Compare(context.Background(), before, after, probes)
+	prep, err := parity.NewComparer().Compare(rootCtx, before, after, probes)
 	if err != nil {
 		pr.Fail(2, err.Error())
 		return 1
@@ -788,7 +804,7 @@ func cmdPresent(args []string) int {
 	}
 	before := parity.Endpoint{Scheme: beforeScheme}
 	after := parity.Endpoint{Scheme: afterScheme, DialOverride: afterAddr, Insecure: insecureAfter}
-	rep, err := parity.NewComparer().Compare(context.Background(), before, after, probes)
+	rep, err := parity.NewComparer().Compare(rootCtx, before, after, probes)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "flareover present: %v\n", err)
 		return 1
@@ -807,7 +823,7 @@ func cmdPresent(args []string) int {
 // the auto-provision step that closes the gap between "generate" and "done".
 func cmdProvision(args []string) int {
 	var snapPath, decisionsPath, nsList, edgeIP string
-	var pdnsURL, pdnsKey, cmURL, cmToken, ca, originCA, cmAccount, cmDNS, dnsTarget string
+	var pdnsURL, cmURL, cmToken, ca, originCA, cmAccount, cmDNS, dnsTarget string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if a == "--pdns-key" || a == "--certmate-token" {
@@ -849,104 +865,38 @@ func cmdProvision(args []string) int {
 	}
 	// PowerDNS/CertMate secrets come from the environment only, never argv, like
 	// every other backend, so they never leak via ps / /proc / shell history.
-	pdnsKey = os.Getenv("PDNS_API_KEY")
 	cmToken = os.Getenv("CERTMATE_TOKEN")
 
-	// DNS backend selection (default: self-hosted PowerDNS). Scaleway managed DNS
-	// takes its credentials from the environment, never from argv.
-	var scwSecret, scwProject string
-	var ovhKey, ovhSecret, ovhConsumer string
-	var gandiPAT, lswKey, hetznerToken string
-	var awsKey, awsSecret, awsSession string
-	var gcpSA []byte
-	var gcpProject, gcpErr string
-	var azTenant, azClient, azSecret, azSub, azRG string
-	var useScaleway, useOVH, useGandi, useLeaseweb, useHetzner, useRoute53, useCloudDNS, useAzure bool
-	switch dnsTarget {
-	case "", "powerdns":
-	case "scaleway", "scaleway-dns", "scalewaydns":
-		useScaleway = true
-		scwSecret, scwProject = os.Getenv("SCW_SECRET_KEY"), os.Getenv("SCW_DEFAULT_PROJECT_ID")
-	case "ovh", "ovh-dns", "ovhdns":
-		useOVH = true
-		ovhKey, ovhSecret, ovhConsumer = os.Getenv("OVH_APPLICATION_KEY"), os.Getenv("OVH_APPLICATION_SECRET"), os.Getenv("OVH_CONSUMER_KEY")
-	case "gandi", "gandi-dns", "gandidns":
-		useGandi = true
-		gandiPAT = os.Getenv("GANDI_PAT")
-	case "leaseweb", "leaseweb-dns", "leasewebdns":
-		useLeaseweb = true
-		lswKey = os.Getenv("LEASEWEB_API_KEY")
-	case "hetzner", "hetzner-dns", "hetznerdns":
-		useHetzner = true
-		hetznerToken = os.Getenv("HETZNER_DNS_TOKEN")
-	case "route53", "aws", "aws-route53":
-		useRoute53 = true
-		awsKey, awsSecret, awsSession = os.Getenv("AWS_ACCESS_KEY_ID"), os.Getenv("AWS_SECRET_ACCESS_KEY"), os.Getenv("AWS_SESSION_TOKEN")
-	case "clouddns", "cloud-dns", "gcp", "google":
-		useCloudDNS = true
-		gcpProject = os.Getenv("GOOGLE_CLOUD_PROJECT")
-		if path := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); path != "" {
-			if b, err := os.ReadFile(path); err != nil {
-				gcpErr = fmt.Sprintf("read GOOGLE_APPLICATION_CREDENTIALS (%s): %v", path, err)
-			} else {
-				gcpSA = b
-			}
-		}
-	case "azure", "azure-dns", "azuredns":
-		useAzure = true
-		azTenant, azClient, azSecret = os.Getenv("AZURE_TENANT_ID"), os.Getenv("AZURE_CLIENT_ID"), os.Getenv("AZURE_CLIENT_SECRET")
-		azSub, azRG = os.Getenv("AZURE_SUBSCRIPTION_ID"), os.Getenv("AZURE_RESOURCE_GROUP")
-	default:
-		fmt.Fprintf(os.Stderr, "flareover provision: unknown --dns %q (want: powerdns | scaleway | ovh | gandi | leaseweb | hetzner | route53 | clouddns | azure)\n", dnsTarget)
+	// DNS backend selection, resolved through the one registry `prepare` also
+	// uses. Credential loading, presence checking and construction live beside
+	// each provider in internal/dnstarget; this used to be eight providers'
+	// worth of inline environment reading and validation, and it is most of why
+	// this function measured cyclomatic complexity 131.
+	dnsT, ok := dnstarget.Lookup(dnsTarget)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "%v\n", dnstarget.UnknownError("provision", dnsTarget))
 		return 2
 	}
-	anyDNS := useScaleway || useOVH || useGandi || useLeaseweb || useHetzner || useRoute53 || useCloudDNS || useAzure
-	if snapPath == "" || (pdnsURL == "" && cmURL == "" && !anyDNS) {
-		fmt.Fprintln(os.Stderr, "flareover provision: need --snapshot and at least one of --pdns-url / --certmate-url / --dns scaleway|ovh|gandi|leaseweb|hetzner|route53|clouddns|azure")
+	// An explicit --dns naming a generate-only backend is a real request the
+	// tool cannot honour; say so, rather than reporting it as unknown.
+	if dnsTarget != "" && dnsT.GenerateOnly() {
+		fmt.Fprintf(os.Stderr, "flareover provision: --dns %s is generate-only (%s has no mapped record API).\n"+
+			"  Run `flareover prepare --dns %s --out <dir>` and apply the emitted script yourself.\n",
+			dnsT.Key, dnsT.Label, dnsT.Key)
 		return 2
 	}
-	if useScaleway && (scwSecret == "" || scwProject == "") {
-		fmt.Fprintln(os.Stderr, "flareover provision: --dns scaleway needs SCW_SECRET_KEY and SCW_DEFAULT_PROJECT_ID in the environment")
+
+	wantDNS := dnsTarget != "" || pdnsURL != ""
+	if snapPath == "" || (!wantDNS && cmURL == "") {
+		fmt.Fprintf(os.Stderr, "flareover provision: need --snapshot and at least one of --pdns-url / --certmate-url / --dns %s\n",
+			strings.Join(dnstarget.Keys(), "|"))
 		return 2
 	}
-	if useOVH && (ovhKey == "" || ovhSecret == "" || ovhConsumer == "") {
-		fmt.Fprintln(os.Stderr, "flareover provision: --dns ovh needs OVH_APPLICATION_KEY, OVH_APPLICATION_SECRET and OVH_CONSUMER_KEY in the environment")
-		return 2
-	}
-	if useGandi && gandiPAT == "" {
-		fmt.Fprintln(os.Stderr, "flareover provision: --dns gandi needs GANDI_PAT in the environment")
-		return 2
-	}
-	if useLeaseweb && lswKey == "" {
-		fmt.Fprintln(os.Stderr, "flareover provision: --dns leaseweb needs LEASEWEB_API_KEY in the environment")
-		return 2
-	}
-	if useHetzner && hetznerToken == "" {
-		fmt.Fprintln(os.Stderr, "flareover provision: --dns hetzner needs HETZNER_DNS_TOKEN in the environment")
-		return 2
-	}
-	if useRoute53 && (awsKey == "" || awsSecret == "") {
-		fmt.Fprintln(os.Stderr, "flareover provision: --dns route53 needs AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in the environment")
-		return 2
-	}
-	if useCloudDNS {
-		if gcpErr != "" {
-			fmt.Fprintf(os.Stderr, "flareover provision: --dns clouddns: %s\n", gcpErr)
-			return 2
-		}
-		if len(gcpSA) == 0 {
-			fmt.Fprintln(os.Stderr, "flareover provision: --dns clouddns needs GOOGLE_APPLICATION_CREDENTIALS (service-account key file) in the environment")
-			return 2
-		}
-	}
-	if useAzure && (azTenant == "" || azClient == "" || azSecret == "" || azSub == "" || azRG == "") {
-		fmt.Fprintln(os.Stderr, "flareover provision: --dns azure needs AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID and AZURE_RESOURCE_GROUP in the environment")
-		return 2
-	}
-	if useRoute53 || useCloudDNS || useAzure {
+	if !dnsT.Sovereign {
 		// Honest tier: never let a US-operated target pass as sovereign.
-		fmt.Fprintln(os.Stderr, "flareover provision: NOTE: Route 53 / Cloud DNS / Azure DNS are US-operated (AWS/Google/Microsoft), NOT sovereign (US CLOUD Act reach). For EU sovereignty: --dns scaleway|ovh|gandi|leaseweb|hetzner (or bunny via `prepare --dns bunny` + apply.sh).")
+		fmt.Fprintf(os.Stderr, "flareover provision: NOTE: %s. For EU sovereignty: --dns scaleway|ovh|gandi|leaseweb|hetzner (or bunny via `prepare --dns bunny` + apply.sh).\n", dnsT.Label)
 	}
+
 	if ca == "" {
 		ca = "letsencrypt"
 	}
@@ -968,177 +918,42 @@ func cmdProvision(args []string) int {
 
 	pr := render.NewProgress(os.Stdout, []string{"DNS zone", "Certificates (DNS-01)"},
 		render.Enabled(os.Stdout), render.IsTTY(os.Stdout))
-	ctx := context.Background()
+	ctx := rootCtx
 	var dsRecords []string
 
-	// DNS zone: Scaleway managed DNS, self-hosted PowerDNS, or skipped.
+	// DNS zone. One path for every backend: the registry hands back a
+	// provisioner or an error naming exactly what is missing, and the optional
+	// interfaces cover what only some backends can do.
 	pr.Start(0)
-	switch {
-	case useScaleway:
-		sp := scalewaydns.NewProvisioner(scwSecret, scwProject)
-		if u := os.Getenv("SCW_API_URL"); u != "" { // SDK-standard override; also lets tests point at a mock
-			sp.BaseURL = u
-		}
-		if err := sp.Provision(ctx, built.DNS); err != nil {
-			pr.Fail(0, err.Error())
-			return 1
-		}
-		detail := fmt.Sprintf("%d records (Scaleway)", len(built.DNS.Records))
-		if ns, err := sp.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
-			detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
-		}
-		if built.DNS.DNSSEC {
-			detail += " · DNSSEC: enable in the Scaleway console (not yet automated)"
-		}
-		pr.Done(0, detail)
-	case useOVH:
-		op := ovhdns.NewProvisioner(ovhKey, ovhSecret, ovhConsumer)
-		if u := os.Getenv("OVH_ENDPOINT"); u != "" { // e.g. https://eu.api.ovh.com/1.0, or a test mock
-			op.BaseURL = u
-		}
-		if err := op.Provision(ctx, built.DNS); err != nil {
-			pr.Fail(0, err.Error())
-			return 1
-		}
-		detail := fmt.Sprintf("%d records (OVHcloud)", len(built.DNS.Records))
-		if ns, err := op.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
-			detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
-		}
-		if built.DNS.DNSSEC {
-			detail += " · DNSSEC: enable in the OVH panel (not yet automated)"
-		}
-		pr.Done(0, detail)
-	case useGandi:
-		gp := gandidns.NewProvisioner(gandiPAT)
-		if u := os.Getenv("GANDI_ENDPOINT"); u != "" {
-			gp.BaseURL = u
-		}
-		if err := gp.Provision(ctx, built.DNS); err != nil {
-			pr.Fail(0, err.Error())
-			return 1
-		}
-		detail := fmt.Sprintf("%d records (Gandi LiveDNS)", len(built.DNS.Records))
-		if ns, err := gp.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
-			detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
-		}
-		if built.DNS.DNSSEC {
-			detail += " · DNSSEC: manage in the Gandi panel (not yet automated)"
-		}
-		pr.Done(0, detail)
-	case useLeaseweb:
-		lp := leasewebdns.NewProvisioner(lswKey)
-		if u := os.Getenv("LEASEWEB_ENDPOINT"); u != "" {
-			lp.BaseURL = u
-		}
-		if err := lp.Provision(ctx, built.DNS); err != nil {
-			pr.Fail(0, err.Error())
-			return 1
-		}
-		detail := fmt.Sprintf("%d records (Leaseweb)", len(built.DNS.Records))
-		if built.DNS.DNSSEC {
-			detail += " · DNSSEC: manage in the Leaseweb panel (not yet automated)"
-		}
-		pr.Done(0, detail)
-	case useHetzner:
-		hp := hetznerdns.NewProvisioner(hetznerToken)
-		if u := os.Getenv("HETZNER_DNS_ENDPOINT"); u != "" {
-			hp.BaseURL = u
-		}
-		if err := hp.Provision(ctx, built.DNS); err != nil {
-			pr.Fail(0, err.Error())
-			return 1
-		}
-		detail := fmt.Sprintf("%d records (Hetzner · EU-owned, sovereign)", len(built.DNS.Records))
-		if ns, err := hp.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
-			detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
-		}
-		if built.DNS.DNSSEC {
-			detail += " · DNSSEC: enable in the Hetzner DNS console (no record-API to automate it)"
-		}
-		pr.Done(0, detail)
-	case useRoute53:
-		rp := route53.NewProvisioner(awsKey, awsSecret, awsSession)
-		if u := os.Getenv("AWS_ENDPOINT_URL_ROUTE53"); u != "" {
-			rp.Endpoint = u
-		}
-		if err := rp.Provision(ctx, built.DNS); err != nil {
-			pr.Fail(0, err.Error())
-			return 1
-		}
-		detail := fmt.Sprintf("%d records (Route 53 · US-operated, not sovereign)", len(built.DNS.Records))
-		if ns, err := rp.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
-			detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
-		}
-		if built.DNS.DNSSEC {
-			detail += " · DNSSEC: enable in the Route 53 console (not yet automated)"
-		}
-		pr.Done(0, detail)
-	case useCloudDNS:
-		cp, err := clouddns.NewProvisioner(gcpSA, gcpProject)
+	if !wantDNS {
+		pr.Done(0, fmt.Sprintf("skipped (no --pdns-url / --dns %s)", strings.Join(dnstarget.Keys(), "|")))
+	} else {
+		dp, err := dnsT.NewProvisioner(dnstarget.Opts{PDNSURL: pdnsURL, Nameservers: splitCSV(nsList)})
 		if err != nil {
+			pr.Fail(0, fmt.Sprintf("--dns %s: %v", dnsT.Key, err))
+			return 2
+		}
+		if err := dp.Provision(ctx, built.DNS); err != nil {
 			pr.Fail(0, err.Error())
 			return 1
 		}
-		if u := os.Getenv("CLOUDDNS_ENDPOINT"); u != "" {
-			cp.BaseURL = u
-		}
-		if u := os.Getenv("GOOGLE_TOKEN_URI"); u != "" { // let tests point the token exchange at a mock
-			cp.TokenURI = u
-		}
-		if err := cp.Provision(ctx, built.DNS); err != nil {
-			pr.Fail(0, err.Error())
-			return 1
-		}
-		detail := fmt.Sprintf("%d records (Cloud DNS · US-operated, not sovereign)", len(built.DNS.Records))
-		if ns, err := cp.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
-			detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
-		}
-		if built.DNS.DNSSEC {
-			detail += " · DNSSEC: enable on the managed zone in the Cloud DNS console (not yet automated)"
-		}
-		pr.Done(0, detail)
-	case useAzure:
-		ap := azuredns.NewProvisioner(azTenant, azClient, azSecret, azSub, azRG)
-		if u := os.Getenv("AZURE_ARM_ENDPOINT"); u != "" {
-			ap.BaseURL = u
-		}
-		if u := os.Getenv("AZURE_AUTH_HOST"); u != "" { // let tests point the token exchange at a mock
-			ap.AuthHost = u
-		}
-		if err := ap.Provision(ctx, built.DNS); err != nil {
-			pr.Fail(0, err.Error())
-			return 1
-		}
-		detail := fmt.Sprintf("%d records (Azure DNS · US-operated, not sovereign)", len(built.DNS.Records))
-		if ns, err := ap.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
-			detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
-		}
-		if built.DNS.DNSSEC {
-			detail += " · DNSSEC: enable on the zone in the Azure portal (not yet automated)"
-		}
-		pr.Done(0, detail)
-	case pdnsURL != "":
-		var ns []string
-		for _, n := range strings.Split(nsList, ",") {
-			if s := strings.TrimSpace(n); s != "" {
-				ns = append(ns, s)
+		detail := fmt.Sprintf("%d records (%s)", len(built.DNS.Records), dnsT.Label)
+		if l, ok := dp.(dnstarget.NameserverLister); ok {
+			if ns, err := l.Nameservers(ctx, built.DNS.Name); err == nil && len(ns) > 0 {
+				detail += " · delegate NS at registrar: " + strings.Join(ns, ", ")
 			}
 		}
-		p := powerdns.NewProvisioner(pdnsURL, pdnsKey)
-		if err := p.Provision(ctx, built.DNS, ns); err != nil {
-			pr.Fail(0, err.Error())
-			return 1
-		}
-		detail := fmt.Sprintf("%d records", len(built.DNS.Records))
 		if built.DNS.DNSSEC {
-			if ds, err := p.EnableDNSSEC(ctx, built.DNS.Name); err == nil {
-				dsRecords = ds
-				detail += fmt.Sprintf(", DNSSEC signed (%d DS)", len(ds))
+			if e, ok := dp.(dnstarget.DNSSECEnabler); ok {
+				if ds, err := e.EnableDNSSEC(ctx, built.DNS.Name); err == nil {
+					dsRecords = ds
+					detail += fmt.Sprintf(", DNSSEC signed (%d DS)", len(ds))
+				}
+			} else if dnsT.DNSSECNote != "" {
+				detail += " · DNSSEC: " + dnsT.DNSSECNote
 			}
 		}
 		pr.Done(0, detail)
-	default:
-		pr.Done(0, "skipped (no --pdns-url / --dns scaleway|ovh|gandi|leaseweb|hetzner|route53|clouddns|azure)")
 	}
 
 	// CertMate
@@ -1176,11 +991,18 @@ func cmdGuard(args []string) int {
 	var url, onUnhealthy string
 	expectStatus, fails := 200, 3
 	interval := 30 * time.Second
-	var once bool
+	var once, logJSON, keepWatching bool
 	for i := 0; i < len(args); i++ {
 		a := args[i]
-		if a == "--once" {
+		switch a {
+		case "--once":
 			once = true
+			continue
+		case "--log-json":
+			logJSON = true
+			continue
+		case "--keep-watching":
+			keepWatching = true
 			continue
 		}
 		if i+1 >= len(args) {
@@ -1192,13 +1014,30 @@ func cmdGuard(args []string) int {
 		case "--url":
 			url = args[i]
 		case "--expect-status":
-			fmt.Sscanf(args[i], "%d", &expectStatus)
-		case "--interval":
-			if d, err := time.ParseDuration(args[i]); err == nil {
-				interval = d
+			// Parsed strictly. These used to go through fmt.Sscanf with the
+			// error discarded, so `--expect-status 3O1` silently left the 200
+			// default in place — and the guard then reported a healthy 301 site
+			// as failing and ran the rollback trigger against it.
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n < 100 || n > 599 {
+				fmt.Fprintf(os.Stderr, "flareover guard: --expect-status %q is not an HTTP status code (100-599)\n", args[i])
+				return 2
 			}
+			expectStatus = n
+		case "--interval":
+			d, err := time.ParseDuration(args[i])
+			if err != nil || d <= 0 {
+				fmt.Fprintf(os.Stderr, "flareover guard: --interval %q is not a positive duration (e.g. 30s, 2m)\n", args[i])
+				return 2
+			}
+			interval = d
 		case "--fails":
-			fmt.Sscanf(args[i], "%d", &fails)
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n < 1 {
+				fmt.Fprintf(os.Stderr, "flareover guard: --fails %q is not a positive count\n", args[i])
+				return 2
+			}
+			fails = n
 		case "--on-unhealthy":
 			onUnhealthy = args[i]
 		default:
@@ -1207,7 +1046,7 @@ func cmdGuard(args []string) int {
 		}
 	}
 	if url == "" {
-		fmt.Fprintln(os.Stderr, "flareover guard: need --url <migrated-domain>; optional --on-unhealthy \"<rollback cmd>\", --interval, --fails, --once")
+		fmt.Fprintln(os.Stderr, "flareover guard: need --url <migrated-domain>; optional --on-unhealthy \"<rollback cmd>\", --interval, --fails, --once, --keep-watching, --log-json")
 		return 2
 	}
 
@@ -1216,37 +1055,82 @@ func cmdGuard(args []string) int {
 	if color {
 		green, red, dim, reset = "\033[32m", "\033[31m", "\033[2m", "\033[0m"
 	}
-	report := func(s guard.Status) {
-		ts := s.At.Format("15:04:05")
+	// emit writes one record per event. This is the only long-running verb, and
+	// the only one whose output a human is not watching: a redirected guard log
+	// used to be a stream of `15:04:05 ✓ healthy` lines carrying no date and no
+	// indication of what was being watched, so two guards for two zones were
+	// indistinguishable and a watch spanning midnight had ambiguous timestamps.
+	emit := func(ev string, s guard.Status, extra map[string]any) {
+		if logJSON {
+			rec := map[string]any{
+				"time": s.At.Format(time.RFC3339), "event": ev, "url": url,
+				"healthy": s.Healthy, "consecutive_fails": s.ConsecutiveFails, "threshold": fails,
+			}
+			if s.Reason != "" {
+				rec["reason"] = s.Reason
+			}
+			for k, v := range extra {
+				rec[k] = v
+			}
+			b, _ := json.Marshal(rec)
+			fmt.Println(string(b))
+			return
+		}
+		ts := s.At.Format(time.RFC3339)
+		switch {
+		case ev == "healthy":
+			fmt.Printf("  %s%s%s %s✓ healthy%s %s%s%s\n", dim, ts, reset, green, reset, dim, url, reset)
+		case ev == "unhealthy":
+			fmt.Printf("  %s%s%s %s✗ %s%s %s(%d/%d · %s)%s\n", dim, ts, reset, red, s.Reason, reset, dim, s.ConsecutiveFails, fails, url, reset)
+		default:
+			fmt.Printf("  %s%s%s %s%s%s %s%s%s\n", dim, ts, reset, red, ev, reset, dim, url, reset)
+		}
+	}
+	statusReport := func(s guard.Status) {
 		if s.Healthy {
-			fmt.Printf("  %s%s%s %s✓ healthy%s\n", dim, ts, reset, green, reset)
+			emit("healthy", s, nil)
 		} else {
-			fmt.Printf("  %s%s%s %s✗ %s%s %s(%d/%d)%s\n", dim, ts, reset, red, s.Reason, reset, dim, s.ConsecutiveFails, fails, reset)
+			emit("unhealthy", s, nil)
 		}
 	}
 	onFail := func(reason string) error {
-		fmt.Printf("  %s⚠ threshold reached: %s%s\n", red, reason, reset)
+		now := guard.Status{At: time.Now(), Reason: reason, ConsecutiveFails: fails}
+		emit("threshold-reached", now, nil)
 		if onUnhealthy == "" {
-			fmt.Println("  (no --on-unhealthy set; alerting only)")
+			emit("trigger-skipped", now, map[string]any{"note": "no --on-unhealthy set; alerting only"})
 			return nil
 		}
-		fmt.Printf("  running trigger: %s%s%s\n", dim, onUnhealthy, reset)
-		cmd := exec.Command("bash", "-c", onUnhealthy)
+		emit("trigger-running", now, map[string]any{"command": onUnhealthy})
+		cmd := exec.Command("bash", "-c", onUnhealthy) // #nosec G204: the operator's own --on-unhealthy hook, by design
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		// Detach the trigger from this process's signal group. A Ctrl-C aimed at
+		// the watchdog would otherwise also hit a rollback already in flight,
+		// interrupting the very thing the guard exists to complete.
+		detachProcessGroup(cmd)
 		return cmd.Run()
 	}
 
-	triggered, err := guard.Watch(context.Background(), guard.HTTPCheck(url, expectStatus), guard.Options{
-		Interval: interval, FailThreshold: fails, OnUnhealthy: onFail, Report: report, Once: once,
+	// The watch ends for a reason, and the reason is worth recording: without a
+	// closing record, a guard that stopped and a guard that is quietly healthy
+	// produce the same (absent) output in a log nobody is tailing.
+	end := func(ev string, extra map[string]any) {
+		emit(ev, guard.Status{At: time.Now(), Healthy: true}, extra)
+	}
+
+	triggered, err := guard.Watch(rootCtx, guard.HTTPCheck(url, expectStatus), guard.Options{
+		Interval: interval, FailThreshold: fails, OnUnhealthy: onFail, Report: statusReport,
+		Once: once, KeepWatching: keepWatching,
 	})
 	if err != nil {
+		end("watch-ended", map[string]any{"error": err.Error()})
 		fmt.Fprintf(os.Stderr, "flareover guard: %v\n", err)
 		return 1
 	}
 	if triggered {
-		fmt.Printf("  %sguard fired: rollback/failover triggered.%s\n", red, reset)
+		end("watch-ended", map[string]any{"note": "guard fired: rollback/failover triggered"})
 		return 20
 	}
+	end("watch-ended", map[string]any{"note": "watch completed"})
 	return 0
 }
 
@@ -1329,33 +1213,16 @@ func cmdPrepare(args []string) int {
 		fmt.Fprintf(os.Stderr, "flareover prepare: %v\n", err)
 		return 2
 	}
-	// The DNS target is orthogonal to the proxy profile: keep the self-hosted
-	// PowerDNS zone by default, or swap in bunny.net's managed EU DNS.
-	switch dnsTarget {
-	case "", "powerdns":
-		// profile default (self-hosted PowerDNS)
-	case "bunny", "bunny-dns", "bunnydns":
-		profile.DNS = bunnydns.Generator{}
-	case "scaleway", "scaleway-dns", "scalewaydns":
-		profile.DNS = scalewaydns.Generator{}
-	case "ovh", "ovh-dns", "ovhdns":
-		profile.DNS = ovhdns.Generator{}
-	case "gandi", "gandi-dns", "gandidns":
-		profile.DNS = gandidns.Generator{}
-	case "leaseweb", "leaseweb-dns", "leasewebdns":
-		profile.DNS = leasewebdns.Generator{}
-	case "hetzner", "hetzner-dns", "hetznerdns":
-		profile.DNS = hetznerdns.Generator{}
-	case "route53", "aws", "aws-route53":
-		profile.DNS = route53.Generator{}
-	case "clouddns", "cloud-dns", "gcp", "google":
-		profile.DNS = clouddns.Generator{}
-	case "azure", "azure-dns", "azuredns":
-		profile.DNS = azuredns.Generator{}
-	default:
-		fmt.Fprintf(os.Stderr, "flareover prepare: unknown --dns %q (want: powerdns | bunny | scaleway | ovh | gandi | leaseweb | hetzner | route53 | clouddns | azure)\n", dnsTarget)
+	// The DNS target is orthogonal to the proxy profile. Resolved through the
+	// one registry `provision` also uses, so the two verbs cannot advertise
+	// different vocabularies — which is how `--dns bunny` came to be accepted
+	// here and rejected there.
+	dnsT, ok := dnstarget.Lookup(dnsTarget)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "%v\n", dnstarget.UnknownError("prepare", dnsTarget))
 		return 2
 	}
+	profile.DNS = dnsT.Generator
 
 	var bl, egAllow []string
 	if blocklists != "" {
@@ -1675,7 +1542,7 @@ func cmdDoctor(args []string) int {
 	o.PDNSKey = os.Getenv("PDNS_API_KEY")
 	o.CertMateToken = os.Getenv("CERTMATE_TOKEN")
 
-	checks := doctor.Run(context.Background(), o)
+	checks := doctor.Run(rootCtx, o)
 	fmt.Print(render.Doctor(checks, render.Enabled(os.Stdout)))
 	if len(checks) == 0 {
 		return 2 // nothing to check → not a pass
@@ -1745,4 +1612,15 @@ func loadSnapshot(path string) (cf.Snapshot, error) {
 		return snap, fmt.Errorf("%s: %w", path, err)
 	}
 	return snap, nil
+}
+
+// splitCSV parses a comma-separated flag value into trimmed, non-empty parts.
+func splitCSV(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if v := strings.TrimSpace(p); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }

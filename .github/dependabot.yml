@@ -6,3 +6,16 @@ updates:
   - package-ecosystem: github-actions
     directory: "/"
     schedule: { interval: weekly }
+  # The docs site is the only place in this repository with third-party code:
+  # ~475 packages against the engine's zero. It was also the only ecosystem
+  # nobody was watching, which is how it accumulated 13 open advisories
+  # (including an astro RCE at 9.8) while the two entries above watched
+  # directories with almost nothing in them. Patch and minor updates are
+  # grouped so the volume stays reviewable; a major still arrives on its own.
+  - package-ecosystem: npm
+    directory: "/website"
+    schedule: { interval: weekly }
+    groups:
+      docs-site:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
