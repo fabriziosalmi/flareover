@@ -106,11 +106,8 @@ func Build(s cf.Snapshot, opts Options) (ir.Plan, error) {
 // builder never looked at Snapshot.AccessApps at all, so the honest verdict and
 // the emitted artifact disagreed: the report said "re-author this by hand" and
 // the Caddyfile served the host to anyone.
-func accessGatedHosts(s cf.Snapshot) map[string]bool {
-	if len(s.AccessApps) == 0 {
-		return nil
-	}
-	out := make(map[string]bool, len(s.AccessApps))
+func accessGatedHosts(s cf.Snapshot) accessGate {
+	var g accessGate
 	for _, a := range s.AccessApps {
 		// Access app domains can carry a path ("app.example.com/admin"); the
 		// gate applies to the host, and we are deliberately coarse here —
@@ -119,11 +116,48 @@ func accessGatedHosts(s cf.Snapshot) map[string]bool {
 		if i := strings.IndexByte(host, '/'); i >= 0 {
 			host = host[:i]
 		}
-		if host = strings.ToLower(strings.TrimSpace(host)); host != "" {
-			out[host] = true
+		host = strings.ToLower(strings.TrimSpace(host))
+		if host == "" {
+			continue
+		}
+		// An Access app can be registered on a wildcard domain. Stored
+		// verbatim, "*.internal.example.com" would be a key nothing ever
+		// matches, so every host it actually protects would be generated as a
+		// public one — the gate silently covering nothing.
+		if suffix, ok := strings.CutPrefix(host, "*."); ok {
+			if suffix != "" {
+				g.suffixes = append(g.suffixes, suffix)
+			}
+			continue
+		}
+		if g.exact == nil {
+			g.exact = map[string]bool{}
+		}
+		g.exact[host] = true
+	}
+	return g
+}
+
+// accessGate answers "is this host behind a Cloudflare Access application?".
+// Two kinds of membership, because Access has two kinds of app domain.
+type accessGate struct {
+	exact    map[string]bool
+	suffixes []string // wildcard app domains, with the leading "*." removed
+}
+
+func (g accessGate) has(host string) bool {
+	h := strings.ToLower(host)
+	if g.exact[h] {
+		return true
+	}
+	for _, suf := range g.suffixes {
+		// "*.internal.example.com" gates app.internal.example.com. Cloudflare's
+		// wildcard does not cover the bare parent, and neither do we.
+		if strings.HasSuffix(h, "."+suf) {
+			return true
 		}
 	}
-	return out
+	return false
 }
 
 func buildDNS(s cf.Snapshot, opts Options) ir.DNSZone {
@@ -147,7 +181,7 @@ func buildDNS(s cf.Snapshot, opts Options) ir.DNSZone {
 			// An Access-gated host gets no Site (see buildSites), so it must get
 			// no edge A record either: repointing DNS at an edge that does not
 			// serve the host would be an outage dressed up as a migration.
-			if gated[strings.ToLower(rec.Name)] {
+			if gated.has(rec.Name) {
 				continue
 			}
 			if deproxied[rec.Name] {
@@ -202,7 +236,7 @@ func buildSites(s cf.Snapshot, opts Options) []ir.Site {
 		// requires a login and publish it to the internet — the largest control
 		// this tool could silently drop. Omit it, exactly as an unanswered
 		// origin is omitted, and let the MANUAL finding carry it to the operator.
-		if gated[strings.ToLower(rec.Name)] {
+		if gated.has(rec.Name) {
 			continue
 		}
 		origin, ok := opts.answer("origin:" + rec.Name)

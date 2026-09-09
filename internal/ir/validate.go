@@ -6,6 +6,7 @@ package ir
 import (
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 
 	"github.com/fabriziosalmi/flareover/internal/textguard"
@@ -43,6 +44,21 @@ func (p Plan) Validate() error {
 		checkOrigin(fmt.Sprintf("plan.Sites[%d].Origin", i), s.Origin, note)
 		for j, sp := range s.ScopedProxies {
 			checkOrigin(fmt.Sprintf("plan.Sites[%d].ScopedProxies[%d].Origin", i, j), sp.Origin, note)
+			checkMatcher(fmt.Sprintf("plan.Sites[%d].ScopedProxies[%d].Match", i, j), sp.Match, note)
+		}
+		for j, h := range s.Headers {
+			// The header VALUE is rendered with %q and is safe by construction;
+			// the NAME is interpolated raw, so `X-Foo bar` renders as
+			// `header X-Foo bar "value"` — three arguments where the directive
+			// takes two. Caddy then rejects the file at load, or reads the
+			// wrong token as the value, for an element the report called AUTO.
+			if !isHeaderToken(h.Name) {
+				note("plan.Sites[%d].Headers[%d].Name %q is not a valid header name", i, j, h.Name)
+			}
+			checkMatcher(fmt.Sprintf("plan.Sites[%d].Headers[%d].Match", i, j), h.Match, note)
+		}
+		for j, r := range s.Rewrites {
+			checkMatcher(fmt.Sprintf("plan.Sites[%d].Rewrites[%d].Match", i, j), r.Match, note)
 		}
 	}
 	for i, r := range p.DNS.Records {
@@ -77,6 +93,26 @@ func checkOrigin(path string, o Origin, note func(string, ...any)) {
 	}
 	if o.SNI != "" && !textguard.IsHostname(o.SNI) {
 		note("%s.SNI %q is not a valid hostname", path, o.SNI)
+	}
+}
+
+// headerToken is an RFC 7230 field-name: the characters a header name may
+// contain. Anything else cannot survive being interpolated into a Caddyfile
+// directive without changing that directive's arity.
+var headerToken = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+.^_` + "`" + `|~-]+$`)
+
+func isHeaderToken(s string) bool { return headerToken.MatchString(s) }
+
+// checkMatcher validates a Caddy matcher body (e.g. "path /api*") on its way to
+// a bare %s in the Caddyfile. cfexpr.CaddyMatcher is the only producer and it
+// now refuses a path that is not one safe token, so this is the second line:
+// braces and quotes are Caddyfile syntax and no legitimate matcher carries them.
+func checkMatcher(path, m string, note func(string, ...any)) {
+	if m == "" {
+		return
+	}
+	if strings.ContainsAny(m, `{}"'\`) {
+		note("%s %q carries Caddyfile syntax", path, m)
 	}
 }
 

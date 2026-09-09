@@ -23,10 +23,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -493,7 +495,17 @@ func cmdCost(args []string) int {
 				return 2
 			}
 			i++
-			fmt.Sscanf(args[i], "%f", &vps)
+			// Parsed strictly. Sscanf discarded its error, so `--vps 12,50`
+			// (the European decimal separator) silently became 12 and
+			// `--vps twelve` silently left 0 — and the cost report then
+			// compared the managed edge against a self-hosted stack that
+			// appeared to cost nothing, with a confident number and no warning.
+			v, err := strconv.ParseFloat(args[i], 64)
+			if err != nil || v < 0 {
+				fmt.Fprintf(os.Stderr, "flareover cost: --vps %q is not a non-negative monthly price (e.g. 12 or 12.50)\n", args[i])
+				return exitUsage
+			}
+			vps = v
 		default:
 			if len(a) > 0 && a[0] == '-' {
 				fmt.Fprintf(os.Stderr, "flareover cost: unknown flag %q\n", a)
@@ -942,6 +954,11 @@ func cmdProvision(args []string) int {
 		fmt.Fprintf(os.Stderr, "flareover provision: %v\n", err)
 		return 1
 	}
+	if err := checkEdgeIP("provision", edgeIP); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitUsage
+	}
+	reportUnknownDecisions("provision", decisions, classify.Classify(snap))
 	built, err := plan.Build(snap, plan.Options{Decisions: decisions, CA: ca, OriginCA: originCA, EdgeIP: edgeIP})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "flareover provision: %v\n", err)
@@ -1240,6 +1257,10 @@ func cmdPrepare(args []string) int {
 		fmt.Fprintf(os.Stderr, "flareover prepare: %v\n", err)
 		return 1
 	}
+	if err := checkEdgeIP("prepare", edgeIP); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitUsage
+	}
 	profile, err := stack.Profile(stackID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "flareover prepare: %v\n", err)
@@ -1267,6 +1288,7 @@ func cmdPrepare(args []string) int {
 	// runbook and the MANUAL summary printed at the end, and computing it once
 	// keeps the two from disagreeing.
 	rep := classify.Classify(snap)
+	reportUnknownDecisions("prepare", decisions, rep)
 	built, err := plan.Build(snap, plan.Options{
 		EdgeIP: edgeIP, CA: ca, OriginCA: originCA, Decisions: decisions, Blocklists: bl,
 		EgressDeny: egressDeny, EgressAllow: egAllow, EgressSSLBump: egressSSLBump,
@@ -1624,6 +1646,63 @@ func loadDecisions(path string) (map[string]string, error) {
 		return nil, fmt.Errorf("parsing decisions %s: %w", path, err)
 	}
 	return m, nil
+}
+
+// checkEdgeIP validates --edge-ip before it becomes the content of every
+// de-proxied A record.
+//
+// opts.edge() returns the flag verbatim and plan.buildDNS writes it as
+// `Type: "A", Content: opts.edge()`, while ir.Plan.Validate checks a record's
+// Name and not its Content. So `--edge-ip 203.0.113` produced a zone file the
+// operator was invited to review in git and then apply, with the blast radius
+// of every migrated hostname, and the failure appearing at resolution time
+// rather than at parse time.
+func checkEdgeIP(verb, v string) error {
+	if strings.TrimSpace(v) == "" {
+		return nil // optional: the plan emits EDGE_IP_PLACEHOLDER instead
+	}
+	ip := net.ParseIP(v)
+	if ip == nil {
+		return fmt.Errorf("flareover %s: --edge-ip %q is not an IP address", verb, v)
+	}
+	if ip.To4() == nil {
+		// Proxied records are re-pointed as A records; an AAAA edge would need
+		// the generator to emit AAAA, which it does not.
+		return fmt.Errorf("flareover %s: --edge-ip %q is IPv6; the de-proxied records are emitted as A records, so this edge needs an IPv4 address", verb, v)
+	}
+	return nil
+}
+
+// reportUnknownDecisions names answers that matched no question in this
+// snapshot.
+//
+// Every consumer reads answers by lookup and an unanswered ASK is deliberately
+// omitted rather than guessed, so a misspelled key and a question nobody
+// answered are indistinguishable: the operator gets a smaller Caddyfile, the
+// ASK still listed in the report, and nothing connecting the two.
+func reportUnknownDecisions(verb string, decisions map[string]string, rep report.Report) {
+	if len(decisions) == 0 {
+		return
+	}
+	known := make(map[string]bool, len(rep.Findings))
+	for _, f := range rep.Findings {
+		if f.Question != nil {
+			known[f.Question.ID] = true
+		}
+	}
+	var unknown []string
+	for k := range decisions {
+		if !known[k] {
+			unknown = append(unknown, k)
+		}
+	}
+	if len(unknown) == 0 {
+		return
+	}
+	sort.Strings(unknown)
+	for _, k := range unknown {
+		fmt.Fprintf(os.Stderr, "flareover %s: decisions key %q matches no question in this snapshot; ignored\n", verb, k)
+	}
 }
 
 func loadSnapshot(path string) (cf.Snapshot, error) {

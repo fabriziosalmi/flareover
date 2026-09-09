@@ -200,3 +200,39 @@ func TestExtractExitsManualWhenSurfacesWereUnreadable(t *testing.T) {
 		t.Errorf("a partial extraction = %d, want %d: a gap is a MANUAL item", got, exitManual)
 	}
 }
+
+// --- flag values that used to be accepted and then quietly ignored ----------
+
+// opts.edge() returns --edge-ip verbatim and buildDNS writes it as the content
+// of every de-proxied A record, while ir.Plan.Validate checks a record's Name
+// and not its Content. So a typo produced a zone file the operator was invited
+// to review and then apply, failing at resolution time rather than at parse
+// time.
+func TestEdgeIPMustBeAnIPv4Address(t *testing.T) {
+	for _, bad := range []string{"203.0.113", "not-an-ip", "203.0.113.10:443", "2001:db8::1"} {
+		if err := checkEdgeIP("prepare", bad); err == nil {
+			t.Errorf("--edge-ip %q was accepted; it would become the content of every A record", bad)
+		}
+	}
+	for _, ok := range []string{"", "203.0.113.10", "198.51.100.7"} {
+		if err := checkEdgeIP("prepare", ok); err != nil {
+			t.Errorf("--edge-ip %q rejected: %v", ok, err)
+		}
+	}
+}
+
+// `--vps 12,50` is what a European operator types. It used to parse as 12
+// through a Sscanf whose error was discarded; `--vps twelve` left the default 0
+// and the cost report then compared against a stack that appeared free.
+func TestCostRejectsAPriceItCannotParse(t *testing.T) {
+	silence(t)
+	snap := fixture(t, "example.snapshot.json")
+	for _, bad := range []string{"12,50", "twelve", "€12", "-5"} {
+		if got := cmdCost([]string{snap, "--vps", bad}); got != exitUsage {
+			t.Errorf("cost --vps %q = %d, want %d", bad, got, exitUsage)
+		}
+	}
+	if got := cmdCost([]string{snap, "--vps", "12.50"}); got == exitUsage {
+		t.Error("cost --vps 12.50 was rejected")
+	}
+}
