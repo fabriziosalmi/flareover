@@ -39,8 +39,34 @@ func Classify(s cf.Snapshot) report.Report {
 	classifyR2(s, add)
 	classifyAccess(s, add)
 	classifyEmail(s, add)
+	classifyExtractionGaps(s, add)
 
 	return r
+}
+
+// classifyExtractionGaps turns every surface the extractor could not read into a
+// MANUAL finding.
+//
+// This is the contract's boundary condition. Everything else in this file
+// classifies what the snapshot *contains*; this classifies what it is missing.
+// Without it, a token lacking Firewall Services:Read produces a snapshot with no
+// IP access rules, and the report says the zone has none — a false claim of full
+// coverage, produced by an absence rather than a mistranslation. A gap can never
+// be AUTO or ASK: the tool does not know what it did not read, so there is
+// nothing to generate and no bounded question to ask.
+func classifyExtractionGaps(s cf.Snapshot, add func(report.Finding)) {
+	for _, g := range s.ExtractionGaps {
+		why := fmt.Sprintf("Extraction could not read this surface, so the snapshot does not describe it: anything configured there is NOT covered by this report and was NOT migrated. Re-run `flareover extract` with a token that can read it, then re-assess. Cause: %s",
+			gapDetail(g))
+		add(manual("extraction-gap", g.Surface, why))
+	}
+}
+
+func gapDetail(g cf.Gap) string {
+	if strings.TrimSpace(g.Detail) == "" {
+		return "not reported"
+	}
+	return g.Detail
 }
 
 // --- DNS ---------------------------------------------------------------------

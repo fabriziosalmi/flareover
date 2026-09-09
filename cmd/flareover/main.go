@@ -41,6 +41,7 @@ import (
 	"github.com/fabriziosalmi/flareover/internal/render"
 	"github.com/fabriziosalmi/flareover/internal/report"
 	"github.com/fabriziosalmi/flareover/internal/runbook"
+	"github.com/fabriziosalmi/flareover/internal/safeio"
 	"github.com/fabriziosalmi/flareover/internal/stack"
 	"github.com/fabriziosalmi/flareover/internal/target"
 	"github.com/fabriziosalmi/flareover/internal/target/azuredns"
@@ -85,6 +86,7 @@ PHASES
                             clouddns|azure / --certmate-url.
   present ...               Parity gate: live edge vs staged edge (--after-addr).
   execute ...               Orchestrate the phases live up to the gated cutover.
+                            Stops on MANUAL items unless --accept-manual.
   storage <buckets.json>    Migrate object storage (R2/S3) → self-hosted MinIO
                             (default), or managed EU S3: --dest scaleway [--region
                             fr-par|nl-ams|pl-waw|it-mil] / --dest ovh [--region
@@ -126,6 +128,9 @@ PREPARE FLAGS
                        <id>", creds in env.
   --out <dir>          write artifacts under <dir> (default: stdout preview)
   --validate           prove the generated Caddyfile + zone parse (caddy validate)
+  --rotate-mesh-keys   mint NEW WireGuard keys instead of reusing the ones already
+                       under <out>/mesh. Breaks a deployed tunnel until BOTH ends
+                       are redeployed; without it a re-run is byte-identical.
   --mesh-edge [name=]<host:port>  sovereign WireGuard tunnel to keep an existing
                        (e.g. on-prem) origin unchanged. Repeat for an HA edge
                        front: --mesh-edge hetzner=5.9.1.1:51820 --mesh-edge aws=18.2.3.4:51820
@@ -325,10 +330,13 @@ func cmdResolve(args []string) int {
 	body = append(body, '\n')
 	fmt.Fprintf(os.Stderr, "resolved %d, %d still pending (need a value)\n", answered, pending)
 	if outPath == "" {
-		os.Stdout.Write(body)
+		if _, err := os.Stdout.Write(body); err != nil {
+			fmt.Fprintf(os.Stderr, "flareover resolve: writing to stdout: %v\n", err)
+			return 1
+		}
 		return 0
 	}
-	if err := os.WriteFile(outPath, body, 0o644); err != nil {
+	if err := safeio.WriteFile(outPath, body, 0o600); err != nil {
 		fmt.Fprintf(os.Stderr, "flareover resolve: %v\n", err)
 		return 1
 	}
@@ -411,10 +419,13 @@ func cmdExtract(args []string) int {
 		snap.Zone.Name, len(snap.DNSRecords), len(snap.Rulesets), len(snap.ManagedRules), len(snap.PageRules), len(snap.Workers))
 
 	if outPath == "" || outPath == "-" {
-		os.Stdout.Write(body)
+		if _, err := os.Stdout.Write(body); err != nil {
+			fmt.Fprintf(os.Stderr, "flareover extract: writing to stdout: %v\n", err)
+			return 1
+		}
 		return 0
 	}
-	if err := os.WriteFile(outPath, body, 0o600); err != nil {
+	if err := safeio.WriteFile(outPath, body, 0o600); err != nil {
 		fmt.Fprintf(os.Stderr, "flareover extract: %v\n", err)
 		return 1
 	}
@@ -576,21 +587,15 @@ func cmdStorage(args []string) int {
 		arts := objstore.Generate(snap, objstore.GenOptions{
 			MinIOAlias: alias, MinIOEndpoint: endpoint, Decisions: decisions, Dest: dest, Region: region,
 		})
-		for _, a := range arts {
-			dst := filepath.Join(outDir, a.Path)
-			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-				fmt.Fprintf(os.Stderr, "flareover storage: %v\n", err)
-				return 1
-			}
-			if err := os.WriteFile(dst, a.Content, 0o644); err != nil {
-				fmt.Fprintf(os.Stderr, "flareover storage: %v\n", err)
-				return 1
-			}
-			if a.Note != "" {
-				fmt.Fprintf(os.Stderr, "  %s: %s\n", a.Path, a.Note)
-			} else {
-				fmt.Fprintf(os.Stderr, "  %s\n", a.Path)
-			}
+		// objstore.Artifact carries no Mode (its outputs have always been 0644);
+		// widen it to the common shape so both phases share one writer.
+		files := make([]target.Artifact, len(arts))
+		for i, a := range arts {
+			files[i] = target.Artifact{Path: a.Path, Content: a.Content, Mode: 0o644, Note: a.Note}
+		}
+		if err := writeArtifacts(outDir, files); err != nil {
+			fmt.Fprintf(os.Stderr, "flareover storage: %v\n", err)
+			return 1
 		}
 	}
 	c := rep.Counts()
@@ -610,12 +615,14 @@ func cmdStorage(args []string) int {
 func cmdExecute(args []string) int {
 	var snapPath, decisionsPath, afterAddr string
 	beforeScheme, afterScheme := "https", "https"
-	var insecureAfter bool
+	var insecureAfter, acceptManual bool
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch a {
 		case "--insecure-after":
 			insecureAfter = true
+		case "--accept-manual":
+			acceptManual = true
 		case "--snapshot", "--decisions", "--after-addr", "--before-scheme", "--after-scheme":
 			if i+1 >= len(args) {
 				fmt.Fprintf(os.Stderr, "flareover execute: %s needs a value\n", a)
@@ -665,6 +672,18 @@ func cmdExecute(args []string) int {
 	c := rep.Counts()
 	pr.Done(0, fmt.Sprintf("%d elements · %d AUTO / %d ASK / %d MANUAL",
 		len(rep.Findings), c[report.Auto], c[report.Ask], c[report.Manual]))
+
+	// A MANUAL item is a control the generated stack does not reproduce. This
+	// verb orchestrates a cutover, so it stops here rather than counting them
+	// into a progress line and carrying on: authorising a flip while an
+	// unmigrated Zero-Trust policy or Worker is outstanding is the decision a
+	// human has to make explicitly, with the list in front of them.
+	if c[report.Manual] > 0 && !acceptManual {
+		pr.Fail(0, fmt.Sprintf("%d MANUAL item(s): cutover not authorized", c[report.Manual]))
+		printManual(rep, "execute")
+		fmt.Fprintln(os.Stderr, "\n  Handle these by hand, or re-run with --accept-manual to proceed anyway.")
+		return 10
+	}
 
 	pr.Start(1)
 	built, err := plan.Build(snap, plan.Options{Decisions: decisions})
@@ -1234,7 +1253,7 @@ func cmdGuard(args []string) int {
 func cmdPrepare(args []string) int {
 	var path, decisionsPath, edgeIP, ca, originCA, stackID, dnsTarget, outDir, blocklists, egressAllow, edgeProvider string
 	var meshEdges []string
-	var egressDeny, egressSSLBump, doValidate bool
+	var egressDeny, egressSSLBump, doValidate, rotateMeshKeys bool
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch a {
@@ -1246,6 +1265,9 @@ func cmdPrepare(args []string) int {
 			continue
 		case "--validate":
 			doValidate = true
+			continue
+		case "--rotate-mesh-keys":
+			rotateMeshKeys = true
 			continue
 		}
 		switch a {
@@ -1342,6 +1364,10 @@ func cmdPrepare(args []string) int {
 	if egressAllow != "" {
 		egAllow = strings.Split(egressAllow, ",")
 	}
+	// Classify before generating: the report drives both the MIGRATION.md
+	// runbook and the MANUAL summary printed at the end, and computing it once
+	// keeps the two from disagreeing.
+	rep := classify.Classify(snap)
 	built, err := plan.Build(snap, plan.Options{
 		EdgeIP: edgeIP, CA: ca, OriginCA: originCA, Decisions: decisions, Blocklists: bl,
 		EgressDeny: egressDeny, EgressAllow: egAllow, EgressSSLBump: egressSSLBump,
@@ -1367,7 +1393,25 @@ func cmdPrepare(args []string) int {
 			}
 			edges = append(edges, mesh.Edge{Name: name, Endpoint: endpoint})
 		}
-		meshArts, err := mesh.GenerateWireGuard(mesh.Config{Edges: edges})
+		// Reuse the keys already on disk unless rotation was asked for. Without
+		// this, every re-run mints keys no deployed peer recognises and the
+		// atomic write replaces the only copy of the working ones.
+		var meshKeys map[string]string
+		if outDir != "" && !rotateMeshKeys {
+			meshKeys, err = mesh.LoadKeys(outDir)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "flareover prepare: reading existing mesh keys: %v\n", err)
+				return 1
+			}
+			if len(meshKeys) > 0 {
+				fmt.Fprintf(os.Stderr, "  mesh: reusing %d existing key(s) from %s/mesh (use --rotate-mesh-keys to replace them)\n",
+					len(meshKeys), outDir)
+			}
+		}
+		if rotateMeshKeys {
+			fmt.Fprintln(os.Stderr, "  mesh: --rotate-mesh-keys: generating NEW keys; redeploy every edge AND the origin together")
+		}
+		meshArts, err := mesh.GenerateWireGuard(mesh.Config{Edges: edges, Keys: meshKeys})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "flareover prepare: %v\n", err)
 			return 1
@@ -1411,23 +1455,78 @@ func cmdPrepare(args []string) int {
 			if a.Note != "" {
 				fmt.Printf("# note: %s\n", a.Note)
 			}
-			os.Stdout.Write(a.Content)
+			if _, err := os.Stdout.Write(a.Content); err != nil {
+				fmt.Fprintf(os.Stderr, "flareover prepare: writing to stdout: %v\n", err)
+				return 1
+			}
 		}
 		return 0
 	}
+	// The runbook is part of the artifact set, not an afterthought: adding it
+	// here means every file this command produces goes through one atomic,
+	// path-contained writer instead of a second bare WriteFile at the end.
+	paths := make([]string, len(arts))
+	for i, a := range arts {
+		paths[i] = a.Path
+	}
+	arts = append(arts, target.Artifact{
+		Path:    "MIGRATION.md",
+		Content: runbook.Generate(rep, built, paths),
+		Mode:    0o644,
+		Note:    "runbook + manual/ask items + cutover steps",
+	})
+	if err := writeArtifacts(outDir, arts); err != nil {
+		fmt.Fprintf(os.Stderr, "flareover prepare: %v\n", err)
+		return 1
+	}
+
+	// Same verdict gate `assess` and `storage` already apply. The artifacts are
+	// written either way — they are the AUTO plus answered-ASK surface and they
+	// are correct — but the exit code has to say that this migration is not
+	// complete, because a MANUAL item is a control the generated stack does not
+	// reproduce and somebody has to act on it by hand.
+	c := rep.Counts()
+	if c[report.Manual] > 0 {
+		printManual(rep, "prepare")
+		return 10
+	}
+	if c[report.Ask] > 0 {
+		return 11
+	}
+	return 0
+}
+
+// printManual lists the MANUAL findings on stderr so the operator sees what the
+// generated stack does not cover, without having to re-run `assess`.
+func printManual(rep report.Report, phase string) {
+	var manual []report.Finding
+	for _, f := range rep.Sorted() {
+		if f.Verdict == report.Manual {
+			manual = append(manual, f)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "\nflareover %s: %d MANUAL item(s) are NOT covered by the generated stack:\n", phase, len(manual))
+	for _, f := range manual {
+		fmt.Fprintf(os.Stderr, "  ✋ %-14s %s\n     %s\n", f.Kind, f.Name, f.Rationale)
+	}
+}
+
+// writeArtifacts writes a generated set under outDir. Every path is checked for
+// containment before it is joined (an Artifact.Path carries snapshot-derived
+// values, and filepath.Join cleans "../" rather than refusing it), and every
+// file is written atomically so an interruption cannot leave a truncated
+// Caddyfile or zone file that still parses.
+func writeArtifacts(outDir string, arts []target.Artifact) error {
 	for _, a := range arts {
-		dst := filepath.Join(outDir, a.Path)
+		dst, err := safeio.SecureJoin(outDir, a.Path)
+		if err != nil {
+			return err
+		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, "flareover prepare: %v\n", err)
-			return 1
+			return err
 		}
-		mode := os.FileMode(a.Mode)
-		if mode == 0 {
-			mode = 0o644
-		}
-		if err := os.WriteFile(dst, a.Content, mode); err != nil {
-			fmt.Fprintf(os.Stderr, "flareover prepare: %v\n", err)
-			return 1
+		if err := safeio.WriteFile(dst, a.Content, os.FileMode(a.Mode)); err != nil {
+			return err
 		}
 		if a.Note != "" {
 			fmt.Fprintf(os.Stderr, "  %s: %s\n", a.Path, a.Note)
@@ -1435,18 +1534,7 @@ func cmdPrepare(args []string) int {
 			fmt.Fprintf(os.Stderr, "  %s\n", a.Path)
 		}
 	}
-	// Emit the human-facing migration runbook alongside the artifacts.
-	paths := make([]string, len(arts))
-	for i, a := range arts {
-		paths[i] = a.Path
-	}
-	md := runbook.Generate(classify.Classify(snap), built, paths)
-	if err := os.WriteFile(filepath.Join(outDir, "MIGRATION.md"), md, 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "flareover prepare: %v\n", err)
-		return 1
-	}
-	fmt.Fprintln(os.Stderr, "  MIGRATION.md: runbook + manual/ask items + cutover steps")
-	return 0
+	return nil
 }
 
 // edgeCloudInits builds one cloud-init per edge from the already-generated
@@ -1649,6 +1737,12 @@ func loadSnapshot(path string) (cf.Snapshot, error) {
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&snap); err != nil {
 		return snap, fmt.Errorf("parsing snapshot %s: %w", path, err)
+	}
+	if err := snap.CheckSchemaVersion(); err != nil {
+		return snap, fmt.Errorf("%s: %w", path, err)
+	}
+	if err := snap.Validate(); err != nil {
+		return snap, fmt.Errorf("%s: %w", path, err)
 	}
 	return snap, nil
 }

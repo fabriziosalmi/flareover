@@ -62,6 +62,20 @@ Generate the target-stack artifacts (Caddyfile, caddy-waf rules, PowerDNS zone, 
 | `--validate` | Prove the generated Caddyfile + zone parse (`caddy validate`) |
 | `--mesh-edge [name=]<host:port>` | WireGuard tunnel to keep an existing origin unchanged; repeat for an HA edge front |
 | `--edge-provider <key>` | Emit a cloud-init to boot each edge on that provider (requires `--mesh-edge`) |
+| `--rotate-mesh-keys` | Mint **new** WireGuard keys instead of reusing the ones already under `<out>/mesh`. See below. |
+
+**Mesh keys are reused, not regenerated.** On the first `prepare --mesh-edge …` a fresh
+X25519 keypair is generated per peer. Every run after that reads the existing
+`<out>/mesh/*.wg0.conf` back and keeps those keys, so re-running is byte-identical and
+cannot invalidate a tunnel you have already deployed. `--rotate-mesh-keys` opts into new
+key material: the old keys are replaced, and **both** ends of the mesh (every edge *and*
+the origin) must be redeployed together or the tunnel stops authenticating.
+
+**Exit codes:** `0` = everything AUTO · `11` = ASK items remain · `10` = MANUAL items
+remain. The artifacts are written in every case — they are the AUTO plus answered-ASK
+surface and they are correct — but a non-zero code says the migration is not complete,
+and `prepare` prints the MANUAL list so you can see what the generated stack does not
+reproduce.
 
 ### `provision …`
 Stand the target up via APIs (DNS zone + DNSSEC, CertMate DNS-01 certs).
@@ -81,7 +95,16 @@ Stand the target up via APIs (DNS zone + DNSSEC, CertMate DNS-01 certs).
 Parity gate: probe the live edge vs the staged edge (`--after-addr <host:port>`) and diff status / redirects / headers / body. **Exit `12`** on a HARD divergence.
 
 ### `execute …`
-Orchestrate the phases live up to the gated cutover. The DNS flip stays your explicit step. **Exit `12`** if the cutover is blocked.
+Orchestrate the phases live up to the gated cutover. The DNS flip stays your explicit step. **Exit `12`** if the parity gate blocks the cutover.
+
+| Flag | Effect |
+|------|--------|
+| `--accept-manual` | Proceed even though the report contains MANUAL items |
+
+**MANUAL items stop this verb.** A MANUAL verdict means the generated stack does not
+reproduce that control — a Zero-Trust Access policy, a Worker, a custom cipher suite.
+`execute` prints the list and exits `10` rather than authorising a cutover while one is
+outstanding. `--accept-manual` says you have read the list and are proceeding anyway.
 
 ### `storage <buckets.json>`
 Migrate object storage (R2/S3) → self-hosted MinIO (default) or managed EU S3. See [Object Storage](/docs/object-storage/).
@@ -126,6 +149,7 @@ Print the build version.
 | `0` | all | Success / clean |
 | `1` | all | Runtime error |
 | `2` | all | Usage / bad arguments |
-| `10` | `assess`, `storage` | MANUAL items present |
-| `11` | `assess`, `storage` | ASK items present (no MANUAL) |
+| `10` | `assess`, `prepare`, `storage`, `execute` | MANUAL items present. `prepare` still writes its artifacts; `execute` refuses to proceed without `--accept-manual`. |
+| `11` | `assess`, `prepare`, `storage` | ASK items present (no MANUAL) |
 | `12` | `present`, `execute` | Parity divergence / cutover blocked |
+| `20` | `guard` | The failguard fired: the rollback / failover trigger ran |

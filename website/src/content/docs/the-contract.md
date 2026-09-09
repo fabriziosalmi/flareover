@@ -27,7 +27,12 @@ Classification and artifact generation are a **pure function** of `snapshot + de
 verdicts, config = f(snapshot, decisions.lock)
 ```
 
-Run it twice, get **byte-identical** output. This is enforced by golden tests. The practical consequence: the entire migration is reviewable in `git`: you diff `./out` like any code change before anything goes live. (Runtime state a *target* assigns later, e.g. a MinIO lifecycle-rule id, is outside this function and noted where it differs.)
+Run it twice, get **byte-identical** output. This is enforced by golden tests. The practical consequence: the entire migration is reviewable in `git`: you diff `./out` like any code change before anything goes live.
+
+Two things sit outside this function, and both are named rather than hidden:
+
+- **Runtime state a *target* assigns later** — a MinIO lifecycle-rule id, for example — is not ours to predict, and is noted where it differs.
+- **Secret material generated on the first run.** `prepare --mesh-edge` mints a WireGuard keypair per peer, which is by definition not a function of the inputs. It is generated **once**: every later run reads the existing `<out>/mesh/*.wg0.conf` and reuses those keys, so the re-run *is* byte-identical and regenerating cannot silently invalidate a tunnel you have deployed. New key material has to be asked for, with `--rotate-mesh-keys`.
 
 ## The invariant that makes it real: classify ⟺ generate
 
