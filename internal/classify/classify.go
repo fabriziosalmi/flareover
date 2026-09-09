@@ -39,9 +39,35 @@ func Classify(s cf.Snapshot) report.Report {
 	classifyR2(s, add)
 	classifyAccess(s, add)
 	classifyEmail(s, add)
+	classifyStaleCapture(s, add)
 	classifyExtractionGaps(s, add)
 
 	return r
+}
+
+// classifyStaleCapture reports a snapshot written before the extractor could
+// record what it failed to read.
+//
+// This is the same boundary condition as classifyExtractionGaps, one step
+// earlier: that function classifies the gaps a snapshot declares, and this one
+// classifies a snapshot that cannot declare any. Below schema_version 2 an
+// absent surface and an unread surface are the same empty slice, so the report
+// would claim full coverage on the strength of a file's age. The case that
+// makes this a security property rather than a tidiness one is Cloudflare
+// Access: plan.accessGatedHosts reads an empty AccessApps as "no host needs an
+// identity gate" and emits a plain reverse_proxy for every host, which would
+// publish an application that today requires a login.
+func classifyStaleCapture(s cf.Snapshot, add func(report.Finding)) {
+	if !s.PredatesGapReporting() {
+		return
+	}
+	shape := fmt.Sprintf("schema_version %d", s.SchemaVersion)
+	if s.SchemaVersion == 0 {
+		shape = "no schema_version at all"
+	}
+	add(manual("extraction-gap", "snapshot schema_version",
+		fmt.Sprintf("This snapshot carries %s; this build writes %d. A snapshot written before that version could not record which surfaces extraction failed to read, so anything absent here may be absent from the zone or merely never read, and nothing distinguishes the two. That includes Cloudflare Access, whose emptiness is what decides that a host needs no identity gate. Re-run `flareover extract` and re-assess before trusting this report.",
+			shape, cf.CurrentSchemaVersion)))
 }
 
 // classifyExtractionGaps turns every surface the extractor could not read into a

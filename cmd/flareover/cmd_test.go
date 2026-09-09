@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	cf "github.com/fabriziosalmi/flareover/internal/cloudflare"
 )
 
 // The audit found that no test anywhere invoked any cmd* function, so 39 flags,
@@ -15,14 +17,6 @@ import (
 // tests drive the verbs directly. They deliberately exercise only paths that
 // touch no network and no credentials: argument parsing, the documented exit
 // codes, and the vocabulary the two DNS-taking verbs must share.
-
-const (
-	exitOK      = 0
-	exitRuntime = 1
-	exitUsage   = 2
-	exitManual  = 10
-	exitAsk     = 11
-)
 
 func fixture(t *testing.T, name string) string {
 	t.Helper()
@@ -186,5 +180,23 @@ func TestSplitCSVTrimsAndDropsEmpties(t *testing.T) {
 	}
 	if len(splitCSV("")) != 0 {
 		t.Error("splitCSV(\"\") should be empty")
+	}
+}
+
+// --- extraction is not silently partial ------------------------------------
+
+// A partial capture used to exit 0, so `flareover extract … && deploy` carried
+// on against a snapshot that might be missing the WAF rules or the Access apps
+// — the warnings went to stderr, which a pipeline routinely discards.
+func TestExtractExitsManualWhenSurfacesWereUnreadable(t *testing.T) {
+	if got := extractExit(cf.Snapshot{Zone: cf.Zone{Name: "example.com"}}); got != exitOK {
+		t.Errorf("a complete extraction = %d, want %d", got, exitOK)
+	}
+	partial := cf.Snapshot{
+		Zone:           cf.Zone{Name: "example.com"},
+		ExtractionGaps: []cf.Gap{{Surface: "ip access rules", Detail: "HTTP 403"}},
+	}
+	if got := extractExit(partial); got != exitManual {
+		t.Errorf("a partial extraction = %d, want %d: a gap is a MANUAL item", got, exitManual)
 	}
 }

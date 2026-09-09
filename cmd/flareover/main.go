@@ -145,6 +145,20 @@ PREPARE FLAGS
 
 // version is stamped at build time via -ldflags "-X main.version=…" (goreleaser
 // sets it from the git tag). It stays "dev" for `go run` and local builds.
+// Exit codes. These are a documented part of the CLI contract — CI and shell
+// chains branch on them — so they live here as named constants rather than as
+// literals scattered through thirteen verbs. The table in the CLI reference is
+// asserted against this vocabulary by cmd_test.go.
+const (
+	exitOK       = 0  // clean: everything is AUTO
+	exitRuntime  = 1  // something failed while running
+	exitUsage    = 2  // the command line was wrong
+	exitManual   = 10 // MANUAL items outstanding (an extraction gap is one)
+	exitAsk      = 11 // ASK questions unanswered
+	exitDiverged = 12 // the parity gate found a HARD divergence
+	exitGuard    = 20 // the guard fired: rollback/failover triggered
+)
+
 var version = "dev"
 
 // rootCtx is cancelled when the process is asked to stop. Every phase takes a
@@ -252,10 +266,10 @@ func cmdAssess(args []string) int {
 	// Exit non-zero when human attention is required, so CI/automation can gate.
 	c := rep.Counts()
 	if c[report.Manual] > 0 {
-		return 10
+		return exitManual
 	}
 	if c[report.Ask] > 0 {
-		return 11
+		return exitAsk
 	}
 	return 0
 }
@@ -446,7 +460,25 @@ func cmdExtract(args []string) int {
 		return 1
 	}
 	fmt.Fprintf(os.Stderr, "wrote %s\n", outPath)
-	return 0
+	return extractExit(snap)
+}
+
+// extractExit reports the exit code for a completed extraction.
+//
+// A partial capture used to exit 0: the warnings went to stderr, which a shell
+// pipeline routinely discards, so `flareover extract … > zone.json && deploy`
+// carried on against a snapshot that might be missing the WAF rules or the
+// Access apps. The degradation did reach the exit-code channel eventually,
+// because each gap becomes a MANUAL and assess/prepare then exit 10 — but one
+// step too late, and named as a coverage problem rather than an extraction one.
+// Exit 10 here is the same code for the same reason: a gap IS a MANUAL item.
+func extractExit(snap cf.Snapshot) int {
+	if len(snap.ExtractionGaps) == 0 {
+		return 0
+	}
+	fmt.Fprintf(os.Stderr, "flareover extract: %d surface(s) could not be read; the snapshot is a PARTIAL capture (exit %d)\n",
+		len(snap.ExtractionGaps), exitManual)
+	return exitManual
 }
 
 func cmdCost(args []string) int {
@@ -616,10 +648,10 @@ func cmdStorage(args []string) int {
 	}
 	c := rep.Counts()
 	if c[report.Manual] > 0 {
-		return 10
+		return exitManual
 	}
 	if c[report.Ask] > 0 {
-		return 11
+		return exitAsk
 	}
 	return 0
 }
@@ -698,7 +730,7 @@ func cmdExecute(args []string) int {
 		pr.Fail(0, fmt.Sprintf("%d MANUAL item(s): cutover not authorized", c[report.Manual]))
 		printManual(rep, "execute")
 		fmt.Fprintln(os.Stderr, "\n  Handle these by hand, or re-run with --accept-manual to proceed anyway.")
-		return 10
+		return exitManual
 	}
 
 	pr.Start(1)
@@ -728,7 +760,7 @@ func cmdExecute(args []string) int {
 		pr.Fail(2, fmt.Sprintf("%d probes · GATE FAIL: cutover blocked", len(prep.Results)))
 		pr.PrintLine("")
 		fmt.Print(render.Parity(prep, color))
-		return 12
+		return exitDiverged
 	}
 	pr.Done(2, fmt.Sprintf("%d probes · GATE PASS", len(prep.Results)))
 
@@ -1128,7 +1160,7 @@ func cmdGuard(args []string) int {
 	}
 	if triggered {
 		end("watch-ended", map[string]any{"note": "guard fired: rollback/failover triggered"})
-		return 20
+		return exitGuard
 	}
 	end("watch-ended", map[string]any{"note": "watch completed"})
 	return 0
@@ -1355,10 +1387,10 @@ func cmdPrepare(args []string) int {
 	c := rep.Counts()
 	if c[report.Manual] > 0 {
 		printManual(rep, "prepare")
-		return 10
+		return exitManual
 	}
 	if c[report.Ask] > 0 {
-		return 11
+		return exitAsk
 	}
 	return 0
 }
