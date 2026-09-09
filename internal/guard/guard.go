@@ -39,6 +39,15 @@ type Options struct {
 	Report func(Status)
 	// Once runs a single check and returns (for CI / a one-shot health gate).
 	Once bool
+	// KeepWatching continues the loop after OnUnhealthy has fired, resetting
+	// the failure counter, instead of returning.
+	//
+	// The default (false) is fire-once, which is what a CI gate and the
+	// documented exit code 20 expect. But a watchdog that stops after the first
+	// rollback leaves the migration unguarded for everything that happens next
+	// — including a rollback that itself failed — so an operator running this
+	// as a long-lived service wants the other behaviour.
+	KeepWatching bool
 }
 
 // Watch runs the health loop until the trigger fires, the context is cancelled,
@@ -71,6 +80,12 @@ func Watch(ctx context.Context, check Check, o Options) (triggered bool, err err
 				if herr := o.OnUnhealthy(reason); herr != nil {
 					return true, fmt.Errorf("trigger failed: %w", herr)
 				}
+			}
+			if o.KeepWatching {
+				// Reset and carry on: the site has been acted on, and what
+				// happens next still needs watching.
+				fails = 0
+				return false, nil
 			}
 			return true, nil
 		}

@@ -132,9 +132,33 @@ Failguards watchdog: health-watch + rollback/failover trigger.
 
 | Flag | Effect |
 |------|--------|
-| `--on-unhealthy "<cmd>"` | Command to run on an unhealthy result |
-| `--interval <dur>` | Poll interval (e.g. `30s`) |
-| `--once` | Run a single check and exit |
+| `--on-unhealthy "<cmd>"` | Rollback / failover command to run once the threshold is reached |
+| `--expect-status <code>` | HTTP status that counts as healthy (default `200`) |
+| `--interval <dur>` | Poll interval (e.g. `30s`, `2m`; default `30s`) |
+| `--fails <n>` | Consecutive failures before the trigger fires (default `3`) |
+| `--once` | Run a single check and exit — the CI health gate |
+| `--keep-watching` | Keep watching after the trigger fires, instead of exiting |
+| `--log-json` | Emit one JSON record per event instead of human output |
+
+**This is the only long-running verb, and the only one nobody is watching.** Three
+things follow from that.
+
+*Timestamps are RFC3339 and every line names the URL*, so a redirected guard log
+can be correlated, and two guards watching two zones are distinguishable. `--log-json`
+emits one object per event (`time`, `event`, `url`, `healthy`, `consecutive_fails`,
+`threshold`, and `reason` when unhealthy) for shipping to a log system.
+
+*The watch always emits a closing `watch-ended` record.* Without one, a guard that
+died and a guard that is quietly healthy produce the same absent output.
+
+*The trigger runs in its own process group.* A `Ctrl-C` aimed at the watchdog would
+otherwise also hit a rollback already in flight — interrupting a DNS write halfway,
+which is exactly what the failguard exists to prevent. Stopping the watch now lets
+the rollback finish.
+
+Malformed numeric flags are refused with exit `2` rather than silently falling back
+to the default. A typo in `--expect-status` used to leave `200` in place, so the
+guard reported a healthy `301` site as failing and ran the rollback against it.
 
 ### `providers`
 List EU edge providers with their honest sovereignty tier (EU-owned vs US-operator/EU-region). Use a key with `prepare --edge-provider <key>`. See [Sovereignty Tiers](/docs/sovereignty-tiers/).

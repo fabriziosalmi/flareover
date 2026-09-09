@@ -35,6 +35,15 @@ jobs:
         with:
           node-version: 22 # Astro 7 requires Node >= 22.12
       # Build the Starlight docs site (base: /docs) from website/.
+      # This job holds `pages: write` and an OIDC token, and npm install runs
+      # lifecycle scripts from every one of ~475 packages. Audit before that
+      # happens, and fail the deploy rather than publishing from a tree with a
+      # known-vulnerable dependency: `npm ci` is strict about the lockfile, so
+      # the only way to clear this is to commit a fixed lockfile.
+      - name: Audit docs dependencies
+        working-directory: website
+        run: npm audit --audit-level=high
+
       - name: Build docs site
         working-directory: website
         run: |
