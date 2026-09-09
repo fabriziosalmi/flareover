@@ -23,7 +23,11 @@ The product is a five-phase "diamond". Each phase has a CLI verb (or a small gro
 
 ## The intent model (CF-IR)
 
-The extractor produces a **snapshot** that is deliberately close to the source's own API shapes: extraction is a *dumb transcription*, so no interpretation leaks into it. Everything interpretive happens afterward, in the classifier, against a provider-agnostic **intermediate representation (IR)**: sites, origins, DNS zone/records, TLS, header ops, rewrites, redirects, a WAF policy, cache policy, and a mesh. This separation is why the same engine can, in principle, target more than one source or destination without the honesty logic changing.
+The extractor produces a **snapshot** that is deliberately close to the source's own API shapes: extraction is a *dumb transcription*, so no interpretation leaks into it. The classifier then reads that snapshot directly and attaches a verdict to every element.
+
+The provider-agnostic **intermediate representation (CF-IR)** — sites, origins, DNS zone/records, TLS, header ops, rewrites, redirects, a WAF policy, cache policy, a mesh — sits *after* classification, not before it: it is what the **plan builder** produces from the snapshot plus your answers, for the target adapters to consume.
+
+That ordering matters if you are thinking about extending this. Adding a new **destination** is adding a generator against the IR, and nothing upstream changes. Adding a new **source** is a bigger job: the classifier is written against the source's own shapes, so it would need its own.
 
 ## classify ⟺ generate
 
