@@ -53,6 +53,26 @@ go test ./...
 Test fixtures under `testdata/fixtures/` are sanitized captures, safe to read, never real data. Real
 per-migration snapshots and any infrastructure notes stay out of the repo (see `.gitignore`).
 
+## Documentation
+
+The canonical docs are `website/src/content/docs/`. Three things are generated
+from the code and defended by tests, so don't hand-edit them: the coverage
+matrix, the sovereignty tiers, and the CLI reference's completeness (add a flag
+to `usage` and `cmd/flareover/docs_test.go` fails until the reference documents
+it).
+
+The GitHub wiki is a mirror of those pages, not a second source. Regenerate it
+rather than editing it by hand:
+
+```bash
+git clone https://github.com/fabriziosalmi/flareover.wiki.git /tmp/flareover-wiki
+node website/scripts/sync-wiki.mjs /tmp/flareover-wiki
+cd /tmp/flareover-wiki && git commit -am "docs: sync from canonical docs" && git push
+```
+
+`Home.md`, `_Sidebar.md` and `_Footer.md` are hand-maintained wiki furniture and
+the script leaves them alone.
+
 ## Security
 
 Please report vulnerabilities privately (see [SECURITY.md](SECURITY.md)).

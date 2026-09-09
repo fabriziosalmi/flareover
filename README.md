@@ -97,7 +97,8 @@ explicit human steps.
 # macOS (Homebrew)
 brew install fabriziosalmi/flareover/flareover
 
-# Linux/macOS: verified installer (downloads the release for your OS/arch, checks its sha256)
+# Linux/macOS: verified installer (verifies the Sigstore signature when cosign is present,
+# then the sha256, before installing)
 curl -fsSL https://raw.githubusercontent.com/fabriziosalmi/flareover/main/install.sh | sh
 
 # …or from source (single static binary, pure Go, zero external deps)
@@ -105,8 +106,10 @@ go install github.com/fabriziosalmi/flareover/cmd/flareover@latest
 ```
 
 Building from source requires **Go 1.25+**. Release binaries (linux/macOS/windows · amd64/arm64) ship
-with an SBOM and a `checksums.txt` **signed keyless via Sigstore/cosign**. Verify it with the command
-in each release's notes. `flareover version` prints the build tag.
+with an SBOM and a `checksums.txt` **signed keyless via Sigstore/cosign** — the certificate identity is
+the release workflow itself, so a signature proves the artifact came from this repository's CI. The
+installer checks it automatically when `cosign` is on your PATH, and says so when it is not.
+`flareover version` prints the build tag.
 
 ## Usage
 

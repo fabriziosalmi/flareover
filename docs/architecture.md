@@ -8,19 +8,28 @@ a verdict is attached to every element on the way. Nothing is emitted that isn't
 
 ```mermaid
 flowchart LR
-  CF["Cloudflare zone<br/>(live API or snapshot)"] --> EX[extract]
-  EX --> IR["CF-IR<br/>provider-agnostic<br/>intent model"]
-  IR --> CL[classify]
+  CF["Cloudflare zone<br/>(live API)"] --> EX[extract]
+  EX --> SN[("snapshot<br/>provider-native<br/>capture")]
+  SN --> CL[classify]
   CL --> RP["report<br/>AUTO · ASK · MANUAL"]
   RP -. one yes/no per ASK .-> DEC[("decisions.lock")]
-  IR --> PL[plan]
+  SN --> PL[plan]
   DEC --> PL
-  PL --> GEN["generate<br/>Caddy · caddy-waf · souin<br/>PowerDNS · CertMate · MinIO<br/>WireGuard mesh · SPM"]
+  PL --> IR["CF-IR<br/>provider-agnostic<br/>intent model"]
+  IR --> GEN["generate<br/>Caddy · caddy-waf · souin<br/>PowerDNS · CertMate · MinIO<br/>WireGuard mesh · SPM"]
   GEN --> PROV[provision]
   PROV --> PRES["present<br/>parity gate"]
   PRES -->|GATE: PASS| EXEC["execute<br/>gated cutover"]
   EXEC --> GRD["guard<br/>health + rollback"]
 ```
+
+Note where the IR sits: **downstream of classification, not upstream of it.**
+`classify` reads the provider-native snapshot directly (`classify.Classify` takes
+a `cloudflare.Snapshot`, and `internal/classify` does not import `internal/ir` at
+all); the IR is what `plan` *produces* for the target adapters to consume. So the
+provider-agnosticism is a property of everything after the plan builder — adding
+a new **target** is adding a generator, while adding a new **source** would mean
+a new classifier too.
 
 **Read-only up to `execute`.** `extract`, `assess`, `cost`, `prepare`, `present`, `doctor` never write
 to your source or your registrar. Only `provision` (your own target, your own credentials) and the

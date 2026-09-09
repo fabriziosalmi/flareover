@@ -13,11 +13,22 @@ brew install fabriziosalmi/flareover/flareover
 
 ## Verified install script (Linux / macOS)
 
-Downloads the release for your OS/arch and checks its `sha256` before installing:
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fabriziosalmi/flareover/main/install.sh | sh
 ```
+
+The script downloads the release for your OS/arch and verifies it before installing:
+
+- **If `cosign` is on your `PATH`**, it verifies the Sigstore signature over
+  `checksums.txt` first — pinned to this repository's release workflow as the
+  certificate identity and to GitHub as the OIDC issuer. A failed verification
+  aborts the install. This is the check that proves the release is *ours*.
+- **Then** it compares the archive's `sha256` against that (now trusted) file.
+
+Without `cosign` the script still runs, using the checksum alone, and says so:
+that detects corruption in transit, not a tampered release. If you want the full
+guarantee, install cosign first — `brew install cosign`, or see
+[sigstore/cosign](https://github.com/sigstore/cosign).
 
 ## From source
 
@@ -34,13 +45,10 @@ Every release ships prebuilt binaries for **linux / macOS / windows** on **amd64
 - an **SBOM** (`*.sbom.json`), and
 - a `checksums.txt` **signed keyless via Sigstore/cosign**.
 
-Verify a download against the signed checksums (the exact command is printed in each release's notes), then check the binary:
+## Verifying the signature by hand
 
-```bash
-flareover version
-```
-
-## Verifying the signature
+The install script does this for you when cosign is available. To check a binary
+you downloaded from the releases page yourself:
 
 ```bash
 # from a release directory containing checksums.txt(.pem/.sig)

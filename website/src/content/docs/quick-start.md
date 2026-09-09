@@ -35,6 +35,15 @@ Every setting gets exactly one verdict: **AUTO**, **ASK**, or **MANUAL** (see **
 | `11` | There are **ASK** items to answer (no MANUAL) |
 | `10` | There are **MANUAL** items to handle by hand |
 
+:::caution[These codes are not only for `assess`]
+`prepare` and `storage` return them too, and `execute` refuses to authorise a
+cutover while MANUAL items are outstanding (exit `10`, unless you pass
+`--accept-manual`). A shell chain like `flareover prepare … && deploy` will stop
+where you might expect it to continue — that is deliberate: a MANUAL item is a
+control the generated stack does not reproduce. Full table in the
+[CLI Reference](/docs/cli-reference/).
+:::
+
 ## 3. Resolve the ASK questions
 
 ```bash
@@ -63,7 +72,9 @@ flareover prepare zone.snapshot.json \
 
 This writes the deployable artifacts (Caddyfile, caddy-waf rules, PowerDNS zone, …) **plus a `MIGRATION.md`** report: a table of every element found and exactly what it became (1:1 AUTO / answered-ASK / MANUAL). `--validate` proves the generated Caddyfile and zone actually parse.
 
-> Generation is a **pure function** of `snapshot + decisions.lock`: run it twice, get byte-identical config. Review `./out` in `git` before anything goes live.
+> Generation is a **pure function** of `snapshot + decisions.lock`: run it twice, get byte-identical config. Review `./out` in `git` before anything goes live. (The one exception is secret material, which cannot be derived from the inputs: `--mesh-edge` generates WireGuard keys on the *first* run and reuses them from `<out>/mesh` afterwards, so re-running still diffs clean. See [The Contract](/docs/the-contract/).)
+
+`prepare` exits `10` if the report still contains MANUAL items and `11` if it contains ASK items, and prints the MANUAL list. The artifacts are written either way — they are the AUTO plus answered-ASK surface and they are correct — but the exit code tells you the migration is not complete.
 
 ## 6. Pre-flight: is the target ready?
 
