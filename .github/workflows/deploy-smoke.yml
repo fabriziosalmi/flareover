@@ -1,0 +1,125 @@
+name: deploy-smoke
+
+# The deploy/ stack used to carry a caveat that it was "structurally validated
+# but not yet run end-to-end in CI (no Docker there)" — and the thing it could
+# not answer was the most basic one: does PowerDNS start and serve on a clean
+# host, or does the gsqlite3 schema have to be loaded by hand first? ubuntu
+# runners do have Docker, so the question is answerable.
+#
+# This brings up the two stateful services the migration cannot do without and
+# asserts they work. It deliberately skips Caddy: that service builds a custom
+# binary with xcaddy, which takes minutes and proves nothing about the question
+# being asked here.
+
+on:
+  push:
+    branches: [main]
+    paths: ["deploy/**", ".github/workflows/deploy-smoke.yml"]
+  pull_request:
+    paths: ["deploy/**", ".github/workflows/deploy-smoke.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Compose file is valid
+        working-directory: deploy
+        run: |
+          cp .env.example .env
+          docker compose config >/dev/null
+
+      - name: Secrets for the run
+        working-directory: deploy
+        run: |
+          # Throwaway, generated per run: nothing here outlives the job.
+          {
+            echo "PDNS_API_KEY=$(openssl rand -hex 24)"
+            echo "CERTMATE_TOKEN=$(openssl rand -hex 32)"
+            echo "MINIO_ROOT_USER=flareover"
+            echo "MINIO_ROOT_PASSWORD=$(openssl rand -hex 24)"
+          } >> .env
+
+      - name: Bring up PowerDNS and MinIO
+        working-directory: deploy
+        run: docker compose up -d powerdns minio
+
+      # This is the assertion the caveat was standing in for: pdns-init loaded
+      # the schema, PowerDNS started against it, and the API answers.
+      - name: PowerDNS serves its API on a clean host
+        working-directory: deploy
+        run: |
+          set -a; . ./.env; set +a
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /tmp/servers.json -w '%{http_code}' \
+              -H "X-API-Key: $PDNS_API_KEY" http://127.0.0.1:8081/api/v1/servers || true)
+            [ "$code" = "200" ] && break
+            sleep 2
+          done
+          if [ "$code" != "200" ]; then
+            echo "::error::PowerDNS API did not answer (last HTTP $code)"
+            docker compose logs pdns-init powerdns
+            exit 1
+          fi
+          cat /tmp/servers.json
+
+      # A responding API proves the webserver is up; creating a zone proves the
+      # gsqlite3 schema is actually there, which is the part that was in doubt.
+      - name: The gsqlite3 schema is usable
+        working-directory: deploy
+        run: |
+          set -a; . ./.env; set +a
+          code=$(curl -s -o /tmp/zone.json -w '%{http_code}' -X POST \
+            -H "X-API-Key: $PDNS_API_KEY" -H 'Content-Type: application/json' \
+            --data '{"name":"smoke.example.","kind":"Native","nameservers":["ns1.smoke.example."]}' \
+            http://127.0.0.1:8081/api/v1/servers/localhost/zones)
+          if [ "$code" != "201" ]; then
+            echo "::error::zone creation returned HTTP $code — the schema is not loaded"
+            cat /tmp/zone.json
+            docker compose logs pdns-init powerdns
+            exit 1
+          fi
+          curl -sf -H "X-API-Key: $PDNS_API_KEY" \
+            http://127.0.0.1:8081/api/v1/servers/localhost/zones | grep -q 'smoke.example'
+
+      # The API must not accept requests from outside the declared subnet: the
+      # allow_from setting is the restriction, not the port binding.
+      - name: The API refuses a source outside the internal subnet
+        working-directory: deploy
+        run: |
+          set -a; . ./.env; set +a
+          code=$(docker run --rm --network host curlimages/curl:8.11.1 -s -o /dev/null -w '%{http_code}' \
+            -H "X-API-Key: $PDNS_API_KEY" \
+            "http://$(hostname -I | awk '{print $1}'):8081/api/v1/servers" || echo "000")
+          # 000 (refused/unreachable, because 8081 publishes on 127.0.0.1 only)
+          # and 403 (reached it, allow_from rejected) are both correct. 200 is not.
+          if [ "$code" = "200" ]; then
+            echo "::error::the PowerDNS API answered a request from outside the internal subnet"
+            exit 1
+          fi
+          echo "refused as expected (HTTP $code)"
+
+      - name: MinIO answers
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9000/minio/health/live || true)
+            [ "$code" = "200" ] && break
+            sleep 2
+          done
+          [ "$code" = "200" ] || { echo "::error::MinIO health check returned $code"; exit 1; }
+
+      - name: Logs on failure
+        if: failure()
+        working-directory: deploy
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        working-directory: deploy
+        run: docker compose down -v
