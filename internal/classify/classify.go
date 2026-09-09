@@ -82,10 +82,33 @@ func classifyStaleCapture(s cf.Snapshot, add func(report.Finding)) {
 // nothing to generate and no bounded question to ask.
 func classifyExtractionGaps(s cf.Snapshot, add func(report.Finding)) {
 	for _, g := range s.ExtractionGaps {
-		why := fmt.Sprintf("Extraction could not read this surface, so the snapshot does not describe it: anything configured there is NOT covered by this report and was NOT migrated. Re-run `flareover extract` with a token that can read it, then re-assess. Cause: %s",
-			gapDetail(g))
+		why := fmt.Sprintf("Extraction could not read this surface, so the snapshot does not describe it: anything configured there is NOT covered by this report and was NOT migrated. %s Cause: %s",
+			gapRemedy(g), gapDetail(g))
 		add(manual("extraction-gap", g.Surface, why))
 	}
+}
+
+// gapRemedy picks the instruction that matches the cause.
+//
+// warn() is called for every non-fatal read failure, so one text covered a
+// missing token scope, an unset account id, a rate limit and a transient 5xx —
+// and it named the first for all four. An operator throttled halfway through an
+// account-wide extraction got a list of MANUAL items each telling them to
+// obtain permissions they already had, while the actual remedy (wait, re-run)
+// appeared nowhere.
+func gapRemedy(g cf.Gap) string {
+	d := strings.ToLower(g.Detail)
+	switch {
+	case strings.Contains(d, "rate limited") || strings.Contains(d, "429"):
+		return "The API refused the read because this token is being rate limited, not because it lacks access: wait for the limit to reset and re-run `flareover extract`, then re-assess."
+	case strings.Contains(d, "transient") || strings.Contains(d, "http 5"):
+		return "The API failed transiently rather than refusing access: re-run `flareover extract`, then re-assess."
+	case strings.Contains(d, "cloudflare_account_id"):
+		return "This surface is account-scoped: set CLOUDFLARE_ACCOUNT_ID and re-run `flareover extract`, then re-assess."
+	case strings.Contains(d, "scope") || strings.Contains(d, "403") || strings.Contains(d, "401"):
+		return "Re-run `flareover extract` with a token that can read it, then re-assess."
+	}
+	return "Re-run `flareover extract` once the cause below is addressed, then re-assess."
 }
 
 func gapDetail(g cf.Gap) string {

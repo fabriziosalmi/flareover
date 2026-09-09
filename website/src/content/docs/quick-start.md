@@ -3,7 +3,7 @@ title: "Quick Start"
 description: "This walks a single zone from read-only assessment all the way to a gated cutover. Every step before the DNS flip is non-destructive and produces"
 ---
 
-This walks a single zone from **read-only assessment** all the way to a **gated cutover**. Every step before the DNS flip is non-destructive and produces artifacts you can review in `git`.
+This walks a single zone from **read-only assessment** all the way to a **gated cutover**. Every step before the DNS flip is non-destructive and produces artifacts you can review in `git` — in a private repository, since the output directory also carries generated key material.
 
 > **You will need:** a running edge host (its public IP), and a target stack to point at. No box yet? The **[Deploy / Landing Zone](/docs/deploy/)** page stands one up with a single `docker compose up`.
 
@@ -72,7 +72,7 @@ flareover prepare zone.snapshot.json \
 
 This writes the deployable artifacts (Caddyfile, caddy-waf rules, PowerDNS zone, …) **plus a `MIGRATION.md`** report: a table of every element found and exactly what it became (1:1 AUTO / answered-ASK / MANUAL). `--validate` proves the generated Caddyfile and zone actually parse.
 
-> Generation is a **pure function** of `snapshot + decisions.lock`: run it twice, get byte-identical config. Review `./out` in `git` before anything goes live. (The one exception is secret material, which cannot be derived from the inputs: `--mesh-edge` generates WireGuard keys on the *first* run and reuses them from `<out>/mesh` afterwards, so re-running still diffs clean. See [The Contract](/docs/the-contract/).)
+> Generation is a **pure function** of `snapshot + decisions.lock`: run it twice, get byte-identical config. Review `./out` in `git` before anything goes live — **except `<out>/mesh/*.wg0.conf`, which carry WireGuard private keys**. `prepare` writes a `.gitignore` beside them for exactly this reason; keep the rest of `./out` in a private repository anyway. (Those keys are the one thing not derived from the inputs: `--mesh-edge` generates them on the *first* run and reuses them afterwards, so re-running still diffs clean. See [The Contract](/docs/the-contract/).)
 
 `prepare` exits `10` if the report still contains MANUAL items and `11` if it contains ASK items, and prints the MANUAL list. The artifacts are written either way — they are the AUTO plus answered-ASK surface and they are correct — but the exit code tells you the migration is not complete.
 

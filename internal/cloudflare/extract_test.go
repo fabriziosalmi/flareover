@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 const testZoneID = "0123456789abcdef0123456789abcdef"
@@ -175,4 +176,92 @@ func TestListZonesPaged(t *testing.T) {
 	if len(zs) != 2 || zs[0].Name != "a.example" || zs[1].Name != "b.example" {
 		t.Errorf("zones = %+v, want both pages", zs)
 	}
+}
+
+// A throttled request used to be indistinguishable from a malformed one: 429
+// fell through to the generic "API error" branch, so the surface became an
+// extraction gap whose remedy text told the operator to widen a token that was
+// already wide enough. Nothing retried, either, so a transient limit
+// permanently reduced that run's coverage.
+func TestRateLimitedRequestsAreRetriedThenNamed(t *testing.T) {
+	fastBackoff(t)
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls < 3 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte(env(`{"id":"z1","name":"example.com"}`)))
+	}))
+	defer srv.Close()
+
+	c := NewClient("tok")
+	c.BaseURL = srv.URL
+	var out struct{ Name string }
+	if err := c.get(context.Background(), "/zones/z1", &out); err != nil {
+		t.Fatalf("a 429 that later succeeds should be retried, got: %v", err)
+	}
+	if calls != 3 {
+		t.Errorf("calls = %d, want 3 (two 429s then the answer)", calls)
+	}
+	if out.Name != "example.com" {
+		t.Errorf("result not decoded after the retry: %+v", out)
+	}
+}
+
+func TestPersistentRateLimitSaysWhatToDo(t *testing.T) {
+	fastBackoff(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	c := NewClient("tok")
+	c.BaseURL = srv.URL
+	err := c.get(context.Background(), "/zones/z1", nil)
+	if err == nil {
+		t.Fatal("a persistent 429 returned no error")
+	}
+	// The remedy for a rate limit is to wait, not to widen the token.
+	if !strings.Contains(err.Error(), "429") || !strings.Contains(err.Error(), "re-run") {
+		t.Errorf("the error does not name the cause or the remedy: %v", err)
+	}
+	if strings.Contains(err.Error(), "scope") {
+		t.Errorf("a rate limit was reported as a permissions problem: %v", err)
+	}
+}
+
+// A response over the limit used to be truncated silently and then fail to
+// parse, so a very large zone reported "unexpected end of JSON input".
+func TestAnOversizedResponseIsAnErrorNotATruncation(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		buf := make([]byte, 1<<20)
+		for i := range buf {
+			buf[i] = 'x'
+		}
+		for written := 0; written <= maxBody; written += len(buf) {
+			if _, err := w.Write(buf); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	c := NewClient("tok")
+	c.BaseURL = srv.URL
+	err := c.get(context.Background(), "/zones/z1", nil)
+	if err == nil || !strings.Contains(err.Error(), "limit") {
+		t.Errorf("an oversized response should name the limit, got: %v", err)
+	}
+}
+
+// fastBackoff shrinks the retry wait for a test that is proving the retry
+// happens, not that it waits a second.
+func fastBackoff(t *testing.T) {
+	t.Helper()
+	prev := backoff
+	backoff = func(int) time.Duration { return time.Millisecond }
+	t.Cleanup(func() { backoff = prev })
 }

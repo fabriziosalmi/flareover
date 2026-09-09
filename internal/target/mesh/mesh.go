@@ -243,6 +243,20 @@ func GenerateWireGuard(cfg Config) ([]target.Artifact, error) {
 	})
 
 	arts = append(arts, target.Artifact{Path: "mesh/README.md", Content: []byte(readme(cfg))})
+
+	// The protection has to travel with the keys. The docs tell an operator to
+	// review ./out in git — that is the point of a deterministic generator —
+	// and this is the one directory in it that must not be committed. The
+	// repository's own .gitignore covers /out/ but only protects a run made
+	// inside a clone of flareover itself, not the per-migration repository the
+	// docs describe.
+	arts = append(arts, target.Artifact{
+		Path: "mesh/.gitignore",
+		Content: []byte("# These files carry WireGuard PRIVATE KEYS. Do not commit them:\n" +
+			"# a key in a git history survives every later rotation.\n" +
+			"*.wg0.conf\n"),
+		Note: "keeps the private keys out of version control",
+	})
 	return arts, nil
 }
 
@@ -254,6 +268,12 @@ func readme(cfg Config) string {
 	b.WriteString("tunnel agent does (cloudflared → WireGuard).\n\n")
 
 	fmt.Fprintf(&b, "Topology: %d public edge node(s) → one origin at `%s`.\n\n", len(cfg.Edges), cfg.OriginWGIP)
+
+	b.WriteString("## These files are secrets\n\n")
+	b.WriteString("`*.wg0.conf` carry WireGuard **private keys**. They are written `0600` and a\n")
+	b.WriteString("`.gitignore` beside them excludes them, but if you copy them elsewhere the\n")
+	b.WriteString("protection does not follow: a key committed to a git history survives every\n")
+	b.WriteString("later `prepare --rotate-mesh-keys`.\n\n")
 
 	b.WriteString("## Bring it up\n\n")
 	b.WriteString("On each edge node (public):\n")

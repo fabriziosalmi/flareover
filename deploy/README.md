@@ -50,6 +50,24 @@ flareover storage buckets.json --out ./out && sh ./out/minio/provision.sh
 Caddy live-reloads the bind-mounted Caddyfile; re-run `prepare --out ./out` and it
 picks up the change.
 
+## Keep the guard running
+
+After the cutover the guard is the entire recovery mechanism, and started from a
+shell it dies with a closed terminal, an SSH drop or a reboot — silently, since
+a guard that is quietly healthy and a guard that is gone produce the same absent
+output. [`flareover-guard.service`](flareover-guard.service) supervises it:
+
+```sh
+sudo cp flareover-guard.service /etc/systemd/system/
+sudo systemctl edit flareover-guard     # set FLAREOVER_GUARD_URL and the rollback hook
+sudo systemctl enable --now flareover-guard
+systemctl is-active flareover-guard     # the answer to "is anything still watching?"
+```
+
+It runs with `--keep-watching` (the default fire-once behaviour is right for a
+CI gate, not for a watchdog) and `--log-json`, so journald gets structured
+records including `trigger-completed` / `trigger-failed` with the elapsed time.
+
 ## Back it up
 
 The seven volumes are not equal, and which is which is not guessable. Three hold

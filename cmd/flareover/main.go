@@ -1142,6 +1142,27 @@ func cmdGuard(args []string) int {
 			emit("unhealthy", s, nil)
 		}
 	}
+	// Resolve the shell before the watch starts, not when the rollback fires.
+	// `bash` was exec'd by name with no LookPath, in the one command whose whole
+	// purpose is to run when things are already broken — so on Alpine, a
+	// distroless image or a minimal Debian the guard would watch happily for
+	// hours and only discover the missing shell at the moment the site was
+	// already down. Every other external binary in this tree is resolved this
+	// way first (internal/validate, internal/doctor).
+	shell := ""
+	if onUnhealthy != "" {
+		for _, cand := range []string{"bash", "sh"} {
+			if p, err := exec.LookPath(cand); err == nil {
+				shell = p
+				break
+			}
+		}
+		if shell == "" {
+			fmt.Fprintln(os.Stderr, "flareover guard: --on-unhealthy needs bash or sh on PATH")
+			return exitUsage
+		}
+	}
+
 	onFail := func(reason string) error {
 		now := guard.Status{At: time.Now(), Reason: reason, ConsecutiveFails: fails}
 		emit("threshold-reached", now, nil)
@@ -1149,14 +1170,29 @@ func cmdGuard(args []string) int {
 			emit("trigger-skipped", now, map[string]any{"note": "no --on-unhealthy set; alerting only"})
 			return nil
 		}
-		emit("trigger-running", now, map[string]any{"command": onUnhealthy})
-		cmd := exec.Command("bash", "-c", onUnhealthy) // #nosec G204: the operator's own --on-unhealthy hook, by design
+		emit("trigger-running", now, map[string]any{"command": onUnhealthy, "shell": shell})
+		cmd := exec.Command(shell, "-c", onUnhealthy) // #nosec G204: the operator's own --on-unhealthy hook, by design
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		// Detach the trigger from this process's signal group. A Ctrl-C aimed at
 		// the watchdog would otherwise also hit a rollback already in flight,
 		// interrupting the very thing the guard exists to complete.
 		detachProcessGroup(cmd)
-		return cmd.Run()
+
+		// Record how it ended. Without this the log showed the most
+		// consequential action the tool takes starting and never said whether
+		// it finished — and under --keep-watching nothing else ever would,
+		// because the loop resets and carries on emitting health ticks.
+		started := time.Now()
+		err := cmd.Run()
+		done := guard.Status{At: time.Now(), Reason: reason, ConsecutiveFails: fails}
+		extra := map[string]any{"elapsed": time.Since(started).Round(time.Millisecond).String()}
+		if err != nil {
+			extra["error"] = err.Error()
+			emit("trigger-failed", done, extra)
+			return err
+		}
+		emit("trigger-completed", done, extra)
+		return nil
 	}
 
 	// The watch ends for a reason, and the reason is worth recording: without a

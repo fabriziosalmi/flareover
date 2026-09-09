@@ -125,3 +125,39 @@ func TestACurrentSnapshotIsNotFlaggedAsStale(t *testing.T) {
 		}
 	}
 }
+
+// warn() is called for every non-fatal read failure, so one remedy text covered
+// four different causes and named the first for all of them. An operator
+// throttled halfway through an account-wide extraction got a list of MANUAL
+// items each telling them to widen a token that was already wide enough.
+func TestTheGapRemedyMatchesTheCause(t *testing.T) {
+	cases := []struct {
+		detail    string
+		wantSays  string
+		wantNever string
+	}{
+		{"rulesets: HTTP 429 rate limited after 4 attempts: wait for the limit to reset and re-run", "wait for the limit", "token that can read"},
+		{"page rules: HTTP 503 from the API after 4 attempts (transient): re-run", "transiently", "token that can read"},
+		{"R2 buckets + Access apps: skipped (set CLOUDFLARE_ACCOUNT_ID)", "CLOUDFLARE_ACCOUNT_ID", "token that can read"},
+		{"ip access rules: HTTP 403 (token missing scope?)", "token that can read", "rate limited"},
+	}
+	for _, c := range cases {
+		rep := Classify(cf.Snapshot{
+			SchemaVersion:  cf.CurrentSchemaVersion,
+			Zone:           cf.Zone{Name: "example.com"},
+			ExtractionGaps: []cf.Gap{{Surface: "surface", Detail: c.detail}},
+		})
+		var got string
+		for _, f := range rep.Findings {
+			if f.Kind == "extraction-gap" {
+				got = f.Rationale
+			}
+		}
+		if !strings.Contains(got, c.wantSays) {
+			t.Errorf("detail %q: rationale should say %q, got: %s", c.detail, c.wantSays, got)
+		}
+		if strings.Contains(got, c.wantNever) {
+			t.Errorf("detail %q: rationale wrongly says %q", c.detail, c.wantNever)
+		}
+	}
+}
