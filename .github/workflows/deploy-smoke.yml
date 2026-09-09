@@ -44,6 +44,11 @@ jobs:
             echo "CERTMATE_TOKEN=$(openssl rand -hex 32)"
             echo "MINIO_ROOT_USER=flareover"
             echo "MINIO_ROOT_PASSWORD=$(openssl rand -hex 24)"
+            # The runner has systemd-resolved holding 127.0.0.53:53, so
+            # publishing DNS on 0.0.0.0 fails to bind — the same collision an
+            # operator hits on any Ubuntu host, which is how this knob came to
+            # exist. 127.0.0.1 is free there and here.
+            echo "DNS_BIND=127.0.0.1"
           } >> .env
 
       - name: Bring up PowerDNS and MinIO

@@ -79,8 +79,14 @@ services:
     volumes:
       - pdns-data:/var/lib/powerdns
     ports:
-      - "53:53/udp"
-      - "53:53/tcp"
+      # DNS_BIND exists because of a conflict most hosts have: systemd-resolved
+      # (Ubuntu, Debian, Fedora) listens on 127.0.0.53:53, and publishing on
+      # 0.0.0.0 collides with it — "failed to bind host port for 0.0.0.0:53:
+      # address already in use", before PowerDNS gets to say anything. Set
+      # DNS_BIND to the host's public address, or free 53 first. See
+      # deploy/README.md § Gotchas.
+      - "${DNS_BIND:-0.0.0.0}:53:53/udp"
+      - "${DNS_BIND:-0.0.0.0}:53:53/tcp"
       - "127.0.0.1:8081:8081" # API: provision --pdns-url http://localhost:8081
     networks: [internal]
     security_opt: [no-new-privileges:true]

@@ -50,6 +50,31 @@ flareover storage buckets.json --out ./out && sh ./out/minio/provision.sh
 Caddy live-reloads the bind-mounted Caddyfile; re-run `prepare --out ./out` and it
 picks up the change.
 
+## Gotchas
+
+**Port 53 is probably already taken.** Ubuntu, Debian and Fedora run
+systemd-resolved, whose stub listener holds `127.0.0.53:53`. Publishing DNS on
+`0.0.0.0:53` collides with it and the container never starts:
+
+```
+Error response from daemon: failed to set up container networking: driver failed
+programming external connectivity ... failed to bind host port for 0.0.0.0:53:
+address already in use
+```
+
+Two ways out. Bind only the address that will actually serve DNS —
+`DNS_BIND=203.0.113.10` in `.env` — or free port 53 on the host, which is what
+an edge dedicated to this stack wants:
+
+```sh
+sudo mkdir -p /etc/systemd/resolved.conf.d
+printf '[Resolve]\nDNSStubListener=no\n' | sudo tee /etc/systemd/resolved.conf.d/no-stub.conf
+sudo ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+sudo systemctl restart systemd-resolved
+```
+
+(Found by the smoke workflow, on a runner that has exactly this configuration.)
+
 ## Keep the guard running
 
 After the cutover the guard is the entire recovery mechanism, and started from a
