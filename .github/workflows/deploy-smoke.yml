@@ -110,8 +110,51 @@ jobs:
           fi
           echo "refused as expected (HTTP $code)"
 
-      - name: MinIO answers
+      # The backup procedure in deploy/README.md had a documented restore that
+      # nothing had ever executed, on the volume holding the DNSSEC signing
+      # keys. These steps run it: back up, destroy, restore, and assert the zone
+      # survived — which also proves the part most likely to be wrong, that
+      # pdns-init leaves a restored database alone instead of treating it as
+      # absent.
+      - name: Back up pdns-data the way the README says
+        working-directory: deploy
         run: |
+          mkdir -p backup
+          docker compose stop powerdns
+          docker run --rm -v flareover_pdns-data:/data -v "$PWD/backup:/backup" alpine             tar czf /backup/pdns-data.tgz -C /data .
+          test -s backup/pdns-data.tgz
+          docker compose start powerdns
+
+      - name: Destroy and restore, then assert the zone survived
+        working-directory: deploy
+        run: |
+          set -a; . ./.env; set +a
+          docker compose down -v
+          docker volume create flareover_pdns-data >/dev/null
+          docker run --rm -v flareover_pdns-data:/data -v "$PWD/backup:/backup" alpine             tar xzf /backup/pdns-data.tgz -C /data
+          docker compose up -d powerdns
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /tmp/zones.json -w '%{http_code}'               -H "X-API-Key: $PDNS_API_KEY" http://127.0.0.1:8081/api/v1/servers/localhost/zones || true)
+            [ "$code" = "200" ] && break
+            sleep 2
+          done
+          if [ "$code" != "200" ]; then
+            echo "::error::PowerDNS did not come back after a restore (last HTTP $code)"
+            docker compose logs pdns-init powerdns
+            exit 1
+          fi
+          if ! grep -q 'smoke.example' /tmp/zones.json; then
+            echo "::error::the restored database does not contain the zone that was backed up"
+            cat /tmp/zones.json
+            docker compose logs pdns-init
+            exit 1
+          fi
+          echo "restored, and the zone is still there"
+
+      - name: MinIO answers
+        working-directory: deploy
+        run: |
+          docker compose up -d minio
           for i in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9000/minio/health/live || true)
             [ "$code" = "200" ] && break

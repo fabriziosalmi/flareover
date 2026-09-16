@@ -194,3 +194,18 @@ func TestManagedTargetsExplainDNSSEC(t *testing.T) {
 		}
 	}
 }
+
+// Idempotent drives what `provision` tells an operator after a partial failure,
+// so it has to match each backend's real write semantics rather than be a
+// hopeful default. Leaseweb is the one that replaces by delete-then-create.
+func TestIdempotenceMatchesTheBackendsWriteSemantics(t *testing.T) {
+	for _, tgt := range All() {
+		if tgt.GenerateOnly() {
+			continue
+		}
+		want := tgt.Key != "leaseweb"
+		if tgt.Idempotent != want {
+			t.Errorf("%s: Idempotent = %v, want %v", tgt.Key, tgt.Idempotent, want)
+		}
+	}
+}

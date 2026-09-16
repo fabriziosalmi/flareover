@@ -361,10 +361,11 @@ func (c *Client) extractAccess(ctx context.Context, zoneName string) ([]AccessAp
 	var wg sync.WaitGroup
 	for i, a := range mine {
 		out[i] = AccessApp{Name: a.Name, Domain: a.Domain}
+		// Acquire before spawning: see the note in objstore's fan-out.
+		sem <- struct{}{}
 		wg.Add(1)
 		go func(i int, id string) {
 			defer wg.Done()
-			sem <- struct{}{}
 			defer func() { <-sem }()
 			var pols []json.RawMessage
 			if err := c.get(ctx, "/accounts/"+c.AccountID+"/access/apps/"+id+"/policies", &pols); err == nil {

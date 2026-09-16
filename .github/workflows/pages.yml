@@ -72,18 +72,30 @@ jobs:
       # that: it moves the diligence one step, to remembering to run the script.
       # The coverage matrix and the sovereignty tiers are defended by tests that
       # fail on drift; this does the same for the wiki.
-      - name: The wiki is in sync with the canonical docs
-        continue-on-error: true # the wiki repo may not be cloneable from CI
+      # Two different things were being conflated: "could not check" and
+      # "checked, and it has drifted". Both passed, so the drift this exists to
+      # catch still reached readers on a green build — the same position the
+      # wiki was in before it was made generatable. The clone may genuinely fail
+      # from CI, so that stays soft; the drift does not.
+      - name: Clone the wiki
+        id: wiki
         run: |
-          git clone --depth 1 https://github.com/${{ github.repository }}.wiki.git /tmp/wiki 2>/dev/null || {
+          if git clone --depth 1 https://github.com/${{ github.repository }}.wiki.git /tmp/wiki 2>/dev/null; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
             echo "::notice::wiki not cloneable from CI; skipping the drift check"
-            exit 0
-          }
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: The wiki is in sync with the canonical docs
+        if: steps.wiki.outputs.ok == 'true'
+        run: |
           node website/scripts/sync-wiki.mjs /tmp/wiki
           if ! git -C /tmp/wiki diff --quiet; then
-            echo "::warning::the wiki has drifted from website/src/content/docs. Regenerate it:"
+            echo "::error::the wiki has drifted from website/src/content/docs. Regenerate it:"
             echo "  node website/scripts/sync-wiki.mjs <wiki-clone> && cd <wiki-clone> && git commit -am 'docs: sync' && git push"
             git -C /tmp/wiki diff --stat
+            exit 1
           fi
 
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0

@@ -27,7 +27,7 @@ CertMate, …) on EU infrastructure. Its one rule: **never emit config that sile
 That last part is the whole point: a migration you can trust, because the tool is honest about exactly
 what it can and can't carry over.
 
-**Contents:** [The contract](#the-contract-no-silent-surprises) · [How it works](#how-it-works--five-phases) · [Target stack](#target-stack-eu-sovereign) · [Install](#install) · [Usage](#usage) · [Status](#status) · [Architecture](docs/architecture.md) · [Contributing](CONTRIBUTING.md)
+**Contents:** [The contract](#the-contract-no-silent-surprises) · [How it works](#how-it-works--five-phases) · [Target stack](#target-stack-eu-sovereign) · [Install](#install) · [Usage](#usage) · [Status](#status) · [Architecture](docs/architecture.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
 
 📖 **Full documentation lives at [flareover.com/docs](https://www.flareover.com/docs/)**: [Quick Start](https://www.flareover.com/docs/quick-start/), [Coverage Matrix](https://www.flareover.com/docs/coverage-matrix/), [DNS Targets](https://www.flareover.com/docs/dns-targets/), and the [FAQ](https://www.flareover.com/docs/faq/).
 
