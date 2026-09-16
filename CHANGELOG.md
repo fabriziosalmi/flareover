@@ -9,6 +9,10 @@ existing flag without a deprecation first.
 
 ## Unreleased
 
+_Nothing yet._
+
+## v0.4.0 — 2026-09-16
+
 ### Breaking
 
 - **`extract` now exits `10` on a partial capture.** It previously exited `0`
