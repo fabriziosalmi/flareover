@@ -41,6 +41,9 @@ existing flag without a deprecation first.
   control plane. It is now restricted to loopback plus the declared subnet.
 - Every deploy service runs with `no-new-privileges` and `cap_drop: ALL`, with
   capabilities added back only where the image's entrypoint needs them.
+- **The deploy stack could not pull MinIO at all**: `minio/minio` no longer
+  resolves on Docker Hub. `MINIO_IMAGE` now points at `quay.io/minio/minio`,
+  where MinIO actually publishes.
 - Service images are pinned in `.env` instead of floating on `:latest`. PowerDNS
   moves to 4.9.17; 4.9.9 printed "Security Update Mandatory" on every start.
 - `prepare` writes a `mesh/.gitignore` beside the generated WireGuard keys, and
