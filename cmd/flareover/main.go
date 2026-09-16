@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -473,6 +474,11 @@ func cmdExtract(args []string) int {
 
 	client := cf.NewClient(token)
 	client.AccountID = os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	// Time it. The phases that dominate wall time are network-bound and print
+	// nothing while they run, so a slow zone and a stalled command looked the
+	// same — and nobody had a baseline against which a regression, or the
+	// bounded fan-outs added for exactly this reason, would be visible.
+	started := time.Now()
 	snap, err := client.Extract(rootCtx, zoneRef)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "flareover extract: %v\n", err)
@@ -489,8 +495,9 @@ func cmdExtract(args []string) int {
 	for _, w := range client.Warnings {
 		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 	}
-	fmt.Fprintf(os.Stderr, "flareover extract (%s): %d DNS, %d rulesets, %d managed, %d page rules, %d workers\n",
-		snap.Zone.Name, len(snap.DNSRecords), len(snap.Rulesets), len(snap.ManagedRules), len(snap.PageRules), len(snap.Workers))
+	fmt.Fprintf(os.Stderr, "flareover extract (%s): %d DNS, %d rulesets, %d managed, %d page rules, %d workers in %s\n",
+		snap.Zone.Name, len(snap.DNSRecords), len(snap.Rulesets), len(snap.ManagedRules), len(snap.PageRules), len(snap.Workers),
+		took(started))
 
 	if outPath == "" || outPath == "-" {
 		if _, err := os.Stdout.Write(body); err != nil {
@@ -573,44 +580,20 @@ func cmdCost(args []string) int {
 func cmdStorage(args []string) int {
 	var path, decisionsPath, outDir, endpoint, alias, s3Endpoint, s3Region, dest, region string
 	var extractR2, extractS3 bool
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch a {
-		case "--extract-r2":
-			extractR2 = true
-		case "--extract-s3":
-			extractS3 = true
-		case "--decisions", "--out", "--minio-endpoint", "--minio-alias", "--s3-endpoint", "--s3-region", "--dest", "--region":
-			if i+1 >= len(args) {
-				fmt.Fprintf(os.Stderr, "flareover storage: %s needs a value\n", a)
-				return 2
-			}
-			i++
-			switch a {
-			case "--decisions":
-				decisionsPath = args[i]
-			case "--out":
-				outDir = args[i]
-			case "--minio-endpoint":
-				endpoint = args[i]
-			case "--minio-alias":
-				alias = args[i]
-			case "--s3-endpoint":
-				s3Endpoint = args[i]
-			case "--s3-region":
-				s3Region = args[i]
-			case "--dest":
-				dest = args[i]
-			case "--region":
-				region = args[i]
-			}
-		default:
-			if len(a) > 0 && a[0] == '-' {
-				fmt.Fprintf(os.Stderr, "flareover storage: unknown flag %q\n", a)
-				return 2
-			}
-			path = a
-		}
+	if !newFlagSet("storage").
+		arg(&path).
+		str("--decisions", &decisionsPath).
+		str("--out", &outDir).
+		str("--minio-endpoint", &endpoint).
+		str("--minio-alias", &alias).
+		str("--s3-endpoint", &s3Endpoint).
+		str("--s3-region", &s3Region).
+		str("--dest", &dest).
+		str("--region", &region).
+		bool_("--extract-r2", &extractR2).
+		bool_("--extract-s3", &extractS3).
+		parse(args) {
+		return exitUsage
 	}
 	var snap objstore.Snapshot
 	if extractS3 {
@@ -647,12 +630,9 @@ func cmdStorage(args []string) int {
 			fmt.Fprintln(os.Stderr, "flareover storage: need a snapshot JSON, or --extract-r2 for a live R2 account")
 			return 2
 		}
-		b, err := os.ReadFile(path)
+		var err error
+		snap, err = loadBuckets(path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "flareover storage: %v\n", err)
-			return 1
-		}
-		if err := json.Unmarshal(b, &snap); err != nil {
 			fmt.Fprintf(os.Stderr, "flareover storage: %v\n", err)
 			return 1
 		}
@@ -910,45 +890,32 @@ func cmdPresent(args []string) int {
 func cmdProvision(args []string) int {
 	var snapPath, decisionsPath, nsList, edgeIP string
 	var pdnsURL, cmURL, cmToken, ca, originCA, cmAccount, cmDNS, dnsTarget string
-	for i := 0; i < len(args); i++ {
-		a := args[i]
+
+	// The refusal comes first and by name: these two used to be accepted, and a
+	// script carrying them must fail loudly rather than have the flag parser
+	// report it as merely unknown.
+	for _, a := range args {
 		if a == "--pdns-key" || a == "--certmate-token" {
 			fmt.Fprintf(os.Stderr, "flareover provision: %s is no longer accepted (it would expose the secret on argv). Set PDNS_API_KEY / CERTMATE_TOKEN in the environment instead\n", a)
-			return 2
-		}
-		next := func() string { i++; return args[i] }
-		if i+1 >= len(args) && strings.HasPrefix(a, "--") {
-			fmt.Fprintf(os.Stderr, "flareover provision: %s needs a value\n", a)
-			return 2
-		}
-		switch a {
-		case "--snapshot":
-			snapPath = next()
-		case "--decisions":
-			decisionsPath = next()
-		case "--edge-ip":
-			edgeIP = next()
-		case "--nameservers":
-			nsList = next()
-		case "--dns":
-			dnsTarget = next()
-		case "--pdns-url":
-			pdnsURL = next()
-		case "--certmate-url":
-			cmURL = next()
-		case "--certmate-account":
-			cmAccount = next()
-		case "--certmate-dns":
-			cmDNS = next()
-		case "--ca":
-			ca = next()
-		case "--origin-ca":
-			originCA = next()
-		default:
-			fmt.Fprintf(os.Stderr, "flareover provision: unknown arg %q\n", a)
-			return 2
+			return exitUsage
 		}
 	}
+	if !newFlagSet("provision").
+		str("--snapshot", &snapPath).
+		str("--decisions", &decisionsPath).
+		str("--edge-ip", &edgeIP).
+		str("--nameservers", &nsList).
+		str("--dns", &dnsTarget).
+		str("--pdns-url", &pdnsURL).
+		str("--certmate-url", &cmURL).
+		str("--certmate-account", &cmAccount).
+		str("--certmate-dns", &cmDNS).
+		str("--ca", &ca).
+		str("--origin-ca", &originCA).
+		parse(args) {
+		return exitUsage
+	}
+
 	// PowerDNS/CertMate secrets come from the environment only, never argv, like
 	// every other backend, so they never leak via ps / /proc / shell history.
 	cmToken = os.Getenv("CERTMATE_TOKEN")
@@ -1000,6 +967,12 @@ func cmdProvision(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return exitUsage
 	}
+	if err := checkCA("provision", ca); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitUsage
+	}
+	warnPlaintextTarget("provision", "--pdns-url", pdnsURL)
+	warnPlaintextTarget("provision", "--certmate-url", cmURL)
 	reportUnknownDecisions("provision", decisions, classify.Classify(snap))
 	built, err := plan.Build(snap, plan.Options{Decisions: decisions, CA: ca, OriginCA: originCA, EdgeIP: edgeIP})
 	if err != nil {
@@ -1025,7 +998,18 @@ func cmdProvision(args []string) int {
 			return 2
 		}
 		if err := dp.Provision(ctx, built.DNS); err != nil {
-			pr.Fail(0, err.Error())
+			// The error names the rrset it failed on; what the operator asks
+			// next is how much of the zone preceded it and whether re-running
+			// is safe. The first half we cannot answer without a per-backend
+			// transcript; the second we can, because the backend's write
+			// semantics are known.
+			msg := err.Error()
+			if dnsT.Idempotent {
+				msg += fmt.Sprintf(" — records before it may already be applied; re-running `provision --dns %s` is safe (this backend upserts)", dnsT.Key)
+			} else {
+				msg += fmt.Sprintf(" — records before it may already be applied; %s replaces by delete-then-create, so a re-run briefly removes records that are already correct", dnsT.Label)
+			}
+			pr.Fail(0, msg)
 			return 1
 		}
 		detail := fmt.Sprintf("%d records (%s)", len(built.DNS.Records), dnsT.Label)
@@ -1212,7 +1196,13 @@ func cmdGuard(args []string) int {
 			emit("trigger-skipped", now, map[string]any{"note": "no --on-unhealthy set; alerting only"})
 			return nil
 		}
-		emit("trigger-running", now, map[string]any{"command": onUnhealthy, "shell": shell})
+		// The command is NOT echoed. A rollback hook is exactly the kind of
+		// one-liner that carries a token — a curl to a provider API, a webhook
+		// URL with a key in the query string — and under --log-json this record
+		// is shipped to a collector and retained, turning an exposure bounded
+		// by the process table into one that persists in indexed storage. The
+		// first token plus a length is enough to tell two hooks apart.
+		emit("trigger-running", now, map[string]any{"command": hookLabel(onUnhealthy), "shell": shell})
 		cmd := exec.Command(shell, "-c", onUnhealthy) // #nosec G204: the operator's own --on-unhealthy hook, by design
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		// Detach the trigger from this process's signal group. A Ctrl-C aimed at
@@ -1265,60 +1255,25 @@ func cmdPrepare(args []string) int {
 	var path, decisionsPath, edgeIP, ca, originCA, stackID, dnsTarget, outDir, blocklists, egressAllow, edgeProvider string
 	var meshEdges []string
 	var egressDeny, egressSSLBump, doValidate, rotateMeshKeys bool
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch a {
-		case "--egress-deny":
-			egressDeny = true
-			continue
-		case "--egress-ssl-bump":
-			egressSSLBump = true
-			continue
-		case "--validate":
-			doValidate = true
-			continue
-		case "--rotate-mesh-keys":
-			rotateMeshKeys = true
-			continue
-		}
-		switch a {
-		case "--decisions", "--edge-ip", "--ca", "--origin-ca", "--stack", "--dns", "--out", "--blocklists", "--egress-allow", "--mesh-edge", "--edge-provider":
-			if i+1 >= len(args) {
-				fmt.Fprintf(os.Stderr, "flareover prepare: %s needs a value\n", a)
-				return 2
-			}
-			i++
-			switch a {
-			case "--decisions":
-				decisionsPath = args[i]
-			case "--edge-ip":
-				edgeIP = args[i]
-			case "--ca":
-				ca = args[i]
-			case "--origin-ca":
-				originCA = args[i]
-			case "--stack":
-				stackID = args[i]
-			case "--dns":
-				dnsTarget = args[i]
-			case "--out":
-				outDir = args[i]
-			case "--blocklists":
-				blocklists = args[i]
-			case "--egress-allow":
-				egressAllow = args[i]
-			case "--mesh-edge":
-				meshEdges = append(meshEdges, args[i])
-			case "--edge-provider":
-				edgeProvider = args[i]
-			}
-		default:
-			if len(a) > 0 && a[0] == '-' {
-				fmt.Fprintf(os.Stderr, "flareover prepare: unknown flag %q\n", a)
-				return 2
-			}
-			path = a
-		}
+	if !newFlagSet("prepare").
+		arg(&path).
+		str("--decisions", &decisionsPath).
+		str("--edge-ip", &edgeIP).
+		str("--ca", &ca).
+		str("--origin-ca", &originCA).
+		str("--stack", &stackID).
+		str("--dns", &dnsTarget).
+		str("--out", &outDir).
+		str("--blocklists", &blocklists).
+		str("--egress-allow", &egressAllow).
+		str("--edge-provider", &edgeProvider).
+		list("--mesh-edge", &meshEdges).
+		bool_("--egress-deny", &egressDeny).
+		bool_("--egress-ssl-bump", &egressSSLBump).
+		bool_("--validate", &doValidate).
+		bool_("--rotate-mesh-keys", &rotateMeshKeys).
+		parse(args) {
+		return exitUsage
 	}
 	if path == "" {
 		fmt.Fprintln(os.Stderr, "flareover prepare: need a snapshot JSON path")
@@ -1336,6 +1291,10 @@ func cmdPrepare(args []string) int {
 		return 1
 	}
 	if err := checkEdgeIP("prepare", edgeIP); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitUsage
+	}
+	if err := checkCA("prepare", ca); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return exitUsage
 	}
@@ -1674,6 +1633,12 @@ func cmdDoctor(args []string) int {
 	o.PDNSKey = os.Getenv("PDNS_API_KEY")
 	o.CertMateToken = os.Getenv("CERTMATE_TOKEN")
 
+	// doctor is the pre-flight: it probes these URLs before provisioning does,
+	// so it is the right place to say that a credential is about to cross the
+	// network in cleartext.
+	warnPlaintextTarget("doctor", "--pdns-url", o.PDNSURL)
+	warnPlaintextTarget("doctor", "--certmate-url", o.CertMateURL)
+
 	checks := doctor.Run(rootCtx, o)
 	fmt.Print(render.Doctor(checks, render.Enabled(os.Stdout)))
 	if len(checks) == 0 {
@@ -1724,6 +1689,145 @@ func loadDecisions(path string) (map[string]string, error) {
 		return nil, fmt.Errorf("parsing decisions %s: %w", path, err)
 	}
 	return m, nil
+}
+
+// hookLabel identifies a rollback hook without reproducing it. The first word
+// is the program being run, which is what distinguishes one hook from another
+// in a log; the length disambiguates two invocations of the same program.
+func hookLabel(cmd string) string {
+	f := strings.Fields(cmd)
+	if len(f) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s (%d bytes)", f[0], len(cmd))
+}
+
+// --- shared flag parsing ----------------------------------------------------
+
+// flagSet is a small argument parser for the phase verbs.
+//
+// Every verb repeated the same nested switch: a list of the flags that take a
+// value, a bounds check for the missing-value case, then a second switch
+// assigning each one. That is most of why cmdPrepare measured CCN 55 and
+// cmdStorage 51 — the parsing, not the orchestration — and it meant the same
+// off-by-one had to be got right once per verb. Declaring the flags as a table
+// leaves each verb with its orchestration and one call.
+//
+// Behaviour is deliberately identical to what it replaces: an unknown flag and
+// a flag missing its value both print `flareover <verb>: …` and exit 2, and the
+// first non-flag argument becomes the positional if the verb takes one.
+type flagSet struct {
+	verb  string
+	strs  map[string]*string
+	bools map[string]*bool
+	lists map[string]*[]string
+	// positional receives the first bare argument (a snapshot path, usually).
+	// Nil for verbs that take none.
+	positional *string
+}
+
+func newFlagSet(verb string) *flagSet {
+	return &flagSet{
+		verb:  verb,
+		strs:  map[string]*string{},
+		bools: map[string]*bool{},
+		lists: map[string]*[]string{},
+	}
+}
+
+func (f *flagSet) str(name string, into *string) *flagSet    { f.strs[name] = into; return f }
+func (f *flagSet) bool_(name string, into *bool) *flagSet    { f.bools[name] = into; return f }
+func (f *flagSet) list(name string, into *[]string) *flagSet { f.lists[name] = into; return f }
+func (f *flagSet) arg(into *string) *flagSet                 { f.positional = into; return f }
+
+// parse returns false when it has already reported a usage error; the caller
+// then returns exitUsage.
+func (f *flagSet) parse(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if p, ok := f.bools[a]; ok {
+			*p = true
+			continue
+		}
+		_, wantsStr := f.strs[a]
+		_, wantsList := f.lists[a]
+		if wantsStr || wantsList {
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "flareover %s: %s needs a value\n", f.verb, a)
+				return false
+			}
+			i++
+			if wantsStr {
+				*f.strs[a] = args[i]
+			} else {
+				*f.lists[a] = append(*f.lists[a], args[i])
+			}
+			continue
+		}
+		if len(a) > 0 && a[0] == '-' {
+			fmt.Fprintf(os.Stderr, "flareover %s: unknown flag %q\n", f.verb, a)
+			return false
+		}
+		if f.positional != nil {
+			*f.positional = a
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "flareover %s: unexpected argument %q\n", f.verb, a)
+		return false
+	}
+	return true
+}
+
+// took renders an elapsed duration at a resolution an operator cares about.
+func took(start time.Time) string {
+	d := time.Since(start)
+	if d < time.Second {
+		return d.Round(time.Millisecond).String()
+	}
+	return d.Round(100 * time.Millisecond).String()
+}
+
+// knownCAs is the set --ca documents. The value travels into ir.Site.TLS.CA
+// and is posted to CertMate as ca_provider, so an unchecked typo fails at
+// issuance time — the point furthest from the mistake and hardest to attribute
+// to it — for a flag whose usage text already names its two values.
+var knownCAs = map[string]bool{"": true, "letsencrypt": true, "actalis": true}
+
+func checkCA(verb, v string) error {
+	if !knownCAs[strings.ToLower(strings.TrimSpace(v))] {
+		return fmt.Errorf("flareover %s: --ca %q is not a known CA (letsencrypt | actalis)", verb, v)
+	}
+	return nil
+}
+
+// warnPlaintextTarget reports a target URL that will carry a credential in
+// cleartext.
+//
+// powerdns.Provisioner sets X-API-Key and certmate.Client sets Authorization on
+// a request built from this value, and nothing examined it: `--pdns-url
+// http://pdns.internal:8081` puts the key that controls the zone's
+// authoritative DNS on the wire in plaintext. The documented examples are all
+// http://localhost, which is safe on the shipped single-host topology and is
+// exactly what makes the pattern easy to carry to a remote host without
+// noticing. A warning rather than a refusal keeps that workflow working while
+// making the remote case a decision.
+func warnPlaintextTarget(verb, flag, raw string) {
+	if strings.TrimSpace(raw) == "" {
+		return
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "http" {
+		return
+	}
+	host := u.Hostname()
+	if host == "localhost" || host == "" {
+		return
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "flareover %s: %s is plain http to a non-local host (%s); the credential will cross the network in cleartext\n",
+		verb, flag, host)
 }
 
 // checkEdgeIP validates --edge-ip before it becomes the content of every
@@ -1781,6 +1885,35 @@ func reportUnknownDecisions(verb string, decisions map[string]string, rep report
 	for _, k := range unknown {
 		fmt.Fprintf(os.Stderr, "flareover %s: decisions key %q matches no question in this snapshot; ignored\n", verb, k)
 	}
+}
+
+// loadBuckets reads an object-storage snapshot with the same three guards
+// loadSnapshot applies to a zone snapshot.
+//
+// This used to be a bare json.Unmarshal twenty lines from a function that
+// decodes strictly, checks a schema version and validates: an unknown field
+// was ignored, so a typo'd key silently became a zero value and a file from
+// another tool was accepted as far as it parsed, and nothing checked the bucket
+// names that are interpolated into the generated `mc` and rclone commands an
+// operator runs as shell.
+func loadBuckets(path string) (objstore.Snapshot, error) {
+	var snap objstore.Snapshot
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return snap, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&snap); err != nil {
+		return snap, fmt.Errorf("parsing buckets %s: %w", path, err)
+	}
+	if err := snap.CheckSchemaVersion(); err != nil {
+		return snap, fmt.Errorf("%s: %w", path, err)
+	}
+	if err := snap.Validate(); err != nil {
+		return snap, fmt.Errorf("%s: %w", path, err)
+	}
+	return snap, nil
 }
 
 func loadSnapshot(path string) (cf.Snapshot, error) {

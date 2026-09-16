@@ -13,9 +13,11 @@ package objstore
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/fabriziosalmi/flareover/internal/report"
+	"github.com/fabriziosalmi/flareover/internal/textguard"
 )
 
 // Snapshot is a provider-native capture of an object-storage account's buckets.
@@ -24,6 +26,79 @@ type Snapshot struct {
 	Source        string   `json:"source"` // "r2" | "s3"
 	Account       string   `json:"account,omitempty"`
 	Buckets       []Bucket `json:"buckets"`
+	// ExtractionGaps are the bucket facets the extractor could not read. Same
+	// contract as cloudflare.Snapshot: a facet that could not be read is not a
+	// facet that is absent, and Classify reports each one MANUAL so the
+	// difference is visible.
+	ExtractionGaps []Gap `json:"extraction_gaps,omitempty"`
+}
+
+// CurrentSchemaVersion is the snapshot shape this build writes.
+//
+//	1 — the original shape.
+//	2 — adds extraction_gaps, so a partial capture says so.
+//
+// This constant exists because the version previously did not: both extractors
+// wrote the literal 1 independently and nothing read it back, which is a label
+// rather than a control. A version only controls compatibility if something
+// declines to proceed on a mismatch.
+const CurrentSchemaVersion = 2
+
+// Gap is one bucket facet the extractor could not read, and why.
+type Gap struct {
+	// Bucket is the bucket the facet belongs to; empty for an account-level gap.
+	Bucket string `json:"bucket,omitempty"`
+	// Facet names what could not be read, e.g. "versioning".
+	Facet  string `json:"facet"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// CheckSchemaVersion refuses a snapshot this build does not understand.
+//
+// 0 is accepted: hand-authored fixtures predate the field and a zero value is
+// indistinguishable from absent. A shape below CurrentSchemaVersion is readable
+// but cannot declare a gap, which Classify reports.
+func (s Snapshot) CheckSchemaVersion() error {
+	switch s.SchemaVersion {
+	case 0, 1, CurrentSchemaVersion:
+		return nil
+	default:
+		return fmt.Errorf("buckets snapshot schema_version %d is not supported by this build (understands up to %d): re-run `flareover storage --extract-s3` or `--extract-r2`",
+			s.SchemaVersion, CurrentSchemaVersion)
+	}
+}
+
+// PredatesGapReporting reports the shape that cannot declare an unread facet.
+func (s Snapshot) PredatesGapReporting() bool { return s.SchemaVersion < CurrentSchemaVersion }
+
+// bucketNameRe is the S3 bucket naming rule, which every destination here
+// enforces: 3-63 chars, lowercase alphanumerics with dots and hyphens, starting
+// and ending alphanumeric. It matters because the name is interpolated into the
+// generated `mc mb` and rclone commands, which an operator runs as shell.
+var bucketNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
+
+// Validate checks a snapshot before any generator interpolates it into a shell
+// script. The zone snapshot has had this since the traversal work; the bucket
+// snapshot reached the same generators with nothing.
+func (s Snapshot) Validate() error {
+	var problems []string
+	note := func(format string, args ...any) {
+		if len(problems) < 20 {
+			problems = append(problems, fmt.Sprintf(format, args...))
+		}
+	}
+	for _, bad := range textguard.FindControlStrings(s, "buckets") {
+		note("%s", bad)
+	}
+	for i, b := range s.Buckets {
+		if !bucketNameRe.MatchString(b.Name) {
+			note("buckets.Buckets[%d].Name %q is not a valid bucket name", i, b.Name)
+		}
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	return fmt.Errorf("buckets snapshot failed validation:\n  - %s", strings.Join(problems, "\n  - "))
 }
 
 // Bucket is one bucket's configuration.
@@ -62,6 +137,9 @@ type LifecycleRule struct {
 func Classify(s Snapshot) report.Report {
 	r := report.Report{Zone: s.Source + ":" + s.Account}
 	add := func(f report.Finding) { r.Findings = append(r.Findings, f) }
+
+	classifyStaleCapture(s, add)
+	classifyExtractionGaps(s, add)
 
 	for _, b := range s.Buckets {
 		// The bucket itself maps cleanly.
@@ -108,6 +186,47 @@ func Classify(s Snapshot) report.Report {
 		}
 	}
 	return r
+}
+
+// classifyExtractionGaps turns every bucket facet the extractor could not read
+// into a MANUAL finding.
+//
+// The four per-bucket reads are best-effort by design: a 404 on ?cors means the
+// bucket genuinely has none. But any other failure used to produce the same
+// zero value, so "versioning is off" and "versioning could not be read" were
+// the same snapshot — and the second one migrates a bucket without versioning
+// while the report calls it covered.
+func classifyExtractionGaps(s Snapshot, add func(report.Finding)) {
+	for _, g := range s.ExtractionGaps {
+		name := g.Facet
+		if g.Bucket != "" {
+			name = g.Bucket + "/" + g.Facet
+		}
+		why := fmt.Sprintf("Extraction could not read this setting, so the snapshot does not describe it: whatever is configured there is NOT covered by this report and was NOT migrated. Re-run the extraction once the cause below is addressed. Cause: %s",
+			gapDetail(g))
+		add(report.Finding{Kind: "extraction-gap", Name: name, Verdict: report.Manual, Rationale: why})
+	}
+}
+
+// classifyStaleCapture reports a snapshot written before gaps could be recorded.
+func classifyStaleCapture(s Snapshot, add func(report.Finding)) {
+	if !s.PredatesGapReporting() || len(s.Buckets) == 0 {
+		return
+	}
+	shape := fmt.Sprintf("schema_version %d", s.SchemaVersion)
+	if s.SchemaVersion == 0 {
+		shape = "no schema_version at all"
+	}
+	add(report.Finding{Kind: "extraction-gap", Name: "snapshot schema_version", Verdict: report.Manual,
+		Rationale: fmt.Sprintf("This buckets snapshot carries %s; this build writes %d. A snapshot written before that version could not record which settings extraction failed to read, so a bucket reported as having no versioning, no lifecycle rules and no attached policy may simply never have been asked. Re-extract before trusting this report.",
+			shape, CurrentSchemaVersion)})
+}
+
+func gapDetail(g Gap) string {
+	if strings.TrimSpace(g.Detail) == "" {
+		return "not reported"
+	}
+	return g.Detail
 }
 
 // GenOptions parameterizes generation.

@@ -44,7 +44,7 @@ func ExtractS3(ctx context.Context, cfg S3Config) (Snapshot, error) {
 	if cfg.Region == "" {
 		cfg.Region = "us-east-1"
 	}
-	s := Snapshot{SchemaVersion: 1, Source: "s3"}
+	s := Snapshot{SchemaVersion: CurrentSchemaVersion, Source: "s3"}
 
 	// ListBuckets.
 	var lb struct {
@@ -66,19 +66,29 @@ func ExtractS3(ctx context.Context, cfg S3Config) (Snapshot, error) {
 	// byte-stable — determinism is the contract here, so the output order must
 	// not depend on which goroutine finished first.
 	buckets := make([]Bucket, len(lb.Buckets.Bucket))
+	// Gaps are collected per bucket and flattened in listing order afterwards,
+	// for the same reason the buckets are: the snapshot must not depend on
+	// which goroutine finished first.
+	gaps := make([][]Gap, len(lb.Buckets.Bucket))
 	sem := make(chan struct{}, s3Concurrency)
 	var wg sync.WaitGroup
 	for i, b := range lb.Buckets.Bucket {
+		// Acquire before spawning, not inside the goroutine: otherwise the
+		// bound limits requests in flight while the task count still grows with
+		// the input, and the loop applies no backpressure of its own.
+		sem <- struct{}{}
 		wg.Add(1)
 		go func(i int, name string) {
 			defer wg.Done()
-			sem <- struct{}{}
 			defer func() { <-sem }()
-			buckets[i] = cfg.describeBucket(ctx, name)
+			buckets[i], gaps[i] = cfg.describeBucket(ctx, name)
 		}(i, b.Name)
 	}
 	wg.Wait()
 	s.Buckets = buckets
+	for _, g := range gaps {
+		s.ExtractionGaps = append(s.ExtractionGaps, g...)
+	}
 	return s, nil
 }
 
@@ -91,18 +101,38 @@ const s3Concurrency = 8
 // describeBucket performs one bucket's four metadata reads. Each is best-effort
 // by design: a 404 on ?cors means the bucket has none, and an error on any of
 // them leaves that facet at its zero value rather than failing the extraction.
-func (cfg S3Config) describeBucket(ctx context.Context, name string) Bucket {
+func (cfg S3Config) describeBucket(ctx context.Context, name string) (Bucket, []Gap) {
 	bucket := Bucket{Name: name, Region: cfg.Region}
+	var gaps []Gap
+
+	// Each of the four reads below is best-effort, and that used to mean the
+	// failure was indistinguishable from the absence: a 403 on ?versioning
+	// recorded "versioning off", a 429 on ?policy recorded "no policy
+	// attached". Both are the permissive answer, and both flow into the
+	// generated MinIO script as a setting to reproduce — so the migration drops
+	// the control and the report calls the bucket covered.
+	//
+	// A 404 (NoSuchCORSConfiguration, NoSuchLifecycleConfiguration,
+	// NoSuchBucketPolicy) genuinely means absent and is the normal case.
+	// Anything else is recorded as a gap, which Classify reports MANUAL.
+	note := func(facet string, err error) {
+		if err == nil || isAbsent(err) {
+			return
+		}
+		gaps = append(gaps, Gap{Bucket: name, Facet: facet, Detail: oneLine(err.Error())})
+	}
 
 	// Versioning.
 	var v struct {
 		Status string `xml:"Status"`
 	}
-	if err := cfg.getXML(ctx, "/"+name+"?versioning", &v); err == nil {
+	err := cfg.getXML(ctx, "/"+name+"?versioning", &v)
+	note("versioning", err)
+	if err == nil {
 		bucket.Versioning = v.Status == "Enabled"
 	}
 
-	// CORS (404/NoSuchCORSConfiguration is normal).
+	// CORS.
 	var cors struct {
 		Rules []struct {
 			Origins []string `xml:"AllowedOrigin"`
@@ -111,7 +141,9 @@ func (cfg S3Config) describeBucket(ctx context.Context, name string) Bucket {
 			MaxAge  int      `xml:"MaxAgeSeconds"`
 		} `xml:"CORSRule"`
 	}
-	if err := cfg.getXML(ctx, "/"+name+"?cors", &cors); err == nil {
+	err = cfg.getXML(ctx, "/"+name+"?cors", &cors)
+	note("cors", err)
+	if err == nil {
 		for _, r := range cors.Rules {
 			bucket.CORS = append(bucket.CORS, CORSRule{
 				AllowedOrigins: r.Origins, AllowedMethods: r.Methods,
@@ -136,7 +168,9 @@ func (cfg S3Config) describeBucket(ctx context.Context, name string) Bucket {
 			} `xml:"Transition"`
 		} `xml:"Rule"`
 	}
-	if err := cfg.getXML(ctx, "/"+name+"?lifecycle", &lc); err == nil {
+	err = cfg.getXML(ctx, "/"+name+"?lifecycle", &lc)
+	note("lifecycle", err)
+	if err == nil {
 		for _, r := range lc.Rules {
 			prefix := r.Prefix
 			if prefix == "" {
@@ -154,11 +188,31 @@ func (cfg S3Config) describeBucket(ctx context.Context, name string) Bucket {
 	}
 
 	// Policy presence (JSON, not XML): record it so it surfaces as MANUAL.
-	if body, err := cfg.get(ctx, "/"+name+"?policy"); err == nil && len(strings.TrimSpace(string(body))) > 0 {
+	body, perr := cfg.get(ctx, "/"+name+"?policy")
+	note("policy", perr)
+	if perr == nil && len(strings.TrimSpace(string(body))) > 0 {
 		bucket.PolicyJSON = string(body)
 	}
 
-	return bucket
+	return bucket, gaps
+}
+
+// isAbsent reports whether the error means "this bucket has no such
+// configuration" rather than "this could not be read". S3 answers the former
+// with 404 and a NoSuch* code.
+func isAbsent(err error) bool {
+	m := err.Error()
+	return strings.Contains(m, "HTTP 404") || strings.Contains(m, "NoSuch")
+}
+
+// oneLine collapses an error into a single bounded line, so a multi-line XML
+// fault cannot break the snapshot's own validation or a rendered report row.
+func oneLine(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > 512 {
+		s = s[:509] + "..."
+	}
+	return s
 }
 
 // get performs a SigV4-signed GET and returns the body (non-2xx → error).

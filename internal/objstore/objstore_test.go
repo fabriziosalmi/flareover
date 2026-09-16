@@ -5,6 +5,7 @@ package objstore
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -293,4 +294,126 @@ func artifact(arts []Artifact, path string) string {
 		}
 	}
 	return ""
+}
+
+// --- the guards the zone snapshot had and this one did not -----------------
+
+// A failed read of a bucket facet used to be recorded as the facet being
+// absent, which is the permissive answer: "versioning off" rather than
+// "versioning could not be read". The migration then drops the setting and the
+// report calls the bucket covered.
+func TestUnreadableFacetBecomesAGapNotAFalseNegative(t *testing.T) {
+	s := Snapshot{
+		SchemaVersion: CurrentSchemaVersion,
+		Source:        "s3",
+		Buckets:       []Bucket{{Name: "media"}},
+		ExtractionGaps: []Gap{
+			{Bucket: "media", Facet: "versioning", Detail: "HTTP 403 (key cannot read bucket configuration)"},
+		},
+	}
+	rep := Classify(s)
+	var found *report.Finding
+	for i, f := range rep.Findings {
+		if f.Kind == "extraction-gap" {
+			found = &rep.Findings[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("an unreadable facet produced no finding: the report would claim coverage it does not have")
+	}
+	if found.Verdict != report.Manual {
+		t.Errorf("verdict = %s, want MANUAL", found.Verdict)
+	}
+	if found.Name != "media/versioning" {
+		t.Errorf("name = %q, want the bucket and the facet", found.Name)
+	}
+	if !strings.Contains(found.Rationale, "403") {
+		t.Errorf("rationale should carry the cause: %q", found.Rationale)
+	}
+	if rep.Counts()[report.Manual] == 0 {
+		t.Error("a snapshot with gaps would exit 0 as a clean migration")
+	}
+}
+
+// A 404 means the bucket genuinely has no such configuration, which is the
+// normal case for CORS and lifecycle. It must not become noise.
+func TestAbsentConfigurationIsNotAGap(t *testing.T) {
+	for _, msg := range []string{
+		"/media?cors: HTTP 404: NoSuchCORSConfiguration",
+		"/media?policy: HTTP 404",
+		"NoSuchLifecycleConfiguration",
+	} {
+		if !isAbsent(errors.New(msg)) {
+			t.Errorf("isAbsent(%q) = false; a genuinely absent configuration would be reported as unread", msg)
+		}
+	}
+	for _, msg := range []string{
+		"/media?versioning: HTTP 403",
+		"/media?policy: HTTP 429 rate limited",
+		"context deadline exceeded",
+	} {
+		if isAbsent(errors.New(msg)) {
+			t.Errorf("isAbsent(%q) = true; an unread facet would be recorded as absent", msg)
+		}
+	}
+}
+
+// A snapshot too old to declare a gap cannot be trusted to mean what it says.
+func TestAStaleBucketSnapshotIsFlagged(t *testing.T) {
+	for _, v := range []int{0, 1} {
+		rep := Classify(Snapshot{SchemaVersion: v, Source: "s3", Buckets: []Bucket{{Name: "media"}}})
+		var flagged bool
+		for _, f := range rep.Findings {
+			if f.Name == "snapshot schema_version" && f.Verdict == report.Manual {
+				flagged = true
+			}
+		}
+		if !flagged {
+			t.Errorf("schema_version %d was not flagged: an unread facet is indistinguishable from an absent one", v)
+		}
+	}
+	rep := Classify(Snapshot{SchemaVersion: CurrentSchemaVersion, Source: "s3", Buckets: []Bucket{{Name: "media"}}})
+	for _, f := range rep.Findings {
+		if f.Name == "snapshot schema_version" {
+			t.Fatalf("a current snapshot was flagged as stale: %+v", f)
+		}
+	}
+}
+
+// Bucket names reach the generated `mc mb` and rclone commands, which an
+// operator runs as shell.
+func TestValidateRejectsBucketNamesThatReachAShell(t *testing.T) {
+	for _, bad := range []string{"", "a", "UPPER", "has space", "semi;colon", "../etc", "trailing-", strings.Repeat("x", 64)} {
+		s := Snapshot{SchemaVersion: CurrentSchemaVersion, Source: "s3", Buckets: []Bucket{{Name: bad}}}
+		if err := s.Validate(); err == nil {
+			t.Errorf("Validate accepted bucket name %q", bad)
+		}
+	}
+	ok := Snapshot{SchemaVersion: CurrentSchemaVersion, Source: "s3", Buckets: []Bucket{
+		{Name: "media"}, {Name: "my-bucket.eu"}, {Name: "a1b"},
+	}}
+	if err := ok.Validate(); err != nil {
+		t.Errorf("Validate rejected ordinary bucket names: %v", err)
+	}
+}
+
+func TestValidateRejectsControlCharacters(t *testing.T) {
+	s := Snapshot{SchemaVersion: CurrentSchemaVersion, Source: "s3", Buckets: []Bucket{
+		{Name: "media", PolicyJSON: "{\"Statement\":[]}\n\x00"},
+	}}
+	if err := s.Validate(); err == nil {
+		t.Error("Validate accepted a control character in a policy that reaches a generated file")
+	}
+}
+
+func TestCheckSchemaVersionRefusesWhatThisBuildCannotRead(t *testing.T) {
+	if err := (Snapshot{SchemaVersion: CurrentSchemaVersion + 1}).CheckSchemaVersion(); err == nil {
+		t.Error("a newer schema version was accepted")
+	}
+	for _, v := range []int{0, 1, CurrentSchemaVersion} {
+		if err := (Snapshot{SchemaVersion: v}).CheckSchemaVersion(); err != nil {
+			t.Errorf("schema_version %d rejected: %v", v, err)
+		}
+	}
 }

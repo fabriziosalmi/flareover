@@ -21,7 +21,7 @@ var r2Base = "https://api.cloudflare.com/client/v4"
 // Read-only: it only issues GETs. Requires an API token with Workers R2
 // Storage:Read and the account id.
 func ExtractR2(ctx context.Context, token, accountID string) (Snapshot, error) {
-	s := Snapshot{SchemaVersion: 1, Source: "r2", Account: accountID}
+	s := Snapshot{SchemaVersion: CurrentSchemaVersion, Source: "r2", Account: accountID}
 	c := &http.Client{Timeout: 30 * time.Second}
 
 	get := func(path string, out any) error {

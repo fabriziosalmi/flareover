@@ -292,3 +292,114 @@ func TestExecuteOnAMissingSnapshotIsARuntimeErrorNotAUsageError(t *testing.T) {
 		t.Errorf("execute on a missing snapshot = %d, want %d", got, exitRuntime)
 	}
 }
+
+// --- the flag parser the verbs now share ------------------------------------
+
+// Three verbs each carried their own copy of the same nested switch, which is
+// most of why they measured CCN 55, 51 and 45. The behaviour it replaced is the
+// behaviour that has to survive: an unknown flag and a flag missing its value
+// both exit 2, and a bare argument becomes the positional.
+func TestFlagSetKeepsTheUsageContract(t *testing.T) {
+	silence(t)
+	var s, pos string
+	var b bool
+	var l []string
+	fs := func() *flagSet {
+		s, pos, b, l = "", "", false, nil
+		return newFlagSet("test").arg(&pos).str("--s", &s).bool_("--b", &b).list("--l", &l)
+	}
+
+	if !fs().parse([]string{"file.json", "--s", "v", "--b", "--l", "x", "--l", "y"}) {
+		t.Fatal("a valid argument list was rejected")
+	}
+	if pos != "file.json" || s != "v" || !b || len(l) != 2 || l[0] != "x" || l[1] != "y" {
+		t.Errorf("parsed wrongly: pos=%q s=%q b=%v l=%v", pos, s, b, l)
+	}
+
+	for _, args := range [][]string{
+		{"--s"},        // value-taking flag at the end
+		{"--l"},        // list flag at the end
+		{"--nonesuch"}, // unknown flag
+		{"-x"},         // unknown short flag
+	} {
+		if fs().parse(args) {
+			t.Errorf("parse(%v) succeeded; want a usage error", args)
+		}
+	}
+
+	// A verb that takes no positional must refuse one rather than ignore it.
+	var only string
+	if newFlagSet("test").str("--s", &only).parse([]string{"stray.json"}) {
+		t.Error("a verb with no positional accepted a bare argument")
+	}
+}
+
+// --- present: the gate whose exit code execute reads ------------------------
+
+func TestPresentRejectsUnknownFlagsAndMissingArguments(t *testing.T) {
+	silence(t)
+	snap := fixture(t, "example.snapshot.json")
+	for _, args := range [][]string{
+		{},                              // no --after-addr
+		{snap},                          // snapshot without --after-addr
+		{snap, "--after-addr"},          // flag without a value
+		{snap, "--nonesuch"},            // unknown flag
+		{"--after-addr", "127.0.0.1:1"}, // no snapshot
+	} {
+		if got := cmdPresent(args); got != exitUsage {
+			t.Errorf("present %v = %d, want %d", args, got, exitUsage)
+		}
+	}
+}
+
+func TestPresentOnAMissingSnapshotIsARuntimeErrorNotAUsageError(t *testing.T) {
+	silence(t)
+	got := cmdPresent([]string{"--snapshot", "/nonexistent/zone.json", "--after-addr", "127.0.0.1:1"})
+	if got != exitRuntime {
+		t.Errorf("present on a missing snapshot = %d, want %d", got, exitRuntime)
+	}
+}
+
+// --- storage: the second most complex verb, and it emits shell --------------
+
+func TestStorageRejectsUnknownFlagsAndMissingArguments(t *testing.T) {
+	silence(t)
+	for _, args := range [][]string{
+		{},               // no snapshot and no --extract-*
+		{"--out"},        // flag without a value
+		{"--nonesuch"},   // unknown flag
+		{"--extract-s3"}, // needs --s3-endpoint and credentials
+	} {
+		if got := cmdStorage(args); got != exitUsage {
+			t.Errorf("storage %v = %d, want %d", args, got, exitUsage)
+		}
+	}
+}
+
+func TestStorageRejectsAnUnknownDestination(t *testing.T) {
+	silence(t)
+	snap := fixture(t, "storage.snapshot.json")
+	if got := cmdStorage([]string{snap, "--out", t.TempDir(), "--dest", "nonesuch"}); got != exitUsage {
+		t.Errorf("storage --dest nonesuch = %d, want %d", got, exitUsage)
+	}
+}
+
+// A bucket snapshot used to enter through a bare json.Unmarshal, twenty lines
+// from a loader that decodes strictly, checks a schema version and validates.
+func TestStorageRefusesAMalformedBucketSnapshot(t *testing.T) {
+	silence(t)
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		"unknown-field.json": `{"schema_version":2,"source":"s3","nonesuch":1,"buckets":[]}`,
+		"future.json":        `{"schema_version":99,"source":"s3","buckets":[]}`,
+		"bad-name.json":      `{"schema_version":2,"source":"s3","buckets":[{"name":"Has Space"}]}`,
+	} {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if got := cmdStorage([]string{p}); got != exitRuntime {
+			t.Errorf("storage on %s = %d, want %d", name, got, exitRuntime)
+		}
+	}
+}

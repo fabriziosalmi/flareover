@@ -64,6 +64,16 @@ go test ./...
 Test fixtures under `testdata/fixtures/` are sanitized captures, safe to read, never real data. Real
 per-migration snapshots and any infrastructure notes stay out of the repo (see `.gitignore`).
 
+## Changing what callers depend on
+
+flareover is pre-1.0, and the surface callers actually depend on is the CLI: the
+verb names, the flags, and the **exit codes**. A shell chain breaks as hard on a
+changed exit code as on a renamed flag.
+
+If a change alters any of those, add a `### Breaking` entry to `CHANGELOG.md`
+under Unreleased saying what to do about it. The generated release notes list
+commits; that file is where somebody upgrading looks.
+
 ## Documentation
 
 The canonical docs are `website/src/content/docs/`. Three things are generated

@@ -52,6 +52,11 @@ picks up the change.
 
 ## Gotchas
 
+**MinIO comes from quay.io, not Docker Hub.** `minio/minio` no longer resolves
+on Docker Hub, so an older copy of this compose fails at `up` with `pull access
+denied for minio/minio`. `MINIO_IMAGE` in `.env` points at
+`quay.io/minio/minio`; if you pin a different version, take it from there.
+
 **Port 53 is probably already taken.** Ubuntu, Debian and Fedora run
 systemd-resolved, whose stub listener holds `127.0.0.53:53`. Publishing DNS on
 `0.0.0.0:53` collides with it and the container never starts:

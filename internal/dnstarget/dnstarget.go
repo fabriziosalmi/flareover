@@ -81,6 +81,16 @@ type Target struct {
 	// DNSSECNote is appended to the progress line when the zone wants DNSSEC
 	// and this backend cannot enable it programmatically.
 	DNSSECNote string
+	// Idempotent reports whether re-applying the same zone is safe to repeat.
+	//
+	// It matters when a run fails partway: the error names the rrset it failed
+	// on and nothing records how many preceded it, so the operator's next
+	// question is whether re-running is safe. On an upsert backend it plainly
+	// is. Leaseweb has no upsert and replaces by delete-then-create, so a
+	// re-run re-enters that window for records that were already correct —
+	// which the operator should know before they type the command rather than
+	// after.
+	Idempotent bool
 	// Generator renders the offline artifacts (`prepare`).
 	Generator target.Generator
 	// NewProvisioner builds the live applier (`provision`), or returns an error
@@ -98,13 +108,15 @@ func (t Target) GenerateOnly() bool { return t.NewProvisioner == nil }
 var registry = []Target{
 	{
 		Key: "powerdns", Label: "PowerDNS (self-hosted)", Sovereign: true,
+		Idempotent:     true,
 		Generator:      powerdns.Generator{},
 		NewProvisioner: newPowerDNS,
 	},
 	{
 		Key: "bunny", Aliases: []string{"bunny-dns", "bunnydns"},
 		Label: "bunny.net DNS (EU-owned)", Sovereign: true,
-		Generator: bunnydns.Generator{},
+		Idempotent: true,
+		Generator:  bunnydns.Generator{},
 		// Generate-only: bunny.net's record API is not mapped, so prepare emits
 		// an apply.sh the operator runs. Declaring it here rather than omitting
 		// it is the point — `provision --dns bunny` now says what to do instead
@@ -115,6 +127,7 @@ var registry = []Target{
 		Key: "scaleway", Aliases: []string{"scaleway-dns", "scalewaydns"},
 		Label: "Scaleway", Sovereign: true,
 		DNSSECNote: "enable it for the zone in the Scaleway console (not yet automated)",
+		Idempotent: true,
 		Generator:  scalewaydns.Generator{},
 		NewProvisioner: envProvisioner(
 			[]string{"SCW_SECRET_KEY", "SCW_DEFAULT_PROJECT_ID"},
@@ -128,6 +141,7 @@ var registry = []Target{
 		Key: "ovh", Aliases: []string{"ovh-dns", "ovhdns"},
 		Label: "OVHcloud", Sovereign: true,
 		DNSSECNote: "enable it in the OVH panel (not yet automated)",
+		Idempotent: true,
 		Generator:  ovhdns.Generator{},
 		NewProvisioner: envProvisioner(
 			[]string{"OVH_APPLICATION_KEY", "OVH_APPLICATION_SECRET", "OVH_CONSUMER_KEY"},
@@ -141,6 +155,7 @@ var registry = []Target{
 		Key: "gandi", Aliases: []string{"gandi-dns", "gandidns"},
 		Label: "Gandi LiveDNS", Sovereign: true,
 		DNSSECNote: "manage it in the Gandi panel (not yet automated)",
+		Idempotent: true,
 		Generator:  gandidns.Generator{},
 		NewProvisioner: envProvisioner([]string{"GANDI_PAT"},
 			func(v map[string]string, _ Opts) Provisioner {
@@ -165,6 +180,7 @@ var registry = []Target{
 		Key: "hetzner", Aliases: []string{"hetzner-dns", "hetznerdns"},
 		Label: "Hetzner · EU-owned, sovereign", Sovereign: true,
 		DNSSECNote: "enable it in the Hetzner DNS console (no record-API to automate it)",
+		Idempotent: true,
 		Generator:  hetznerdns.Generator{},
 		NewProvisioner: envProvisioner([]string{"HETZNER_DNS_TOKEN"},
 			func(v map[string]string, _ Opts) Provisioner {
@@ -177,6 +193,7 @@ var registry = []Target{
 		Key: "route53", Aliases: []string{"aws", "aws-route53"},
 		Label: "Route 53 · US-operated, not sovereign", Sovereign: false,
 		DNSSECNote: "enable it in the Route 53 console (not yet automated)",
+		Idempotent: true,
 		Generator:  route53.Generator{},
 		NewProvisioner: envProvisioner([]string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"},
 			func(v map[string]string, _ Opts) Provisioner {
@@ -191,6 +208,7 @@ var registry = []Target{
 		Key: "clouddns", Aliases: []string{"cloud-dns", "gcp", "google"},
 		Label: "Cloud DNS · US-operated, not sovereign", Sovereign: false,
 		DNSSECNote:     "enable it on the managed zone in the Cloud DNS console (not yet automated)",
+		Idempotent:     true,
 		Generator:      clouddns.Generator{},
 		NewProvisioner: newCloudDNS,
 	},
@@ -198,6 +216,7 @@ var registry = []Target{
 		Key: "azure", Aliases: []string{"azure-dns", "azuredns"},
 		Label: "Azure DNS · US-operated, not sovereign", Sovereign: false,
 		DNSSECNote: "enable it on the zone in the Azure portal (not yet automated)",
+		Idempotent: true,
 		Generator:  azuredns.Generator{},
 		NewProvisioner: envProvisioner(
 			[]string{"AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_SUBSCRIPTION_ID", "AZURE_RESOURCE_GROUP"},

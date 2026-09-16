@@ -24,6 +24,47 @@ All credentials come from the **environment**, never the command line.
 | **Leaseweb** | `leaseweb` | Delete-then-create REPLACE | `LEASEWEB_API_KEY` |
 | **Hetzner** | `hetzner` | Create-if-absent per record | `HETZNER_DNS_TOKEN` |
 
+## Pointing a backend somewhere else
+
+Each backend's API endpoint is compiled in, and each can be overridden from the
+environment. Nothing prints the endpoint it used, so **a stale value in your
+shell silently redirects a live `provision --dns` at a different host, with real
+credentials** — check these before a cutover if you have ever pointed the tool
+at a sandbox.
+
+| Target | Override | Overrides |
+|--------|----------|-----------|
+| Scaleway | `SCW_API_URL` | API base URL |
+| OVHcloud | `OVH_ENDPOINT` | API base URL (default `https://eu.api.ovh.com/1.0`) |
+| Gandi | `GANDI_ENDPOINT` | LiveDNS base URL |
+| Leaseweb | `LEASEWEB_ENDPOINT` | API base URL |
+| Hetzner | `HETZNER_DNS_ENDPOINT` | API base URL |
+| Route 53 | `AWS_ENDPOINT_URL_ROUTE53` | API endpoint |
+| Cloud DNS | `CLOUDDNS_ENDPOINT` · `GOOGLE_TOKEN_URI` | API base URL · OAuth token endpoint |
+| Azure DNS | `AZURE_ARM_ENDPOINT` · `AZURE_AUTH_HOST` | ARM base URL · AAD login host |
+
+An empty or unset variable leaves the compiled-in default in place. These exist
+for testing against a sandbox or a private endpoint; they are not needed for
+normal use.
+
+## What this does to your API quota
+
+Extraction and provisioning are one request per item, so the cost grows with the
+size of your account. The ceilings the tool imposes on itself:
+
+| Limit | Value | What it protects |
+|-------|-------|------------------|
+| Concurrent bucket reads (`storage`) | 8 | your object-storage provider's request budget |
+| Concurrent Access-policy reads (`extract`) | 6 | the Cloudflare API's request budget |
+| Retry attempts on `429`/`5xx` | 4, exponential backoff from 1s | retrying harder into a rate limit is amplification |
+| Response size | 32 MiB | a pathological or hostile response |
+| Any single string in a snapshot | 8192 bytes | a value inflated to carry a payload into a generated file |
+
+A rate limit is not fatal: the retry absorbs a brief one, and a persistent one
+becomes a MANUAL item saying to wait and re-run rather than a silent gap. None
+of these is configurable yet; if you need them lower for a stricter provider,
+open an issue.
+
 ## Managed: US-operated (honestly tiered, **not** sovereign)
 
 These live under US CLOUD Act / FISA reach. flareover offers them as the pragmatic "keep your existing account" bridge and says so every time. It will never label them sovereign, and prints a nudge back to the EU-owned options. See [Sovereignty Tiers](/docs/sovereignty-tiers/).
