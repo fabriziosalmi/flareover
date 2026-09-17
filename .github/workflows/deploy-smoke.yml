@@ -93,6 +93,18 @@ jobs:
           curl -sf -H "X-API-Key: $PDNS_API_KEY" \
             http://127.0.0.1:8081/api/v1/servers/localhost/zones | grep -q 'smoke.example'
 
+          # Sign it. The signing key is what the restore assertion below
+          # actually needs to compare: a zone that comes back without its
+          # original key is a zone whose DS record at the registrar is now
+          # wrong, which is the failure the backup exists to prevent.
+          curl -sf -X PUT -H "X-API-Key: $PDNS_API_KEY" -H 'Content-Type: application/json' \
+            --data '{"dnssec":true}' \
+            http://127.0.0.1:8081/api/v1/servers/localhost/zones/smoke.example. 
+          curl -sf -H "X-API-Key: $PDNS_API_KEY" \
+            http://127.0.0.1:8081/api/v1/servers/localhost/zones/smoke.example./cryptokeys \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)[0]["dnskey"])' > /tmp/dnskey-before
+          test -s /tmp/dnskey-before
+
       # The API must not accept requests from outside the declared subnet: the
       # allow_from setting is the restriction, not the port binding.
       - name: The API refuses a source outside the internal subnet
@@ -149,7 +161,20 @@ jobs:
             docker compose logs pdns-init
             exit 1
           fi
-          echo "restored, and the zone is still there"
+          # The zone being present is a proxy; the property that matters is the
+          # signing key. If it came back different, every resolver validating
+          # against the DS record at the registrar would fail — a restore that
+          # looks successful and has silently broken the zone.
+          curl -sf -H "X-API-Key: $PDNS_API_KEY" \
+            http://127.0.0.1:8081/api/v1/servers/localhost/zones/smoke.example./cryptokeys \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)[0]["dnskey"])' > /tmp/dnskey-after
+          if ! diff -q /tmp/dnskey-before /tmp/dnskey-after >/dev/null; then
+            echo "::error::the zone came back with a DIFFERENT DNSSEC key; the DS record at the registrar would no longer validate"
+            echo "before: $(cat /tmp/dnskey-before)"
+            echo "after:  $(cat /tmp/dnskey-after)"
+            exit 1
+          fi
+          echo "restored: the zone is there and its DNSSEC signing key is unchanged"
 
       - name: MinIO answers
         working-directory: deploy
