@@ -128,6 +128,20 @@ Restore is the same in reverse (`tar xzf` into a fresh volume) — do it before
 the first `docker compose up`, so `pdns-init` sees an existing database and
 leaves it alone.
 
+**What a good restore looks like:** the zone is back *and its DNSSEC signing key
+is the one you backed up*. The zone alone is not enough — a zone that returns
+with a new key is a zone whose DS record at your registrar no longer validates,
+which fails silently for every resolver that checks. Confirm both:
+
+```sh
+curl -sf -H "X-API-Key: $PDNS_API_KEY" \
+  "http://localhost:8081/api/v1/servers/localhost/zones/<zone>./cryptokeys" \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)[0]["dnskey"])'
+```
+
+`deploy-smoke.yml` runs exactly this round trip on every change to this
+directory and fails the build if the key differs.
+
 ## Upgrading
 
 Image versions are pinned in `.env`, not floating on `:latest`. To upgrade, edit
