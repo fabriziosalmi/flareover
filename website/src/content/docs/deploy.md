@@ -21,6 +21,14 @@ cp .env.example .env          # set PDNS_API_KEY, CERTMATE_TOKEN, etc.
 docker compose up -d --build  # --build compiles the custom Caddy once
 ```
 
+:::caution[Port 53 is probably already taken]
+Ubuntu, Debian and Fedora run `systemd-resolved`, whose stub listener holds
+`127.0.0.53:53`, so publishing the stack's DNS on `0.0.0.0` fails to bind and
+the container never starts. Set `DNS_BIND` in `.env` to the address that will
+actually serve DNS, or free port 53 on the host — both are in
+[Troubleshooting](/docs/troubleshooting/).
+:::
+
 Then point `provision` at it, loading the secrets from the environment (never the command line):
 
 ```bash
@@ -34,8 +42,38 @@ flareover provision --snapshot snap.json --decisions decisions.lock \
 
 - **Caddy** (`80`/`443`) and **PowerDNS** (`53`, authoritative: it must be publicly reachable to serve the zone) are internet-facing.
 - Every **admin/API** surface (PowerDNS `8081`, CertMate `8000`, MinIO `9000`/`9001`, secure-proxy-manager `3128`) binds to `127.0.0.1`.
+- The PowerDNS control API additionally refuses any source outside the compose
+  network: the restriction is in the setting, not only in the port binding, so
+  exposing `8081` later does not silently remove it.
+- Every service runs with `no-new-privileges` and `cap_drop: ALL`, with
+  capabilities added back only where the image's entrypoint needs them.
 
 Put your own firewall in front regardless. See [Security](/docs/security/).
+
+### Back it up
+
+The seven volumes are not equal. Three hold state that cannot be regenerated:
+
+| Volume | Holds | If you lose it |
+|--------|-------|----------------|
+| `pdns-data` | the authoritative zone **and the DNSSEC signing keys** | the zone stops resolving, and the DS record at your registrar points at keys that no longer exist |
+| `certmate-data` + `certs` | issued certificates and issuance state | re-issuance, and rate limits at the CA |
+| `minio-data` | the migrated objects | possibly the only remaining copy, once the source bucket is gone |
+
+`caddy-data`, `caddy-config` and `spm-data` are disposable — re-running
+`prepare` plus a restart rebuilds them. The commands, and what a *good* restore
+looks like (the zone back **and its original DNSSEC key**), are in
+[`deploy/README.md`](https://github.com/fabriziosalmi/flareover/blob/main/deploy/README.md).
+
+### Pinned, and proven
+
+Image versions are pinned in `.env` rather than floating on `:latest`: these
+services hold the authoritative zone, the DNSSEC keys and the migrated objects,
+so an upgrade should be a reviewed change and a rollback should be possible.
+
+A CI job brings this stack up on every change to `deploy/` and asserts that the
+PowerDNS API answers, that a zone can be created and signed, and that it
+survives a backup/restore round trip with the same signing key.
 
 ## Boot an edge on a provider
 

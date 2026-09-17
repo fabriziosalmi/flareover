@@ -105,11 +105,11 @@ curl -fsSL https://raw.githubusercontent.com/fabriziosalmi/flareover/main/instal
 go install github.com/fabriziosalmi/flareover/cmd/flareover@latest
 ```
 
-Building from source requires **Go 1.25+**. Release binaries (linux/macOS/windows · amd64/arm64) ship
+Building from source requires **Go 1.26+**. Release binaries (linux/macOS/windows · amd64/arm64) ship
 with an SBOM and a `checksums.txt` **signed keyless via Sigstore/cosign** — the certificate identity is
 the release workflow itself, so a signature proves the artifact came from this repository's CI. The
 installer checks it automatically when `cosign` is on your PATH, and says so when it is not.
-`flareover version` prints the build tag.
+`flareover version` prints the tag, the commit it was built from, and whether that tree was clean.
 
 ## Usage
 

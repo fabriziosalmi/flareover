@@ -76,10 +76,38 @@ The cutover was blocked (a gate didn't pass). Re-run `present` to see the specif
 
 ## General
 
+### `docker compose up` fails with `address already in use` on port 53
+Your host is already running a DNS listener — on Ubuntu, Debian and Fedora that
+is `systemd-resolved`, whose stub holds `127.0.0.53:53`, and publishing the
+stack's DNS on `0.0.0.0` collides with it:
+
+```
+failed to bind host port for 0.0.0.0:53: address already in use
+```
+
+Either bind only the address that will actually serve DNS — `DNS_BIND=203.0.113.10`
+in `deploy/.env` — or free port 53 on the host, which is what an edge dedicated
+to this stack wants:
+
+```bash
+sudo mkdir -p /etc/systemd/resolved.conf.d
+printf '[Resolve]\nDNSStubListener=no\n' | sudo tee /etc/systemd/resolved.conf.d/no-stub.conf
+sudo ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+sudo systemctl restart systemd-resolved
+```
+
+### `docker compose up` fails with `pull access denied for minio/minio`
+MinIO is no longer distributed on Docker Hub; it publishes on quay.io. An older
+copy of `deploy/docker-compose.yml` will not pull it. `MINIO_IMAGE` in
+`deploy/.env` should read `quay.io/minio/minio:<release>`.
+
 ### Which version am I running?
 ```bash
 flareover version
+# flareover 0.4.0 (efa6ed3ac5d8, 2026-09-16T07:33:20Z)
 ```
+The commit is in there too, and a `dirty` marker if the binary was built from a
+modified tree — so a bug report names an exact build.
 
 ### Verifying a downloaded binary
 See [Installation](/docs/installation/): verify the cosign-signed `checksums.txt`, then `sha256sum -c`.
