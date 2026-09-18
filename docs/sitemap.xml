@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Le pagine scritte a mano che stanno alla radice del sito. La documentazione
+  sotto /docs/ NON va elencata qui: la genera Starlight, che pubblica la propria
+  sitemap-index.xml, e duplicarla qui vorrebbe dire tenerne allineate due.
+
+  Niente <lastmod>: questo file e' scritto a mano e una data scritta a mano
+  diventa falsa al primo cambiamento della pagina. Meglio assente che sbagliata.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://www.flareover.com/</loc><priority>1.0</priority></url>
+  <url><loc>https://www.flareover.com/docs.html</loc><priority>0.8</priority></url>
+  <url><loc>https://www.flareover.com/privacy.html</loc><priority>0.3</priority></url>
+</urlset>
