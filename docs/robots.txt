@@ -1,0 +1,14 @@
+# Servito come https://www.flareover.com/robots.txt
+#
+# Il sito e' in due pezzi: la landing scritta a mano, che sta alla radice, e la
+# documentazione Starlight montata sotto /docs/. Hanno due sitemap distinte,
+# perche' la sitemap generata da Starlight copre solo cio' che Starlight genera.
+
+User-agent: *
+Allow: /
+
+# Le tre pagine statiche della landing.
+Sitemap: https://www.flareover.com/sitemap.xml
+
+# Le pagine della documentazione, generate da @astrojs/sitemap dentro Starlight.
+Sitemap: https://www.flareover.com/docs/sitemap-index.xml
