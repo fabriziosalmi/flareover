@@ -1,6 +1,6 @@
 ---
 title: "Deploy / Landing Zone"
-description: "The most common friction in a migration is 'where do I run the target?'. flareover ships a one-command landing zone so you don't have to assemble the"
+description: "Where to run the target: a one-command docker compose stack, a cloud-init edge on an EU provider, Terraform for Hetzner, or a WireGuard mesh that keeps your origin."
 ---
 
 The most common friction in a migration is *"where do I run the target?"*. flareover ships a one-command landing zone so you don't have to assemble the stack by hand.
@@ -93,8 +93,8 @@ flareover prepare snap.json --decisions decisions.lock \
 
 ## Keep your origin exactly where it is (WireGuard mesh)
 
-The lowest-risk shape leaves your origin unchanged and just re-tunnels it: flareover stands up your own edge node(s) and a **WireGuard** tunnel, and the origin only swaps its managed tunnel daemon for `wg-quick`. Add `--mesh-edge` (repeat it for an HA edge front). The origin keeps **zero public inbound**.
+The lowest-risk shape leaves your origin unchanged and just re-tunnels it: flareover stands up your own edge node(s) and a **WireGuard** tunnel, and the origin only swaps its managed tunnel daemon for `wg-quick`. Add `--mesh-edge` (repeat it for an HA edge front). The origin keeps **zero public inbound**. Full walkthrough: [Keep your origin](/docs/keep-your-origin/).
 
 ## Bare-metal / Proxmox
 
-The `deploy/` compose file is the fast path; the repository's `docs/deploy-hardened.md` covers the hardened bare-metal / Proxmox blueprint: isolated origin bridge, edge on the routable bridge, origin reachable only through the edge/tunnel.
+The `deploy/` compose file is the fast path; the [Hardened Proxmox landing zone](/docs/hardened-deploy/) covers the hardened bare-metal / Proxmox blueprint: isolated origin bridge, edge on the routable bridge, origin reachable only through the edge/tunnel.

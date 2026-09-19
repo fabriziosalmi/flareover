@@ -1,6 +1,6 @@
 ---
 title: "DNS Targets"
-description: "Authoritative DNS is the one swappable part of the target stack: self-host it, or point --dns at a managed provider. The de-proxied records map"
+description: "Move Cloudflare DNS to self-hosted PowerDNS or a managed provider (bunny.net, Scaleway, OVH, Gandi, Leaseweb, Hetzner, Route 53, Cloud DNS, Azure), with DNSSEC."
 ---
 
 Authoritative DNS is the one swappable part of the target stack: self-host it, or point `--dns` at a managed provider. The de-proxied records map deterministically either way (a shared BIND renderer serializes them), and every provisioner is **idempotent**: re-running converges with no duplicate records.

@@ -87,7 +87,7 @@ explicit human steps.
 > **Already behind a Cloudflare Tunnel?** The lowest-risk path is to keep your origin exactly where
 > it is and just re-tunnel it: flareover stands up your own edge node(s) and a WireGuard tunnel, and
 > the origin only swaps `cloudflared` for `wg-quick`. Add `--mesh-edge` (repeat it for an HA edge
-> front). See [docs/scenario-edge-mesh.md](docs/scenario-edge-mesh.md), and
+> front). See [Keep your origin](https://www.flareover.com/docs/keep-your-origin/), and
 > [`terraform/hetzner/`](terraform/hetzner/) for a Terraform module that boots the
 > edge on Hetzner (EU-owned) straight from the generated cloud-init.
 
@@ -204,7 +204,7 @@ Deliberately **out of scope** because no faithful deterministic mapping exists: 
 country blocking above) and cache-hit-ratio parity, surfaced honestly, never faked.
 
 See [`deploy/`](deploy/) for the one-command docker-compose landing zone, and
-[`docs/deploy-hardened.md`](docs/deploy-hardened.md) for the hardened bare-metal
+[Hardened Proxmox landing zone](https://www.flareover.com/docs/hardened-deploy/) for the hardened bare-metal
 blueprint and the gotchas learned the hard way.
 
 ## License

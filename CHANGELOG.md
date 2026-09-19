@@ -9,7 +9,15 @@ existing flag without a deprecation first.
 
 ## Unreleased
 
-_Nothing yet._
+### Changed
+
+- **The release archive ships the hardened-deploy guide as
+  `docs/hardened-deploy.md`**, not `docs/deploy-hardened.md`. The guide moved
+  into the docs site ([Hardened Proxmox landing zone](https://www.flareover.com/docs/hardened-deploy/)),
+  alongside the keep-your-origin walkthrough
+  ([Keep your origin](https://www.flareover.com/docs/keep-your-origin/)), which
+  was only on GitHub before. A script that reads the old path from an unpacked
+  archive needs the new name.
 
 ## v0.4.0 — 2026-09-16
 

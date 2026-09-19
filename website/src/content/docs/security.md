@@ -1,6 +1,6 @@
 ---
 title: "Security"
-description: "flareover handles credentials for your DNS, certificates, storage, and edge. Its security posture is deliberately"
+description: "How flareover handles your credentials and output: secrets only from the environment, least-privilege tokens, signed releases, and generated keys treated as secrets."
 ---
 
 flareover handles credentials for your DNS, certificates, storage, and edge. Its security posture is deliberately conservative.

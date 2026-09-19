@@ -1,6 +1,6 @@
 ---
 title: "Architecture & the Five Phases"
-description: "flareover is a pipeline. A live zone goes in; a faithful, self-hosted EU stack comes out; a verdict is attached to every"
+description: "How flareover turns a live Cloudflare zone into a self-hosted EU stack: the five phases, the CF-IR intent model, and why classify and generate can't disagree."
 ---
 
 flareover is a pipeline. A live zone goes in; a faithful, self-hosted EU stack comes out; a verdict is attached to every step.

@@ -1,6 +1,6 @@
 ---
 title: "Quick Start"
-description: "This walks a single zone from read-only assessment all the way to a gated cutover. Every step before the DNS flip is non-destructive and produces"
+description: "Walk one Cloudflare zone from a read-only assessment to a gated cutover: extract, assess, resolve, prepare, provision, parity-check, cut over, guard."
 ---
 
 This walks a single zone from **read-only assessment** all the way to a **gated cutover**. Every step before the DNS flip is non-destructive and produces artifacts you can review in `git` — in a private repository, since the output directory also carries generated key material.

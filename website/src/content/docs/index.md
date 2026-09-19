@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: "Move your site off the orange cloud onto your own EU servers, without changing how it behaves. A deterministic, 0% false-positive migration engine."
+description: "Move your site off Cloudflare onto your own EU servers without changing how it behaves. Open-source, deterministic, and honest about what it can't migrate."
 ---
 
 **Move your site off the orange cloud onto your own EU servers, without changing how it behaves.**
