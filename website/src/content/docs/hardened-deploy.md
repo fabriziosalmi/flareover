@@ -1,4 +1,7 @@
-# Hardened Proxmox landing zone
+---
+title: "Hardened Proxmox landing zone"
+description: "The reference bare-metal / Proxmox topology for a sovereign edge: an isolated origin bridge with zero inbound, a one-hop DNAT to the edge, and the gotchas learned on a real migration."
+---
 
 The reference deployment flareover targets, and the exact topology used to
 migrate a real domain off Cloudflare end-to-end. It is optional (a plain single
@@ -32,7 +35,7 @@ origin**: the backend is reachable only through the edge, never from the interne
   leg. This is the zero-inbound guarantee.
 
 Both LXCs are **unprivileged** with minimal `features` (nesting only where a
-workload needs it): Fabrizio's standard isolation posture.
+workload needs it).
 
 ## Bringing it up
 
@@ -62,8 +65,8 @@ workload needs it): Fabrizio's standard isolation posture.
   `--ctstate ESTABLISHED,RELATED -j ACCEPT` for the return path.
 - **Cloudflare Tunnel over a nested NAT**: QUIC (UDP/7844) is often blocked, so
   `cloudflared` hangs on `dial to edge with quic`. Force TCP with
-  `protocol: http2` in the tunnel config. flareover's tunnel tooling sets this
-  by default.
+  `protocol: http2` in the tunnel config. This only matters while the old tunnel
+  is still carrying traffic; after cutover the WireGuard mesh replaces it.
 - **`https://origin:80` is invalid**: an origin answer may carry an explicit
   scheme (`http://host:80`); flareover honors it so `caddy validate` passes.
 - **A `*.zone` site defers all subdomain certs to the wildcard cert**: if that

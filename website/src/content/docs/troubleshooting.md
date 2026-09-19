@@ -1,9 +1,9 @@
 ---
 title: "Troubleshooting"
-description: "Common errors and what they mean. If your issue isn't here, open one on the repository with the relevant assess --json output"
+description: "flareover error messages and what to do about them: auth failures, non-zero exit codes, missing env vars, DNS and storage targets, port 53 conflicts, parity failures."
 ---
 
-Common errors and what they mean. If your issue isn't here, open one on the [repository](https://github.com/fabriziosalmi/flareover/issues) with the relevant `assess --json` output (scrubbed).
+Common errors and what they mean. If your issue isn't here, open one on the [repository](https://github.com/fabriziosalmi/flareover/issues) with the relevant `assess --json` output (scrubbed), or ask in [Discussions](https://github.com/fabriziosalmi/flareover/discussions) if you're not sure it's a bug.
 
 ## Extraction & assessment
 
