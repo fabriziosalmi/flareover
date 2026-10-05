@@ -1,6 +1,6 @@
 ---
 title: "The Contract: no silent surprises"
-description: "Every migration tool has to decide what to do with a setting it doesn't fully understand. Most guess. flareover doesn't. Its entire design is organized"
+description: "flareover's 0% false-positive contract: every setting is AUTO, ASK or MANUAL, and behavior-changing config is emitted only when equivalence is proven or you said yes."
 ---
 
 Every migration tool has to decide what to do with a setting it doesn't fully understand. Most guess. flareover doesn't. Its entire design is organized around one promise:

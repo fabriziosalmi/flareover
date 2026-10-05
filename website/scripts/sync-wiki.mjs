@@ -28,8 +28,9 @@ if (!wikiDir) {
   process.exit(2);
 }
 
-// Pages the wiki owns. index.md becomes Home.md, which is hand-written.
-const SKIP = new Set(['index.md']);
+// Pages the wiki owns. index.md becomes Home.md, which is hand-written; 404.md
+// is the site's not-found page, which a wiki has no use for.
+const SKIP = new Set(['index.md', '404.md']);
 
 // Acronyms the slug loses. "cli-reference" must become "CLI-Reference", not
 // "Cli-Reference", or every cross-link 404s.

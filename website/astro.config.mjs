@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { sidebar } from './src/sidebar.mjs';
 
 export default defineConfig({
   site: 'https://www.flareover.com',
@@ -25,42 +26,7 @@ export default defineConfig({
       editLink: {
         baseUrl: 'https://github.com/fabriziosalmi/flareover/edit/main/website/',
       },
-      sidebar: [
-        {
-          label: 'Start here',
-          items: [
-            { label: 'Overview', link: '/' },
-            { label: 'Installation', link: '/installation/' },
-            { label: 'Quick start', link: '/quick-start/' },
-          ],
-        },
-        {
-          label: 'Concepts',
-          items: [
-            { label: 'The contract', link: '/the-contract/' },
-            { label: 'Architecture', link: '/architecture/' },
-            { label: 'Coverage matrix', link: '/coverage-matrix/' },
-            { label: 'Sovereignty tiers', link: '/sovereignty-tiers/' },
-          ],
-        },
-        {
-          label: 'Reference',
-          items: [
-            { label: 'CLI reference', link: '/cli-reference/' },
-            { label: 'DNS targets', link: '/dns-targets/' },
-            { label: 'Object storage', link: '/object-storage/' },
-            { label: 'Deploy', link: '/deploy/' },
-            { label: 'Security', link: '/security/' },
-          ],
-        },
-        {
-          label: 'Help',
-          items: [
-            { label: 'FAQ', link: '/faq/' },
-            { label: 'Troubleshooting', link: '/troubleshooting/' },
-          ],
-        },
-      ],
+      sidebar,
     }),
   ],
 });

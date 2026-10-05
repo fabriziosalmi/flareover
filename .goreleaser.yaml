@@ -35,7 +35,11 @@ archives:
     files:
       - README.md
       - LICENSE
-      - docs/deploy-hardened.md
+      # The hardened-deploy guide now lives in the docs site; ship it in the
+      # archive under docs/ as before.
+      - src: website/src/content/docs/hardened-deploy.md
+        dst: docs
+        strip_parent: true
 
 checksum:
   name_template: "checksums.txt"

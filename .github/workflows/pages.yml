@@ -62,6 +62,12 @@ jobs:
           cp -R docs/. _site/
           mkdir -p _site/docs
           cp -R website/dist/. _site/docs/
+          # GitHub Pages serves only a root 404.html, for every missing path;
+          # the docs' own one links to search, the FAQ and Troubleshooting.
+          # Its assets are root-absolute (/docs/_astro/…), so it works from any path.
+          cp website/dist/404.html _site/404.html
+          # llms.txt is conventionally at the root; the docs build generates it.
+          cp website/dist/llms.txt _site/llms.txt
       # Rasterize the Open Graph card to PNG (SVG OG images don't render on
       # LinkedIn/Slack). sharp is already installed by the docs build above.
       - name: Rasterize OG image

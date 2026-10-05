@@ -1,4 +1,7 @@
-# Scenario: keep your origin, re-tunnel it off Cloudflare
+---
+title: "Keep your origin: replace Cloudflare Tunnel with WireGuard"
+description: "Leave Cloudflare without moving your app: swap cloudflared for a WireGuard mesh to your own EU edge nodes. The origin keeps zero public inbound, with an optional HA front."
+---
 
 The lowest-risk way to leave Cloudflare, and the one most self-hosters actually need.
 

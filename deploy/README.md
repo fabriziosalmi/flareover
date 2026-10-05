@@ -5,7 +5,7 @@ The #1 friction in a migration is *"where do I run the target?"*. This is a
 consumes the artifacts `flareover prepare` generates, so `provision` has
 something to talk to.
 
-It is the containerized twin of [`../docs/deploy-hardened.md`](../docs/deploy-hardened.md)
+It is the containerized twin of [Hardened Proxmox landing zone](https://www.flareover.com/docs/hardened-deploy/)
 (the bare-metal / Proxmox hardening guide).
 
 ## What it runs

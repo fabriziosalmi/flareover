@@ -69,8 +69,8 @@ flowchart TB
   E2 -->|"WireGuard mesh"| O
 ```
 
-See [scenario-edge-mesh.md](scenario-edge-mesh.md) for the full walkthrough,
-[deploy-hardened.md](deploy-hardened.md) for the hardened landing zone, and
+See [Keep your origin](https://www.flareover.com/docs/keep-your-origin/) for the full walkthrough,
+[Hardened Proxmox landing zone](https://www.flareover.com/docs/hardened-deploy/) for the hardened landing zone, and
 [live-proof.md](live-proof.md) for the Tier-A runbook that proves each managed
 adapter against the real provider before you trust it.
 

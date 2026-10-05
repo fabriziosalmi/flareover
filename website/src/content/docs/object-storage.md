@@ -1,6 +1,6 @@
 ---
 title: "Object Storage"
-description: "flareover migrates object storage (Cloudflare R2 or any S3-compatible source) to self-hosted MinIO or a managed EU S3 provider. It generates a"
+description: "Migrate Cloudflare R2 or any S3 bucket to MinIO or an EU provider (Scaleway, OVH, Contabo, Aruba): buckets, versioning, lifecycle, CORS, and an rclone data copy."
 ---
 
 flareover migrates object storage (Cloudflare **R2** or any **S3**-compatible source) to self-hosted **MinIO** or a managed EU **S3** provider. It generates a `provision.sh` (using `mc`, the MinIO client, which speaks plain S3) plus an **rclone** plan to copy the data as a separate step.

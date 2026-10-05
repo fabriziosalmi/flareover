@@ -1,6 +1,6 @@
 ---
 title: "Installation"
-description: "flareover ships as a single, statically-linked binary with zero external runtime dependencies. Pick whichever install path fits your"
+description: "Install flareover with Homebrew, a signature-verifying install script, a release binary, or go install. Single static binary, Sigstore-signed releases."
 ---
 
 flareover ships as a single, statically-linked binary with **zero external runtime dependencies**. Pick whichever install path fits your platform.

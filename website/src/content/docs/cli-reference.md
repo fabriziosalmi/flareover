@@ -1,6 +1,6 @@
 ---
 title: "CLI Reference"
-description: "flareover <phase [args] flareover"
+description: "Every flareover command, flag and exit code: extract, assess, resolve, prepare, provision, present, execute, guard, storage and more."
 ---
 
 ```

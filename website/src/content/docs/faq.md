@@ -1,6 +1,6 @@
 ---
 title: "FAQ / Q&A"
-description: "Short answers to the questions people actually ask. For the 'how', see Quick Start; for the 'what maps', see the Coverage"
+description: "Straight answers about leaving Cloudflare with flareover: what migrates, what doesn't (Workers, bot scoring), safety, DNSSEC, downtime, cost, and EU sovereignty."
 ---
 
 Short answers to the questions people actually ask. For the "how", see [Quick Start](/docs/quick-start/); for the "what maps", see the [Coverage Matrix](/docs/coverage-matrix/).
@@ -95,7 +95,7 @@ Run `flareover cost your.snapshot.json --vps <your-eur/mo>` for a comparison of 
 It's a "flare over"/"failover" wink: moving off the orange cloud toward your own edge. The brand nods at the orange flare rather than naming anyone.
 
 ### How can I report a bug or request a feature?
-Open an issue on the [repository](https://github.com/fabriziosalmi/flareover/issues). If something in the coverage report looks wrong for your zone, attach the `assess --json` output (scrubbed of anything sensitive).
+Open an issue on the [repository](https://github.com/fabriziosalmi/flareover/issues). For a question rather than a bug ("will this migrate?", "how would I…"), ask in [Discussions](https://github.com/fabriziosalmi/flareover/discussions). If something in the coverage report looks wrong for your zone, attach the `assess --json` output (scrubbed of anything sensitive).
 
 ### Where do I go if the answer isn't here?
-[Troubleshooting](/docs/troubleshooting/) for common errors, or the [CLI Reference](/docs/cli-reference/) for exact flags and exit codes.
+[Troubleshooting](/docs/troubleshooting/) for common errors, or the [CLI Reference](/docs/cli-reference/) for exact flags and exit codes. Otherwise ask in [GitHub Discussions](https://github.com/fabriziosalmi/flareover/discussions): a question asked there becomes an answer here.
