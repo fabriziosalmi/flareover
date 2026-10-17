@@ -105,7 +105,7 @@ func Estimate(s cf.Snapshot, opts Options) Report {
 	}
 	// R2 object storage: variable by volume; noted rather than priced.
 	if len(s.R2Buckets) > 0 {
-		add("r2-storage", fmt.Sprintf("%d R2 bucket(s): volume-priced; migrates to MinIO (no egress fee)", len(s.R2Buckets)), "usage", 0)
+		add("r2-storage", fmt.Sprintf("%d R2 bucket(s): volume-priced; migrates to Garage (no egress fee)", len(s.R2Buckets)), "usage", 0)
 	}
 	// Access / Zero Trust beyond the free seat tier.
 	if len(s.AccessApps) > 0 {
@@ -126,7 +126,7 @@ func Estimate(s cf.Snapshot, opts Options) Report {
 		"Let's Encrypt / Actalis (certs): free",
 	}
 	if len(s.R2Buckets) > 0 {
-		r.EUStackItems = append(r.EUStackItems, "MinIO (S3-compatible, on the same VPS): free software, no egress fee")
+		r.EUStackItems = append(r.EUStackItems, "Garage (S3-compatible, on the same VPS): free software, no egress fee")
 	}
 
 	r.SavingsMonthly = r.CloudflareMonthlyMin - r.EUStackMonthly

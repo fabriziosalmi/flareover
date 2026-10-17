@@ -32,7 +32,7 @@ type S3Config struct {
 
 // ExtractS3 reads an S3-compatible account's buckets and config (versioning,
 // CORS, lifecycle, policy presence) into a Snapshot via SigV4-signed GETs.
-// Read-only. This is the "leave AWS S3 (or any S3) for sovereign MinIO" source,
+// Read-only. This is the "leave AWS S3 (or any S3) for sovereign object storage" source,
 // the counterpart to ExtractR2.
 func ExtractS3(ctx context.Context, cfg S3Config) (Snapshot, error) {
 	if cfg.HTTP == nil {
@@ -109,7 +109,7 @@ func (cfg S3Config) describeBucket(ctx context.Context, name string) (Bucket, []
 	// failure was indistinguishable from the absence: a 403 on ?versioning
 	// recorded "versioning off", a 429 on ?policy recorded "no policy
 	// attached". Both are the permissive answer, and both flow into the
-	// generated MinIO script as a setting to reproduce — so the migration drops
+	// generated provisioning script as a setting to reproduce — so the migration drops
 	// the control and the report calls the bucket covered.
 	//
 	// A 404 (NoSuchCORSConfiguration, NoSuchLifecycleConfiguration,
