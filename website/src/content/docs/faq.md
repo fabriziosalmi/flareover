@@ -54,7 +54,7 @@ Single-field rules and the managed OWASP ruleset map to **caddy-waf**. OWASP CRS
 
 ### Which DNS / storage / edge providers are supported?
 - **DNS (10):** self-hosted PowerDNS, plus managed bunny.net, Scaleway, OVH, Gandi, Leaseweb, Hetzner (EU-owned) and Route 53, Cloud DNS, Azure (US-operated). → [DNS Targets](/docs/dns-targets/)
-- **Object storage (5):** MinIO, Scaleway, OVH, Contabo, Aruba. → [Object Storage](/docs/object-storage/)
+- **Object storage (6):** self-hosted Garage (default) or an existing MinIO, plus managed Scaleway, OVH, Contabo, Aruba. → [Object Storage](/docs/object-storage/)
 - **Edge (9):** six EU-owned + three US-operator EU regions. → [Sovereignty Tiers](/docs/sovereignty-tiers/)
 
 ### What's the difference between "EU-owned" and "EU region"?

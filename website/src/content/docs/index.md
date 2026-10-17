@@ -42,7 +42,7 @@ Everything up to the DNS flip is a review artifact you can read in `git` (privat
 | WAF | **caddy-waf** (OWASP, rate-limit, IP/ASN/country, blocklists) |
 | Edge cache | **souin** (Caddy module) |
 | Certificates | **CertMate**: DNS-01, wildcard, Let's Encrypt or **Actalis** (EU CA) |
-| Object storage | Self-hosted **MinIO**, or managed EU S3 (see **[Object Storage](/docs/object-storage/)**) |
+| Object storage | Self-hosted **Garage** (default) or an existing MinIO, or managed EU S3 (see **[Object Storage](/docs/object-storage/)**) |
 | Sovereign origin link | **WireGuard** mesh (replaces the managed tunnel; origin stays inbound-free) |
 | Egress shield (optional) | **secure-proxy-manager** (default-deny + allowlist, fail-closed) |
 
@@ -56,4 +56,4 @@ Everything up to the DNS flip is a review artifact you can read in `git` (privat
 
 ---
 
-> **Status.** All five phases are implemented; the five core adapters (PowerDNS, CertMate, MinIO, WireGuard mesh, secure-proxy-manager) are proven live against real services. The managed DNS/storage backends and the Terraform edge module are verified against each vendor's documented API and test harness (Tier B) and promoted to live-proven after a real run. Nothing claims a proof it hasn't earned. See [Coverage Matrix](/docs/coverage-matrix/).
+> **Status.** All five phases are implemented; the five core adapters (PowerDNS, CertMate, Garage, WireGuard mesh, secure-proxy-manager) are proven live against real services. MinIO stays supported (`--dest minio`), but its live proof was made with the earlier `mc`-based scripts and does not cover the current AWS CLI ones. The managed DNS/storage backends and the Terraform edge module are verified against each vendor's documented API and test harness (Tier B) and promoted to live-proven after a real run. Nothing claims a proof it hasn't earned. See [Coverage Matrix](/docs/coverage-matrix/).

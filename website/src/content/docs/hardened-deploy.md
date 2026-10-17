@@ -88,8 +88,10 @@ workload needs it).
   admin** (every request served as admin). Set a ≥32-char `API_BEARER_TOKEN`
   *and* create an admin user before exposing it; keep it on an isolated,
   inbound-only-from-your-mesh network regardless.
-- **MinIO lifecycle rule IDs are not preserved.** `mc ilm rule add` lets MinIO
-  assign a fresh rule ID, so a rule extracted as `media/expire-tmp` re-provisions
-  as `media/<random>`. The **semantics are identical** (same prefix, same expiry):
-  the ID is an internal handle, not behavior. So this stays inside the 0%FP
-  contract, but don't be surprised the IDs differ across a round-trip.
+- **Lifecycle rule IDs are the destination's runtime state.** The generated
+  `lifecycle/<bucket>.json` carries the source rule ID, but the earlier
+  `mc`-based scripts (before MinIO was archived upstream) let MinIO assign a
+  fresh one, so a rule extracted as `media/expire-tmp` re-provisioned as
+  `media/<random>`. The **semantics are what the contract covers** (same prefix,
+  same expiry): the ID is an internal handle, not behavior. Don't be surprised
+  if an ID differs across a round-trip.

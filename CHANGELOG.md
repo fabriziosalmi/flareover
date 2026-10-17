@@ -9,6 +9,35 @@ existing flag without a deprecation first.
 
 ## Unreleased
 
+### Breaking
+
+- **Object storage migrates to Garage by default, and the generated scripts
+  use the AWS CLI instead of `mc`.** MinIO is archived upstream (both
+  `minio/minio` and `minio/mc`), the `mc` download answers 410 and
+  `quay.io/minio/minio` answers 401, so neither the default destination nor the
+  client the scripts depended on can be installed any more. That is also why
+  the default changes without a deprecation period: the old one had already
+  stopped working.
+  - `flareover storage` without `--dest` now targets self-hosted Garage.
+    `--dest minio` remains for an existing MinIO server; the managed EU presets
+    (`scaleway`, `ovh`, `contabo`, `aruba`) are unchanged.
+  - Every generated `provision.sh` needs the AWS CLI v2 (`aws`) instead of
+    `mc`. On Garage it also needs the Garage CLI (`GARAGE_CLI`) and `GARAGE_KEY`.
+    `--dest contabo` and `--dest aruba` now need `S3_REGION`: their signing
+    region is not known here, so it is asked for rather than guessed.
+  - On Garage, a versioned source bucket is reported **MANUAL** (Garage does not
+    implement S3 versioning), so a snapshot with versioned buckets now exits
+    with the MANUAL code on the default destination. Public read stays ASK and,
+    on Garage, is served by the web endpoint rather than anonymous S3.
+  - If you keep a MinIO server: add `--dest minio` and install `aws`.
+- **The deploy stack runs Garage instead of MinIO.** In `.env`, replace
+  `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` / `MINIO_IMAGE` with
+  `GARAGE_RPC_SECRET` (`openssl rand -hex 32`) / `GARAGE_ADMIN_TOKEN` /
+  `GARAGE_IMAGE`, run `./garage-init.sh` once after `docker compose up`, and
+  back up the `garage-meta` and `garage-data` volumes instead of `minio-data`.
+  Objects already in a `minio-data` volume are not moved for you: copy them
+  across with rclone before removing the old volume.
+
 ### Changed
 
 - **The toolchain is pinned to `go1.26.9`** (was `go1.26.8`). govulncheck

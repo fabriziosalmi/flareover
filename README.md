@@ -45,7 +45,7 @@ Behavior-changing configuration is emitted **only** for AUTO and answered-ASK it
 is surfaced, never silently applied. Classification and artifact generation are a **pure function** of
 `snapshot + decisions.lock`: run it twice, get byte-identical config (this is golden-tested), so the
 result is reviewable in git before anything goes live. (Runtime state a *target* assigns later, e.g.
-a MinIO lifecycle-rule id, is outside that function and noted where it differs.)
+a lifecycle-rule id an object store assigns, is outside that function and noted where it differs.)
 
 ## How it works: five phases
 
@@ -71,7 +71,7 @@ assess → prepare → present → execute → guard
 | Edge cache | souin (Caddy module) |
 | WAF | caddy-waf (OWASP/rate-limit/IP·ASN·country/blocklists) |
 | Certificates | CertMate: DNS-01, wildcard, Let's Encrypt or **Actalis** (EU CA) |
-| Object storage (R2/S3 →) | MinIO self-hosted, or managed EU S3: **Scaleway** (`storage --dest scaleway`) / **OVHcloud** (`--dest ovh`) / **Contabo** (`--dest contabo`, EU region `eu2`) / **Aruba** (`--dest aruba`, IT, endpoint from your account): buckets + versioning + lifecycle + CORS; rclone data copy |
+| Object storage (R2/S3 →) | Garage self-hosted (default; `--dest minio` for an existing MinIO, archived upstream), or managed EU S3: **Scaleway** (`storage --dest scaleway`) / **OVHcloud** (`--dest ovh`) / **Contabo** (`--dest contabo`, EU region `eu2`) / **Aruba** (`--dest aruba`, IT, endpoint from your account): buckets + versioning (not on Garage) + lifecycle + CORS via the AWS CLI; rclone data copy |
 | Egress shield (optional) | secure-proxy-manager (default-deny + allowlist, fail-closed) |
 | Sovereign origin link | WireGuard mesh (replaces the Cloudflare Tunnel; origin stays inbound-free) |
 | Blocklists | blacklists feeds |
@@ -130,7 +130,7 @@ flareover <phase> [args]
 | `provision …` | Stand the target up via APIs (`--pdns-url`, `--certmate-url`). |
 | `present …` | Parity gate: live edge vs staged edge (`--after-addr`). |
 | `execute …` | Orchestrate the phases live up to the gated cutover. |
-| `storage …` | Migrate object storage → MinIO + rclone plan (`--extract-r2`, `--extract-s3`). |
+| `storage …` | Migrate object storage → Garage (default), MinIO or managed EU S3, + rclone plan (`--extract-r2`, `--extract-s3`). |
 | `guard --url …` | Failguards watchdog: health-watch + rollback/failover (`--on-unhealthy`, `--interval`, `--once`). |
 
 ```bash
@@ -177,17 +177,22 @@ could not:
 |---------|-----------|
 | PowerDNS | zone + rrsets + DNSSEC provisioned on a live PowerDNS |
 | CertMate | a real, publicly-trusted **wildcard certificate** issued via DNS-01 |
-| MinIO | full extract → generate → provision → re-extract round-trip |
+| Garage | generated `garage/provision.sh` (AWS CLI + Garage CLI) run against Garage v2.4.1 in the bundled `deploy/` stack: buckets globally aliased and granted, CORS and expiry read back, public read served on the web endpoint (200) while anonymous S3 stays 403, a second run changes nothing |
 | WireGuard mesh | a real encrypted edge↔origin link, origin inbound-free |
 | secure-proxy-manager | generated egress script applied against the live API, state verified |
 
 The hand-rolled protocol code (AWS SigV4, PowerDNS rrsets, WireGuard X25519 keys, CertMate DNS-01) is
 verified against the real endpoints.
 
+**Garage** is the default object-storage destination since MinIO was archived upstream. Its verdicts
+(no S3 versioning, buckets created with the Garage CLI, public read through the web endpoint) were
+measured against Garage v2.4.1, and the `deploy/` smoke job runs `garage-init.sh` plus an S3 put/get
+round trip on every change to `deploy/`.
+
 **Honest tiering of the managed adapters.** The five above are *live-proven* (Tier A). The managed
 DNS backends beyond PowerDNS, **Scaleway · OVH · Gandi · Leaseweb · Hetzner** (EU-owned) and **Route 53
-· Cloud DNS · Azure** (US-operated), and the managed S3 destinations (**Scaleway · OVH · Contabo ·
-Aruba**), plus the `terraform/hetzner/` edge module, are *Tier B*: verified against each vendor's
+· Cloud DNS · Azure** (US-operated), and the S3 destinations other than Garage (**MinIO** with the current AWS CLI scripts, **Scaleway ·
+OVH · Contabo · Aruba**), plus the `terraform/hetzner/` edge module, are *Tier B*: verified against each vendor's
 documented API and `httptest`/`terraform validate`, **not yet exercised against the live service**.
 They are flagged as such and promoted to Tier A only after a real run (see
 [`docs/live-proof.md`](docs/live-proof.md)); nothing claims a live proof it hasn't earned.

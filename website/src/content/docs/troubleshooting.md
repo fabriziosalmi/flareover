@@ -64,7 +64,22 @@ flareover storage buckets.json --dest aruba --minio-endpoint https://<your-servi
 Only EU regions are accepted, to keep the migration EU-scoped. The error lists the valid regions for that provider.
 
 ### A lifecycle rule didn't migrate
-If it only tiers objects (a transition) or has no positive expiry (e.g. multipart-abort / noncurrent-version only), it's MANUAL: MinIO has no equivalent to emit. Only expiry rules with `> 0` days map.
+If it only tiers objects (a transition) or has no positive expiry (e.g. multipart-abort / noncurrent-version only), it's MANUAL on every destination: there is no equivalent to emit. Only expiry rules with `> 0` days map.
+
+### `storage` exits `10` on a bucket with versioning
+Expected on the default destination. Garage answers `NotImplemented` to `PutBucketVersioning`, so versioning is MANUAL there: the bucket migrates without it and older versions are not copied. Pick a destination that versions (`--dest minio|scaleway|ovh|contabo|aruba`), or accept the loss explicitly.
+
+### `set S3_REGION to the signing region of your … endpoint`
+`provision.sh` for `--dest contabo` and `--dest aruba` needs the signing region in `S3_REGION`; it is not guessed. Set it to the region your provider documents for the endpoint and re-run. On any destination, `S3_REGION` overrides the default.
+
+### `set GARAGE_KEY to the name or ID of the Garage key …`
+The Garage `provision.sh` grants every bucket to a Garage key and needs its name or ID. With the `deploy/` stack, `./garage-init.sh` creates the key `flareover`; export `GARAGE_KEY=flareover` together with its `GARAGE_ACCESS_KEY` / `GARAGE_SECRET_KEY`. If the `garage` binary is not on `PATH`, also set `GARAGE_CLI="docker compose exec -T garage /garage"`.
+
+### A Garage bucket exists but the web endpoint or another key cannot see it
+It was created over S3 (`CreateBucket`), which gives it only an alias local to the key that created it. Buckets from the generated `provision.sh` are created with `garage bucket create` (a global alias) for exactly this reason. For a bucket created some other way, find its ID with `garage bucket list`, add a global alias with `garage bucket alias <bucket-id> <bucket>`, and grant it with `garage bucket allow --read --write --owner <bucket> --key <key>`.
+
+### A public Garage bucket answers `403`
+Anonymous S3 GETs stay `403` on Garage by design. A bucket confirmed public is served by the **web endpoint** (port `3902` in the `deploy/` stack) as `<bucket>.<web root domain>`, not by the S3 API. Set the web root domain in `garage.toml` to your own domain and route it to `3902` from Caddy.
 
 ## Cutover & guard
 
@@ -96,10 +111,11 @@ sudo ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
 sudo systemctl restart systemd-resolved
 ```
 
-### `docker compose up` fails with `pull access denied for minio/minio`
-MinIO is no longer distributed on Docker Hub; it publishes on quay.io. An older
-copy of `deploy/docker-compose.yml` will not pull it. `MINIO_IMAGE` in
-`deploy/.env` should read `quay.io/minio/minio:<release>`.
+### Garage `/health` answers `503`
+A fresh Garage node serves nothing until it has a cluster layout. Run `./garage-init.sh` once in `deploy/` after `docker compose up -d`: it applies the layout and creates the migration key, and `/health` on `127.0.0.1:3903` then answers `200`. The script is safe to re-run.
+
+### `docker compose up` fails to pull a MinIO image
+MinIO is archived upstream and `quay.io/minio/minio` answers `401`. The current `deploy/docker-compose.yml` runs Garage instead (`GARAGE_IMAGE`); an older copy of the compose file or `.env` still references MinIO. Update both from the repository and set `GARAGE_RPC_SECRET` and `GARAGE_ADMIN_TOKEN` in `.env`.
 
 ### Which version am I running?
 ```bash

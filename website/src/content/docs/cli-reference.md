@@ -117,13 +117,13 @@ reproduce that control — a Zero-Trust Access policy, a Worker, a custom cipher
 outstanding. `--accept-manual` says you have read the list and are proceeding anyway.
 
 ### `storage <buckets.json>`
-Migrate object storage (R2/S3) → self-hosted MinIO (default) or managed EU S3. See [Object Storage](/docs/object-storage/).
+Migrate object storage (R2/S3) → self-hosted Garage (default), an existing MinIO, or managed EU S3. The generated `provision.sh` uses the AWS CLI v2 (plus the Garage CLI for Garage). See [Object Storage](/docs/object-storage/).
 
 | Flag | Effect |
 |------|--------|
-| `--dest <id>` | `minio` (default) \| `scaleway` \| `ovh` \| `contabo` \| `aruba` |
+| `--dest <id>` | `garage` (default) \| `minio` \| `scaleway` \| `ovh` \| `contabo` \| `aruba` |
 | `--region <r>` | Provider region (EU-scoped) |
-| `--minio-endpoint <url>` | S3 endpoint (required for `--dest aruba`; also the self-host MinIO endpoint) |
+| `--minio-endpoint <url>` | S3 endpoint for any destination (required for `--dest aruba`; the self-hosted Garage or MinIO endpoint). The name is historical |
 | `--extract-r2` / `--extract-s3` | Extract buckets from R2 / S3 first |
 
 ### `doctor …`
@@ -133,7 +133,7 @@ Read-only pre-flight: is every target reachable, authorized, and configured? GO/
 |------|--------|
 | `--pdns-url <url>` | Probe the PowerDNS API + auth (`PDNS_API_KEY` env) |
 | `--certmate-url <url>` | Probe CertMate health + DNS-provider config (`CERTMATE_TOKEN` env) |
-| `--minio-endpoint <url>` | Probe MinIO/S3 reachability |
+| `--minio-endpoint <url>` | Probe object storage (S3) reachability, for any S3 endpoint |
 | `--spm-url <url>` | Probe secure-proxy-manager readiness |
 | `--check-caddy` | Check the local Caddy build (caddy-waf + souin present) |
 

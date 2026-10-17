@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'">
 <title>flareover: deterministic edge migration to EU-sovereign infrastructure</title>
-<meta name="description" content="A deterministic, 0% false-positive engine that rebuilds your proxied CDN/WAF edge on EU-sovereign self-hosted infrastructure: Caddy, PowerDNS, CertMate, MinIO. AGPL.">
+<meta name="description" content="A deterministic, 0% false-positive engine that rebuilds your proxied CDN/WAF edge on EU-sovereign self-hosted infrastructure: Caddy, PowerDNS, CertMate, Garage. AGPL.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="canonical" href="https://www.flareover.com/">
 <meta property="og:type" content="website">
@@ -254,7 +254,7 @@
       <tr><td class="k">WAF</td><td>caddy-waf</td><td class="juris">free</td></tr>
       <tr><td class="k">Edge cache</td><td>souin</td><td class="juris">free</td></tr>
       <tr><td class="k">Certificates</td><td>CertMate · Let's Encrypt / Actalis</td><td class="juris">EU CA option</td></tr>
-      <tr><td class="k">Object storage (S3-compatible →)</td><td>MinIO · or managed EU: Scaleway / OVH</td><td class="juris">no egress fee</td></tr>
+      <tr><td class="k">Object storage (S3-compatible →)</td><td>Garage · or managed EU: Scaleway / OVH</td><td class="juris">no egress fee</td></tr>
       <tr><td class="k">Landing zone</td><td>refurbished bare metal → Proxmox → LXC</td><td class="juris">EU</td></tr>
     </table>
   </section>
@@ -262,7 +262,7 @@
   <section>
     <h2>Leave the storage too</h2>
     <p class="lead">The same 0% FP discipline migrates S3-compatible object storage (R2, S3, …) onto
-      sovereign MinIO, or managed EU S3 (Scaleway, OVH). The engine maps the configuration; rclone copies the data into the EU, with no egress fee.
+      sovereign Garage, or managed EU S3 (Scaleway, OVH). The engine maps the configuration; rclone copies the data into the EU, with no egress fee.
       A public bucket is never made public without your explicit yes; an IAM policy is flagged, never guessed.</p>
   </section>
 

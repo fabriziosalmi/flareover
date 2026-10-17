@@ -162,26 +162,28 @@ export LEASEWEB_API_KEY=<throwaway>
 
 ## 6. Scaleway / OVH Object Storage  (`storage --dest <p>`)
 
-**Assumption to confirm:** the generated `mc` script drives the provider's S3 for
-**versioning / lifecycle / CORS / public-read** (all standard S3 ops, but confirm
-the endpoint accepts each). The **0%-FP public guard** must hold: a public
-bucket stays private unless explicitly answered `yes`.
+**Assumption to confirm:** the generated script (AWS CLI v2, `aws s3api
+--endpoint-url`) drives the provider's S3 for **versioning / lifecycle / CORS /
+public-read** (all standard S3 ops, but confirm the endpoint accepts each). The
+**0%-FP public guard** must hold: a public bucket stays private unless
+explicitly answered `yes`.
 
 ```sh
 # Scaleway
 export SCW_ACCESS_KEY=<k> SCW_SECRET_KEY=<s>
 ./flareover storage buckets.json --dest scaleway --region fr-par --out out/
-sh out/scaleway-object-storage/provision.sh    # needs the `mc` client on PATH
+bash out/scaleway-object-storage/provision.sh    # needs the AWS CLI v2 (`aws`) on PATH
 
 # OVH (EU regions only: gra|sbg|de|waw)
 export OVH_S3_ACCESS_KEY=<k> OVH_S3_SECRET_KEY=<s>
 ./flareover storage buckets.json --dest ovh --region gra --out out/
-sh out/ovh-object-storage/provision.sh
+bash out/ovh-object-storage/provision.sh
 ```
 
-**Watch / prove:**
-- `mc ls <alias>`: buckets exist; `mc version info`: versioning where expected;
-  `mc ilm rule ls`: lifecycle; `mc cors get`: CORS.
+**Watch / prove** (with `aws --endpoint-url <endpoint> s3api ...`):
+- `list-buckets`: buckets exist; `get-bucket-versioning`: versioning where
+  expected; `get-bucket-lifecycle-configuration`: lifecycle; `get-bucket-cors`: CORS.
+- Re-running `provision.sh` converges: no error, no duplicate buckets.
 - A bucket that was public at the source stays **private** unless you answered
   `public-read:<bucket>=yes`. This is the storage 0%-FP guard. Verify it holds.
 - Then seed data with `sh out/rclone/migrate.sh` (two rclone remotes configured).
@@ -223,7 +225,7 @@ sh out/edge/create-ovh.ovh.sh
 ## Pass criteria (an adapter is Tier-A green when…)
 
 - [ ] `provision`/`apply` succeeds against the real API on a fresh test zone.
-- [ ] `dig`/`mc`/`curl` confirms the applied state **matches the preview** byte-for-intent.
+- [ ] `dig`/`aws s3api`/`curl` confirms the applied state **matches the preview** byte-for-intent.
 - [ ] **Re-running converges**: no duplicate records / rrsets / buckets.
 - [ ] The adapter's named **assumption** (above) is confirmed, or the code/notes
       are corrected to match reality.

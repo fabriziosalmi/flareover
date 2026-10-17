@@ -47,7 +47,7 @@ Every element gets exactly one verdict. **AUTO** = a proven equivalent is genera
 | `dns` | `powerdns` | Proxied (orange-cloud) record hides the true origin behind Cloudflare; the new edge needs the real backend address. |
 | `dnssec` | `powerdns` | DNSSEC is active. PowerDNS can sign the zone, but the DS record at the registrar must be replaced during cutover or resolution breaks. |
 | `ip-access` | `caddy-waf` | Challenge modes have no faithful caddy-waf equivalent (there is no interactive challenge). Treating as a hard block changes behavior for legitimate users. |
-| `r2` | `minio` | R2 bucket → MinIO bucket on Contabo (S3-compatible). Bucket + data copy is deterministic; application code that binds to R2 must be repointed by hand. |
+| `r2` | `garage` | R2 bucket → Garage bucket on your own VPS (S3-compatible; see `flareover storage` for what Garage does and does not reproduce). Bucket + data copy is deterministic; application code that binds to R2 must be repointed by hand. |
 | `redirect` | `caddy` | Redirect target is expression-derived (built from request fields). Caddy can template many of these, but not all Cloudflare functions have equivalents. |
 | `tls` | `caddy` | SSL Flexible means Cloudflare→origin is plaintext HTTP. That is insecure and often reflects an origin with no TLS. Confirm the intended origin scheme. |
 | `tls` | `caddy` | SSL Full (strict) verifies the origin certificate, but a Cloudflare Origin CA cert is trusted only by Cloudflare: a self-hosted Caddy edge cannot verify it. Reproduce the verified edge→origin link with a replacement origin cert, or accept an encrypted-but-unverified link (a downgrade from strict). |
