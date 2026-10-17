@@ -11,6 +11,12 @@ existing flag without a deprecation first.
 
 ### Changed
 
+- **The toolchain is pinned to `go1.26.9`** (was `go1.26.8`). govulncheck
+  reports nine reachable standard-library advisories in 1.26.8 (`crypto/tls`,
+  `mime/multipart`, `net/http`; GO-2026-6608 to GO-2026-6617) and none in 1.26.9.
+  Building from source picks the new toolchain up automatically; the Go floor
+  is unchanged.
+
 - **The release archive ships the hardened-deploy guide as
   `docs/hardened-deploy.md`**, not `docs/deploy-hardened.md`. The guide moved
   into the docs site ([Hardened Proxmox landing zone](https://www.flareover.com/docs/hardened-deploy/)),
