@@ -18,5 +18,10 @@
     "astro": "^7.3.5",
     "sharp": "^0.35.5"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "@expressive-code/core": {
+      "postcss-nested": "7.0.2"
+    }
+  }
 }
