@@ -630,9 +630,9 @@ func classifyLoadBalancers(s cf.Snapshot, add func(report.Finding)) {
 func classifyR2(s cf.Snapshot, add func(report.Finding)) {
 	for _, b := range s.R2Buckets {
 		add(report.Finding{
-			Kind: "r2", Name: b.Name, Verdict: report.Ask, Target: "minio",
-			Rationale: "R2 bucket → MinIO bucket on Contabo (S3-compatible). Bucket + data copy is deterministic; application code that binds to R2 must be repointed by hand.",
-			Question:  &report.Question{ID: "r2-migrate:" + b.Name, Prompt: fmt.Sprintf("Provision a MinIO bucket and copy data for %q?", b.Name), Options: []string{"yes", "no"}, Default: "no"},
+			Kind: "r2", Name: b.Name, Verdict: report.Ask, Target: "garage",
+			Rationale: "R2 bucket → Garage bucket on your own VPS (S3-compatible; see `flareover storage` for what Garage does and does not reproduce). Bucket + data copy is deterministic; application code that binds to R2 must be repointed by hand.",
+			Question:  &report.Question{ID: "r2-migrate:" + b.Name, Prompt: fmt.Sprintf("Provision a Garage bucket and copy data for %q?", b.Name), Options: []string{"yes", "no"}, Default: "no"},
 		})
 	}
 }

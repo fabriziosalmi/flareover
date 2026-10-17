@@ -42,8 +42,8 @@ jobs:
           {
             echo "PDNS_API_KEY=$(openssl rand -hex 24)"
             echo "CERTMATE_TOKEN=$(openssl rand -hex 32)"
-            echo "MINIO_ROOT_USER=flareover"
-            echo "MINIO_ROOT_PASSWORD=$(openssl rand -hex 24)"
+            echo "GARAGE_RPC_SECRET=$(openssl rand -hex 32)"
+            echo "GARAGE_ADMIN_TOKEN=$(openssl rand -hex 24)"
             # The runner has systemd-resolved holding 127.0.0.53:53, so
             # publishing DNS on 0.0.0.0 fails to bind — the same collision an
             # operator hits on any Ubuntu host, which is how this knob came to
@@ -51,9 +51,9 @@ jobs:
             echo "DNS_BIND=127.0.0.1"
           } >> .env
 
-      - name: Bring up PowerDNS and MinIO
+      - name: Bring up PowerDNS and Garage
         working-directory: deploy
-        run: docker compose up -d powerdns minio
+        run: docker compose up -d powerdns garage
 
       # This is the assertion the caveat was standing in for: pdns-init loaded
       # the schema, PowerDNS started against it, and the API answers.
@@ -176,16 +176,33 @@ jobs:
           fi
           echo "restored: the zone is there and its DNSSEC signing key is unchanged"
 
-      - name: MinIO answers
+      # A fresh Garage node serves nothing until it has a layout (/health is 503),
+      # so this runs the bootstrap an operator runs, then a real S3 round trip
+      # with the key it creates: the path the generated garage/provision.sh takes.
+      - name: Garage serves S3 once initialised
         working-directory: deploy
         run: |
-          docker compose up -d minio
+          docker compose up -d garage
+          ./garage-init.sh 1G
           for i in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9000/minio/health/live || true)
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3903/health || true)
             [ "$code" = "200" ] && break
             sleep 2
           done
-          [ "$code" = "200" ] || { echo "::error::MinIO health check returned $code"; exit 1; }
+          [ "$code" = "200" ] || { echo "::error::Garage health check returned $code"; exit 1; }
+          garage() { docker compose exec -T -e RUST_LOG=warn garage /garage "$@"; }
+          info="$(garage key info flareover --show-secret)"
+          secret="$(echo "$info" | awk -F': *' '/Secret key/ {print $2}')"
+          echo "::add-mask::$secret"
+          export AWS_ACCESS_KEY_ID="$(echo "$info" | awk -F': *' '/Key ID/ {print $2}')"
+          export AWS_SECRET_ACCESS_KEY="$secret" AWS_DEFAULT_REGION=garage
+          garage bucket create smoke
+          garage bucket allow --read --write --owner smoke --key flareover
+          echo smoke > /tmp/smoke.txt
+          aws --endpoint-url http://127.0.0.1:3900 s3api put-object --bucket smoke --key smoke.txt --body /tmp/smoke.txt >/dev/null
+          got="$(aws --endpoint-url http://127.0.0.1:3900 s3 cp s3://smoke/smoke.txt -)"
+          [ "$got" = "smoke" ] || { echo "::error::S3 round trip returned '$got'"; exit 1; }
+          echo "Garage: health 200, S3 round trip ok"
 
       - name: Logs on failure
         if: failure()

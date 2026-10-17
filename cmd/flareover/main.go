@@ -13,7 +13,7 @@
 //	guard    failguards: health monitoring + rollback/failover trigger
 //
 // Plus zones/extract (live Cloudflare read), resolve (ASK → decisions.lock),
-// cost, and storage (R2/S3 → MinIO). Every target adapter has been exercised
+// cost, and storage (R2/S3 → Garage). Every target adapter has been exercised
 // against a real running service, not just mocks.
 package main
 
@@ -85,12 +85,15 @@ PHASES
   present ...               Parity gate: live edge vs staged edge (--after-addr).
   execute ...               Orchestrate the phases live up to the gated cutover.
                             Stops on MANUAL items unless --accept-manual.
-  storage <buckets.json>    Migrate object storage (R2/S3) → self-hosted MinIO
-                            (default), or managed EU S3: --dest scaleway [--region
-                            fr-par|nl-ams|pl-waw|it-mil] / --dest ovh [--region
-                            gra|sbg|de|waw] / --dest contabo [--region eu2] /
-                            --dest aruba --minio-endpoint <service-point-url>.
-                            Emits an rclone data-copy plan too.
+  storage <buckets.json>    Migrate object storage (R2/S3) → self-hosted Garage
+                            (default), an existing MinIO (--dest minio), or managed
+                            EU S3: --dest scaleway [--region fr-par|nl-ams|pl-waw|
+                            it-mil] / --dest ovh [--region gra|sbg|de|waw] / --dest
+                            contabo [--region eu2] / --dest aruba --minio-endpoint
+                            <service-point-url>. --minio-endpoint sets the S3
+                            endpoint for any destination. The generated scripts use
+                            the AWS CLI (Garage also its own CLI). Emits an rclone
+                            data-copy plan too.
   guard --url ...           Failguards watchdog: health-watch + rollback/failover
                             trigger. See GUARD FLAGS.
   doctor ...                Read-only pre-flight: is every target reachable,
@@ -101,7 +104,7 @@ PHASES
 DOCTOR FLAGS
   --pdns-url  (+ PDNS_API_KEY env)   probe the PowerDNS API + auth
   --certmate-url (+ CERTMATE_TOKEN)  probe CertMate health + DNS-provider config
-  --minio-endpoint <url>             probe MinIO/S3 reachability
+  --minio-endpoint <url>             probe object-storage (S3) reachability
   --spm-url <url>                    probe secure-proxy-manager readiness
   --check-caddy                      check the local caddy build (caddy-waf + souin)
 
@@ -637,7 +640,14 @@ func cmdStorage(args []string) int {
 			return 1
 		}
 	}
-	rep := objstore.Classify(snap)
+	// The destination is validated before classification: what is AUTO depends
+	// on what the destination implements (Garage has no S3 versioning).
+	if !objstore.ValidDest(dest) {
+		fmt.Fprintf(os.Stderr, "flareover storage: unknown --dest %q (want: %s)\n", dest, strings.Join(objstore.Dests, " | "))
+		return 2
+	}
+	opts := objstore.GenOptions{MinIOAlias: alias, MinIOEndpoint: endpoint, Dest: dest, Region: region}
+	rep := objstore.ClassifyFor(snap, opts)
 	fmt.Print(rep.Text())
 
 	if outDir != "" {
@@ -645,10 +655,6 @@ func cmdStorage(args []string) int {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "flareover storage: %v\n", err)
 			return 1
-		}
-		if dest != "" && dest != "minio" && dest != "scaleway" && dest != "ovh" && dest != "contabo" && dest != "aruba" {
-			fmt.Fprintf(os.Stderr, "flareover storage: unknown --dest %q (want: minio | scaleway | ovh | contabo | aruba)\n", dest)
-			return 2
 		}
 		if dest == "aruba" && endpoint == "" {
 			fmt.Fprintln(os.Stderr, "flareover storage: --dest aruba needs --minio-endpoint <your Aruba Service Point URL> (Aruba's S3 endpoint is account-specific: copy it from the Object Storage account page; it is never guessed)")
@@ -666,9 +672,8 @@ func cmdStorage(args []string) int {
 			fmt.Fprintf(os.Stderr, "flareover storage: unknown Contabo --region %q (EU regions: %s)\n", region, strings.Join(objstore.ContaboStorageRegions, ", "))
 			return 2
 		}
-		arts := objstore.Generate(snap, objstore.GenOptions{
-			MinIOAlias: alias, MinIOEndpoint: endpoint, Decisions: decisions, Dest: dest, Region: region,
-		})
+		opts.Decisions = decisions
+		arts := objstore.Generate(snap, opts)
 		// objstore.Artifact carries no Mode (its outputs have always been 0644);
 		// widen it to the common shape so both phases share one writer.
 		files := make([]target.Artifact, len(arts))

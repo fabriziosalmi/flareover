@@ -35,20 +35,21 @@ func find(r report.Report, kind, name string) *report.Finding {
 	return nil
 }
 
-func TestClassifyVerdicts(t *testing.T) {
+func TestClassifyVerdictsGarageDefault(t *testing.T) {
 	r := Classify(load(t))
 	cases := []struct {
 		kind, name string
 		want       report.Verdict
 	}{
 		{"bucket", "public-assets", report.Auto},
-		{"versioning", "public-assets", report.Auto},
+		// Garage does not implement S3 versioning: never a silent AUTO.
+		{"versioning", "public-assets", report.Manual},
 		{"cors", "public-assets#0", report.Auto},
 		{"lifecycle", "public-assets/expire-temp", report.Auto},
 		{"public-access", "public-assets", report.Ask}, // never public silently
 		{"bucket", "private-backups", report.Auto},
 		{"policy", "private-backups", report.Manual},            // IAM policy not guessed
-		{"lifecycle", "private-backups/glacier", report.Manual}, // tiering has no MinIO target
+		{"lifecycle", "private-backups/glacier", report.Manual}, // tiering has no target
 	}
 	for _, c := range cases {
 		f := find(r, c.kind, c.name)
@@ -60,40 +61,138 @@ func TestClassifyVerdicts(t *testing.T) {
 			t.Errorf("%s/%s: %s, want %s", c.kind, c.name, f.Verdict, c.want)
 		}
 	}
-}
-
-// TestPublicNotReproducedWithoutYes is the 0% FP guard for storage: a public
-// bucket must not become public on MinIO unless explicitly answered yes.
-func TestPublicNotReproducedWithoutYes(t *testing.T) {
-	s := load(t)
-
-	// No decision → provisioning must NOT set anonymous download.
-	arts := Generate(s, GenOptions{})
-	prov := artifact(arts, "minio/provision.sh")
-	if strings.Contains(prov, "anonymous set download") {
-		t.Error("public read reproduced without an explicit yes")
+	if f := find(r, "bucket", "public-assets"); f == nil || f.Target != "garage" {
+		t.Errorf("default target must be garage, got %v", f)
 	}
-	if !strings.Contains(prov, "stays private") {
-		t.Error("declined public read should be noted, not silent")
-	}
-
-	// Explicit yes → provisioning sets anonymous download.
-	arts = Generate(s, GenOptions{Decisions: map[string]string{"public-read:public-assets": "yes"}})
-	prov = artifact(arts, "minio/provision.sh")
-	if !strings.Contains(prov, "anonymous set download eu/public-assets") {
-		t.Error("confirmed public read should be reproduced")
+	if f := find(r, "public-access", "public-assets"); f == nil || !strings.Contains(f.Rationale, "web endpoint") {
+		t.Error("Garage public read must say it is served by the web endpoint, not anonymous S3")
 	}
 }
 
-func TestRcloneAndProvisionArtifacts(t *testing.T) {
-	arts := Generate(load(t), GenOptions{MinIOAlias: "eu"})
-	prov := artifact(arts, "minio/provision.sh")
-	for _, want := range []string{"mc mb -p eu/public-assets", "mc version enable eu/public-assets", "mc ilm rule add --expire-days 30"} {
-		if !strings.Contains(prov, want) {
-			t.Errorf("provision.sh missing %q", want)
+func TestClassifyVerdictsMinIO(t *testing.T) {
+	r := ClassifyFor(load(t), GenOptions{Dest: "minio"})
+	if f := find(r, "versioning", "public-assets"); f == nil || f.Verdict != report.Auto || f.Target != "minio" {
+		t.Errorf("MinIO implements versioning: want AUTO/minio, got %v", f)
+	}
+}
+
+// TestClassifyAgreesWithGenerate is the classify ⟺ generate contract, per
+// destination: a setting is AUTO exactly when the script reproduces it.
+func TestClassifyAgreesWithGenerate(t *testing.T) {
+	for _, dest := range Dests {
+		opts := GenOptions{Dest: dest, MinIOEndpoint: "https://s3.example.eu"}
+		r := ClassifyFor(load(t), opts)
+		var prov string
+		for _, a := range Generate(load(t), opts) {
+			if strings.HasSuffix(a.Path, "/provision.sh") {
+				prov = string(a.Content)
+			}
+		}
+		f := find(r, "versioning", "public-assets")
+		auto := f != nil && f.Verdict == report.Auto
+		emitted := strings.Contains(prov, "put-bucket-versioning --bucket public-assets")
+		if auto != emitted {
+			t.Errorf("%s: versioning AUTO=%v but emitted=%v", dest, auto, emitted)
+		}
+		lc := find(r, "lifecycle", "public-assets/expire-temp")
+		if (lc != nil && lc.Verdict == report.Auto) != strings.Contains(prov, "put-bucket-lifecycle-configuration --bucket public-assets") {
+			t.Errorf("%s: lifecycle verdict and script disagree", dest)
 		}
 	}
-	rc := artifact(arts, "rclone/migrate.sh")
+}
+
+// TestGarageProvisioning pins what was measured against Garage v2.4.1: a bucket
+// created over S3 gets only a key-local alias (invisible to the web endpoint and
+// to every other key), so buckets are created through the Garage CLI and granted
+// to the migration key; versioning (NotImplemented) is never emitted.
+func TestGarageProvisioning(t *testing.T) {
+	arts := Generate(load(t), GenOptions{})
+	prov := artifact(arts, "garage/provision.sh")
+	if prov == "" {
+		t.Fatal("no garage/provision.sh artifact")
+	}
+	for _, want := range []string{
+		`read -r -a GARAGE <<< "${GARAGE_CLI:-garage}"`,
+		`: "${GARAGE_KEY:?`,
+		`REGION="${S3_REGION:-garage}"`,
+		`"${GARAGE[@]}" bucket info public-assets >/dev/null 2>&1 || "${GARAGE[@]}" bucket create public-assets`,
+		`"${GARAGE[@]}" bucket allow --read --write --owner public-assets --key "$GARAGE_KEY"`,
+		`s3 put-bucket-lifecycle-configuration --bucket public-assets --lifecycle-configuration "file://$HERE/lifecycle/public-assets.json"`,
+		`s3 put-bucket-cors --bucket public-assets --cors-configuration "file://$HERE/cors/public-assets.json"`,
+		`aws --endpoint-url "https://GARAGE_S3_ENDPOINT" s3api "$@"`,
+	} {
+		if !strings.Contains(prov, want) {
+			t.Errorf("garage provision.sh missing %q", want)
+		}
+	}
+	for _, bad := range []string{"create-bucket", "put-bucket-versioning", "put-bucket-policy"} {
+		if strings.Contains(prov, bad) {
+			t.Errorf("garage provision.sh must not use %s", bad)
+		}
+	}
+	var lc struct {
+		Rules []struct {
+			ID         string
+			Status     string
+			Filter     struct{ Prefix string }
+			Expiration struct{ Days int }
+		}
+	}
+	if err := json.Unmarshal([]byte(artifact(arts, "garage/lifecycle/public-assets.json")), &lc); err != nil {
+		t.Fatal(err)
+	}
+	if len(lc.Rules) != 1 || lc.Rules[0].Expiration.Days != 30 || lc.Rules[0].Status != "Enabled" {
+		t.Errorf("lifecycle document: %+v", lc)
+	}
+	var cors awsCORS
+	if err := json.Unmarshal([]byte(artifact(arts, "garage/cors/public-assets.json")), &cors); err != nil || len(cors.CORSRules) == 0 || len(cors.CORSRules[0].AllowedOrigins) == 0 {
+		t.Errorf("CORS document must be the aws s3api shape (CORSRules/AllowedOrigins), err=%v doc=%+v", err, cors)
+	}
+}
+
+// TestPublicNotReproducedWithoutYes is the 0% FP guard for storage, on every
+// destination: a public bucket becomes public only on an explicit yes.
+func TestPublicNotReproducedWithoutYes(t *testing.T) {
+	yes := map[string]string{"public-read:public-assets": "yes"}
+	for _, dest := range Dests {
+		opts := GenOptions{Dest: dest, MinIOEndpoint: "https://s3.example.eu"}
+		prov := func(o GenOptions) string {
+			for _, a := range Generate(load(t), o) {
+				if strings.HasSuffix(a.Path, "/provision.sh") {
+					return string(a.Content)
+				}
+			}
+			return ""
+		}
+		no := prov(opts)
+		if strings.Contains(no, "put-bucket-website") || strings.Contains(no, "put-bucket-policy") {
+			t.Errorf("%s: public read reproduced without an explicit yes", dest)
+		}
+		if !strings.Contains(no, "stays private") {
+			t.Errorf("%s: declined public read should be noted, not silent", dest)
+		}
+		opts.Decisions = yes
+		got := prov(opts)
+		want := "s3 put-bucket-policy --bucket public-assets"
+		if dest == "garage" {
+			want = "s3 put-bucket-website --bucket public-assets"
+		}
+		if !strings.Contains(got, want) {
+			t.Errorf("%s: confirmed public read should emit %q", dest, want)
+		}
+	}
+	// The policy document grants anonymous GetObject on that bucket only.
+	arts := Generate(load(t), GenOptions{Dest: "minio", Decisions: yes})
+	pol := artifact(arts, "minio/policy/public-assets.json")
+	for _, want := range []string{`"Principal": "*"`, `"s3:GetObject"`, `"arn:aws:s3:::public-assets/*"`} {
+		if !strings.Contains(pol, want) {
+			t.Errorf("public-read policy missing %s:\n%s", want, pol)
+		}
+	}
+}
+
+func TestRcloneArtifacts(t *testing.T) {
+	rc := artifact(Generate(load(t), GenOptions{}), "rclone/migrate.sh")
 	if !strings.Contains(rc, "rclone sync --progress src:private-backups eu:private-backups") {
 		t.Error("rclone plan missing a bucket sync")
 	}
@@ -103,9 +202,8 @@ func TestRcloneAndProvisionArtifacts(t *testing.T) {
 }
 
 // TestLifecycleZeroExpiryIsManual pins the audit fix: a lifecycle rule with no
-// positive object-expiry (multipart-abort / noncurrent-version only) has no
-// MinIO ILM equivalent, so classify must mark it MANUAL (it was a false-AUTO
-// before) and Generate must emit no `mc ilm` line for it (classify ⟺ generate).
+// positive object-expiry (multipart-abort / noncurrent-version only) is MANUAL
+// and is not in the generated lifecycle document (classify ⟺ generate).
 func TestLifecycleZeroExpiryIsManual(t *testing.T) {
 	snap := Snapshot{Source: "s3", Buckets: []Bucket{{
 		Name: "b", Lifecycle: []LifecycleRule{
@@ -120,17 +218,42 @@ func TestLifecycleZeroExpiryIsManual(t *testing.T) {
 	if f := find(r, "lifecycle", "b/expire-30"); f == nil || f.Verdict != report.Auto {
 		t.Errorf("positive-expiry lifecycle must be AUTO, got %v", f)
 	}
-	prov := artifact(Generate(snap, GenOptions{}), "minio/provision.sh")
-	if strings.Contains(prov, "--expire-days 0") {
-		t.Error("Generate must not emit an mc ilm line for the zero-expiry rule")
+	doc := artifact(Generate(snap, GenOptions{}), "garage/lifecycle/b.json")
+	if strings.Contains(doc, "abort-only") {
+		t.Error("the zero-expiry rule must not be emitted")
 	}
-	if !strings.Contains(prov, "--expire-days 30") {
-		t.Error("Generate must emit the positive-expiry rule")
+	if !strings.Contains(doc, "expire-30") || !strings.Contains(doc, `"Days": 30`) {
+		t.Error("the positive-expiry rule must be emitted")
 	}
 }
 
-// TestScalewayDestination checks the managed-EU-S3 preset: right endpoint,
-// region, credentials env, alias, and artifact folder.
+// TestNoArchivedClientInAnyScript: the MinIO client is archived upstream and its
+// download endpoint answers 410; no destination may still depend on it.
+func TestNoArchivedClientInAnyScript(t *testing.T) {
+	for _, dest := range Dests {
+		for _, a := range Generate(load(t), GenOptions{Dest: dest, MinIOEndpoint: "https://s3.example.eu"}) {
+			for _, line := range strings.Split(string(a.Content), "\n") {
+				if strings.HasPrefix(strings.TrimSpace(line), "mc ") {
+					t.Errorf("%s %s still calls mc: %q", dest, a.Path, line)
+				}
+			}
+		}
+	}
+}
+
+func TestValidDest(t *testing.T) {
+	for _, d := range append([]string{""}, Dests...) {
+		if !ValidDest(d) {
+			t.Errorf("%q should be valid", d)
+		}
+	}
+	if ValidDest("s3") {
+		t.Error("unknown destinations must be rejected")
+	}
+}
+
+// TestScalewayDestination checks the managed-EU-S3 preset: endpoint, signing
+// region, credentials env, rclone remote, and artifact folder.
 func TestScalewayDestination(t *testing.T) {
 	arts := Generate(load(t), GenOptions{Dest: "scaleway"})
 	prov := artifact(arts, "scaleway-object-storage/provision.sh")
@@ -138,41 +261,27 @@ func TestScalewayDestination(t *testing.T) {
 		t.Fatal("no scaleway-object-storage/provision.sh artifact")
 	}
 	for _, want := range []string{
-		"mc alias set scw https://s3.fr-par.scw.cloud \"$SCW_ACCESS_KEY\" \"$SCW_SECRET_KEY\"",
-		"mc mb -p scw/public-assets",
-		"mc version enable scw/public-assets",
+		`aws --endpoint-url "https://s3.fr-par.scw.cloud" s3api "$@"`,
+		`AWS_ACCESS_KEY_ID="$SCW_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$SCW_SECRET_KEY"`,
+		`REGION="${S3_REGION:-fr-par}"`,
+		"s3 head-bucket --bucket public-assets >/dev/null 2>&1 || s3 create-bucket --bucket public-assets",
+		"s3 put-bucket-versioning --bucket public-assets --versioning-configuration Status=Enabled",
 		"Scaleway Object Storage (EU-owned, fr-par)",
 	} {
 		if !strings.Contains(prov, want) {
 			t.Errorf("scaleway provision.sh missing %q", want)
 		}
 	}
-	// It must NOT leak the MinIO defaults.
-	if strings.Contains(prov, "MINIO_ACCESS_KEY") || strings.Contains(prov, "mc mb -p eu/") {
-		t.Error("scaleway provision leaked MinIO alias/creds")
+	if strings.Contains(prov, "MINIO_ACCESS_KEY") || strings.Contains(prov, "GARAGE") {
+		t.Error("scaleway provision leaked another destination's creds")
 	}
-	// rclone destination remote follows the alias.
 	rc := artifact(arts, "rclone/migrate.sh")
 	if !strings.Contains(rc, "rclone sync --progress src:public-assets scw:public-assets") {
 		t.Error("rclone plan should target the scw: remote")
 	}
-
-	// Region override flows into the endpoint.
 	nl := artifact(Generate(load(t), GenOptions{Dest: "scaleway", Region: "nl-ams"}), "scaleway-object-storage/provision.sh")
-	if !strings.Contains(nl, "https://s3.nl-ams.scw.cloud") {
-		t.Error("region override did not reach the endpoint")
-	}
-}
-
-// TestScalewayPublicGuard: the 0%-FP public-read guard holds for Scaleway too.
-func TestScalewayPublicGuard(t *testing.T) {
-	prov := artifact(Generate(load(t), GenOptions{Dest: "scaleway"}), "scaleway-object-storage/provision.sh")
-	if strings.Contains(prov, "anonymous set download") {
-		t.Error("public read reproduced on Scaleway without an explicit yes")
-	}
-	prov = artifact(Generate(load(t), GenOptions{Dest: "scaleway", Decisions: map[string]string{"public-read:public-assets": "yes"}}), "scaleway-object-storage/provision.sh")
-	if !strings.Contains(prov, "mc anonymous set download scw/public-assets") {
-		t.Error("confirmed public read should be reproduced on Scaleway")
+	if !strings.Contains(nl, "https://s3.nl-ams.scw.cloud") || !strings.Contains(nl, `REGION="${S3_REGION:-nl-ams}"`) {
+		t.Error("region override did not reach the endpoint and the signing region")
 	}
 }
 
@@ -190,54 +299,37 @@ func TestValidScalewayRegion(t *testing.T) {
 // TestOVHDestination checks the OVHcloud managed-S3 preset.
 func TestOVHDestination(t *testing.T) {
 	prov := artifact(Generate(load(t), GenOptions{Dest: "ovh"}), "ovh-object-storage/provision.sh")
-	if prov == "" {
-		t.Fatal("no ovh-object-storage/provision.sh artifact")
-	}
 	for _, want := range []string{
-		"mc alias set ovh https://s3.gra.io.cloud.ovh.net \"$OVH_S3_ACCESS_KEY\" \"$OVH_S3_SECRET_KEY\"",
-		"mc mb -p ovh/public-assets",
+		`aws --endpoint-url "https://s3.gra.io.cloud.ovh.net" s3api "$@"`,
+		`AWS_ACCESS_KEY_ID="$OVH_S3_ACCESS_KEY"`,
+		`REGION="${S3_REGION:-gra}"`,
 		"OVHcloud Object Storage (EU-owned, gra)",
 	} {
 		if !strings.Contains(prov, want) {
 			t.Errorf("ovh provision.sh missing %q", want)
 		}
 	}
-	if strings.Contains(prov, "scw/") || strings.Contains(prov, "MINIO_ACCESS_KEY") {
-		t.Error("ovh provision leaked another destination's alias/creds")
-	}
-	// Region override → endpoint.
 	de := artifact(Generate(load(t), GenOptions{Dest: "ovh", Region: "de"}), "ovh-object-storage/provision.sh")
 	if !strings.Contains(de, "https://s3.de.io.cloud.ovh.net") {
 		t.Error("OVH region override did not reach the endpoint")
 	}
-	// The public-read guard holds here too.
-	if strings.Contains(prov, "anonymous set download") {
-		t.Error("public read reproduced on OVH without an explicit yes")
-	}
 }
 
-// TestContaboDestination checks the Contabo managed-S3 preset (EU-owned,
-// S3-compatible; region eu2 in the endpoint hostname, not an "s3." prefix).
-func TestContaboDestination(t *testing.T) {
-	prov := artifact(Generate(load(t), GenOptions{Dest: "contabo"}), "contabo-object-storage/provision.sh")
-	if prov == "" {
-		t.Fatal("no contabo-object-storage/provision.sh artifact")
-	}
-	for _, want := range []string{
-		"mc alias set contabo https://eu2.contabostorage.com \"$CONTABO_S3_ACCESS_KEY\" \"$CONTABO_S3_SECRET_KEY\"",
-		"mc mb -p contabo/public-assets",
-		"Contabo Object Storage (EU-owned, eu2)",
+// TestContaboAndArubaSigningRegionIsNeverGuessed: their SigV4 region is not
+// known here, so the script demands S3_REGION instead of inventing one.
+func TestContaboAndArubaSigningRegionIsNeverGuessed(t *testing.T) {
+	ep := "https://sp-eu-it1.arubacloud.example"
+	for _, c := range []struct{ dest, path, endpoint, env string }{
+		{"contabo", "contabo-object-storage/provision.sh", "https://eu2.contabostorage.com", "CONTABO_S3_ACCESS_KEY"},
+		{"aruba", "aruba-object-storage/provision.sh", ep, "ARUBA_S3_ACCESS_KEY"},
 	} {
-		if !strings.Contains(prov, want) {
-			t.Errorf("contabo provision.sh missing %q", want)
+		prov := artifact(Generate(load(t), GenOptions{Dest: c.dest, MinIOEndpoint: ep}), c.path)
+		if !strings.Contains(prov, `REGION="${S3_REGION:?`) {
+			t.Errorf("%s: S3_REGION must be required, not defaulted", c.dest)
 		}
-	}
-	if strings.Contains(prov, "scw/") || strings.Contains(prov, "ovh/") || strings.Contains(prov, "MINIO_ACCESS_KEY") {
-		t.Error("contabo provision leaked another destination's alias/creds")
-	}
-	// The public-read guard holds here too.
-	if strings.Contains(prov, "anonymous set download") {
-		t.Error("public read reproduced on Contabo without an explicit yes")
+		if !strings.Contains(prov, `aws --endpoint-url "`+c.endpoint+`"`) || !strings.Contains(prov, c.env) {
+			t.Errorf("%s: wrong endpoint or credentials env", c.dest)
+		}
 	}
 }
 
@@ -247,29 +339,6 @@ func TestValidContaboStorageRegion(t *testing.T) {
 	}
 	if ValidContaboStorageRegion("usc1") {
 		t.Error("non-EU Contabo regions must be rejected (EU-scoped migration)")
-	}
-}
-
-// TestArubaDestination checks the Aruba preset: EU-owned (IT) tier label, Aruba
-// env vars, and the operator-supplied endpoint carried through verbatim (Aruba's
-// S3 host is account-specific, so it is never baked in / guessed).
-func TestArubaDestination(t *testing.T) {
-	ep := "https://sp-eu-it1.arubacloud.example"
-	prov := artifact(Generate(load(t), GenOptions{Dest: "aruba", MinIOEndpoint: ep}), "aruba-object-storage/provision.sh")
-	if prov == "" {
-		t.Fatal("no aruba-object-storage/provision.sh artifact")
-	}
-	for _, want := range []string{
-		"mc alias set aruba " + ep + " \"$ARUBA_S3_ACCESS_KEY\" \"$ARUBA_S3_SECRET_KEY\"",
-		"mc mb -p aruba/public-assets",
-		"Aruba Cloud Object Storage (EU-owned, IT",
-	} {
-		if !strings.Contains(prov, want) {
-			t.Errorf("aruba provision.sh missing %q", want)
-		}
-	}
-	if strings.Contains(prov, "scw/") || strings.Contains(prov, "ovh/") || strings.Contains(prov, "contabo/") || strings.Contains(prov, "MINIO_ACCESS_KEY") {
-		t.Error("aruba provision leaked another destination's alias/creds")
 	}
 }
 
@@ -381,7 +450,7 @@ func TestAStaleBucketSnapshotIsFlagged(t *testing.T) {
 	}
 }
 
-// Bucket names reach the generated `mc mb` and rclone commands, which an
+// Bucket names reach the generated provisioning and rclone commands, which an
 // operator runs as shell.
 func TestValidateRejectsBucketNamesThatReachAShell(t *testing.T) {
 	for _, bad := range []string{"", "a", "UPPER", "has space", "semi;colon", "../etc", "trailing-", strings.Repeat("x", 64)} {

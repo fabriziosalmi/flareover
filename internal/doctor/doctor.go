@@ -79,7 +79,7 @@ func Run(ctx context.Context, o Options) []Check {
 		checks = append(checks, checkCertMate(ctx, o))
 	}
 	if o.MinIOEndpoint != "" {
-		checks = append(checks, checkReachable(ctx, o, "MinIO", o.MinIOEndpoint))
+		checks = append(checks, checkReachable(ctx, o, "Object storage (S3)", o.MinIOEndpoint))
 	}
 	if o.SPMURL != "" {
 		checks = append(checks, checkSPM(ctx, o))

@@ -48,7 +48,7 @@ They share a single source of truth for "is this faithfully translatable?": the 
 | `internal/ir` | The provider-agnostic intent model |
 | `internal/plan` | Builds the deployable plan from `snapshot + decisions.lock` (only the faithful surface) |
 | `internal/target/*` | Render/provision adapters: `caddy`, `caddywaf`, `certmate`, `mesh`, `spm`, and the DNS backends, all sharing the BIND renderer in `zonefile` |
-| `internal/objstore` | R2/S3 → MinIO or managed EU S3; hand-rolled SigV4 extraction, `mc`/rclone generation |
+| `internal/objstore` | R2/S3 → Garage (default), MinIO or managed EU S3; hand-rolled SigV4 extraction, AWS CLI (plus Garage CLI) and rclone script generation |
 | `internal/provider` | EU edge-provider catalogue + sovereignty tiering + edge cloud-init |
 | `internal/parity` | The parity prober: live edge vs staged edge, HARD/SOFT divergence |
 | `internal/doctor` · `internal/guard` · `internal/validate` | Pre-flight · failguards · artifact validation |

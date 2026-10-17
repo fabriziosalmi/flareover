@@ -16,7 +16,7 @@ flowchart LR
   SN --> PL[plan]
   DEC --> PL
   PL --> IR["CF-IR<br/>provider-agnostic<br/>intent model"]
-  IR --> GEN["generate<br/>Caddy · caddy-waf · souin<br/>PowerDNS · CertMate · MinIO<br/>WireGuard mesh · SPM"]
+  IR --> GEN["generate<br/>Caddy · caddy-waf · souin<br/>PowerDNS · CertMate · Garage<br/>WireGuard mesh · SPM"]
   GEN --> PROV[provision]
   PROV --> PRES["present<br/>parity gate"]
   PRES -->|GATE: PASS| EXEC["execute<br/>gated cutover"]
@@ -85,7 +85,7 @@ adapter against the real provider before you trust it.
 | `internal/report` | Verdict vocabulary + the coverage report (text / Markdown / JSON / HTML) |
 | `internal/plan` | Builds the deployable `ir.Plan` from snapshot + decisions: only the faithful surface |
 | `internal/target/*` | Render/provision adapters: `caddy`, `caddywaf`, `certmate`, `mesh`, `spm`; DNS via `powerdns` (self-hosted) or a managed provider: EU-owned `bunnydns`, `scalewaydns`, `ovhdns`, `gandidns`, `leasewebdns`, `hetznerdns`, or the honestly-tiered US-operated `route53`, `clouddns`, `azuredns`, all sharing the BIND renderer in `zonefile` |
-| `internal/objstore` | R2/S3 → self-hosted MinIO **or** managed EU S3 (Scaleway/OVH/Contabo/Aruba); hand-rolled SigV4 extraction, `mc`/rclone generation |
+| `internal/objstore` | R2/S3 → self-hosted Garage (default), an existing MinIO, **or** managed EU S3 (Scaleway/OVH/Contabo/Aruba); hand-rolled SigV4 extraction, AWS CLI (plus Garage CLI) and rclone script generation |
 | `internal/provider` | EU edge-provider catalogue + honest sovereignty tiering + edge cloud-init (and Scaleway/OVH instance create scripts) |
 | `internal/parity` | The parity prober: live edge vs staged edge, HARD/SOFT divergence |
 | `internal/validate` | Proves generated artifacts parse (`caddy validate`, zone lint) |

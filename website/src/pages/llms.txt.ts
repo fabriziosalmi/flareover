@@ -39,7 +39,7 @@ export const GET: APIRoute = async () => {
   const body = [
     '# flareover',
     `> ${home?.description}`,
-    'flareover reads a live Cloudflare zone and generates the equivalent configuration for a self-hosted stack (Caddy, caddy-waf, PowerDNS, CertMate, MinIO) on EU infrastructure. Every setting gets one verdict: AUTO (a proven equivalent is generated), ASK (one yes/no, then AUTO) or MANUAL (surfaced, never guessed). It is a single Go binary, AGPL-3.0, with no telemetry. Source: https://github.com/fabriziosalmi/flareover',
+    'flareover reads a live Cloudflare zone and generates the equivalent configuration for a self-hosted stack (Caddy, caddy-waf, PowerDNS, CertMate, Garage) on EU infrastructure. Every setting gets one verdict: AUTO (a proven equivalent is generated), ASK (one yes/no, then AUTO) or MANUAL (surfaced, never guessed). It is a single Go binary, AGPL-3.0, with no telemetry. Source: https://github.com/fabriziosalmi/flareover',
     ...sections,
     '## Optional\n\n- [Questions and answers](https://github.com/fabriziosalmi/flareover/discussions): GitHub Discussions\n- [Changelog](https://github.com/fabriziosalmi/flareover/blob/main/CHANGELOG.md): what changed in each release',
   ].join('\n\n');

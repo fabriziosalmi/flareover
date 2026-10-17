@@ -2,7 +2,7 @@
 #
 # Stands up the target stack that `flareover prepare` / `provision` output drops
 # straight into: PowerDNS (authoritative + API), Caddy (caddy-waf + souin, custom
-# build), CertMate (DNS-01 certs), MinIO (object storage), and secure-proxy-manager
+# build), CertMate (DNS-01 certs), Garage (S3 object storage), and secure-proxy-manager
 # (egress shield). One command; your own box, your own credentials.
 #
 #   1. flareover prepare snap.json --decisions decisions.lock --edge-ip <ip> --out ./out
@@ -134,18 +134,23 @@ services:
     cap_drop: [ALL]
     cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE]
 
-  minio:
-    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z}
+  # S3 object storage. Garage, not MinIO: MinIO is archived upstream and its
+  # images no longer pull. A fresh node needs a layout and a key before it
+  # serves anything: run ./garage-init.sh once after `docker compose up`.
+  garage:
+    image: ${GARAGE_IMAGE:-dxflrs/garage:v2.4.1}
     restart: unless-stopped
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set GARAGE_RPC_SECRET in .env (openssl rand -hex 32)}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in .env}
     volumes:
-      - minio-data:/data
+      - ./garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
     ports:
-      - "127.0.0.1:9000:9000" # S3 API: the generated storage provision.sh targets this
-      - "127.0.0.1:9001:9001" # console
+      - "127.0.0.1:3900:3900" # S3 API: the generated garage/provision.sh targets this
+      - "127.0.0.1:3902:3902" # web endpoint: buckets confirmed public are served here
+      - "127.0.0.1:3903:3903" # admin API: /health answers 200 once the layout is applied
     networks: [internal]
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
@@ -168,7 +173,7 @@ networks:
   edge: {} # public-facing tier (Caddy 80/443, and PowerDNS 53: authoritative DNS must be public)
   # Inter-container tier. The subnet is declared rather than left to Docker so
   # PDNS_webserver_allow_from above can name it: the admin/API ports (8081,
-  # 8000, 9000/9001, 3128) publish only to 127.0.0.1, and the DNS control plane
+  # 8000, 3900/3902/3903, 3128) publish only to 127.0.0.1, and the DNS control plane
   # additionally refuses anything outside this network.
   internal:
     ipam:
@@ -180,8 +185,9 @@ networks:
 #                 the zone stops resolving and the DS record at your registrar
 #                 points at keys that no longer exist.
 #   certmate-data + certs   issued certificates and issuance state.
-#   minio-data    the migrated objects — possibly the only remaining copy once
-#                 the source bucket is decommissioned.
+#   garage-meta + garage-data   the migrated objects and the index that finds
+#                 them: possibly the only remaining copy once the source bucket
+#                 is decommissioned. Back up both, together.
 # These are disposable: re-running `flareover prepare` and a restart rebuild them.
 #   caddy-data, caddy-config, spm-data
 # See deploy/README.md § Back it up for the commands.
@@ -191,5 +197,6 @@ volumes:
   caddy-config: {}
   certs: {}
   certmate-data: {}
-  minio-data: {}
+  garage-meta: {}
+  garage-data: {}
   spm-data: {}
