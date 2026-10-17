@@ -1,0 +1,27 @@
+# Garage configuration for the flareover landing zone: one node, one copy.
+# No secrets here: GARAGE_RPC_SECRET and GARAGE_ADMIN_TOKEN come from .env.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+# One node keeps one copy. Back up garage-meta and garage-data (see the compose
+# file), or add nodes and raise this before trusting it with the only copy.
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+# The region the generated garage/provision.sh signs with (S3_REGION overrides).
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage.localhost"
+
+[s3_web]
+# Buckets confirmed public are served as <bucket>.<root_domain> on port 3902.
+# Put your own domain here and route it to 3902 from Caddy.
+bind_addr = "[::]:3902"
+root_domain = ".web.garage.localhost"
+index = "index.html"
+
+[admin]
+api_bind_addr = "[::]:3903"
