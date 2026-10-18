@@ -9,6 +9,8 @@ existing flag without a deprecation first.
 
 ## Unreleased
 
+## v0.5.0 — 2026-10-18
+
 ### Breaking
 
 - **Object storage migrates to Garage by default, and the generated scripts
