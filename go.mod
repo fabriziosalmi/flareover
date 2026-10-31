@@ -11,4 +11,4 @@ go 1.26
 // after it (crypto/tls, mime/multipart, net/http; GO-2026-6608 to 6617). ci.yml
 // runs govulncheck, so the next one will be a failing build rather than a
 // discovery during an audit, which is how these nine surfaced.
-toolchain go1.26.9
+toolchain go1.26.10
