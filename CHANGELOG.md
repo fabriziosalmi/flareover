@@ -9,6 +9,20 @@ existing flag without a deprecation first.
 
 ## Unreleased
 
+## v0.5.1 — 2026-10-31
+
+### Security
+
+- **Binaries are built with Go 1.26.10.** v0.5.0 was built with Go 1.26.9,
+  which is affected by GO-2026-6809 (`crypto/x509` did not distrust
+  compromised intermediate certificates); flareover reaches it through the
+  object-store certificate generation. Upgrade to v0.5.1; nothing else
+  changes for users.
+
+### Dependencies
+
+- goreleaser-action 7.3.0; docs site dependencies.
+
 ## v0.5.0 — 2026-10-18
 
 ### Breaking
