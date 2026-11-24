@@ -1,9 +1,13 @@
 version: 2
 updates:
   - package-ecosystem: gomod
+    cooldown:
+      default-days: 7
     directory: "/"
     schedule: { interval: weekly }
   - package-ecosystem: github-actions
+    cooldown:
+      default-days: 7
     directory: "/"
     schedule: { interval: weekly }
   # The docs site is the only place in this repository with third-party code:
@@ -13,6 +17,8 @@ updates:
   # directories with almost nothing in them. Patch and minor updates are
   # grouped so the volume stays reviewable; a major still arrives on its own.
   - package-ecosystem: npm
+    cooldown:
+      default-days: 7
     directory: "/website"
     schedule: { interval: weekly }
     groups:
